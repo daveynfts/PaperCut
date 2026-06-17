@@ -1,0 +1,15 @@
+{
+  "name": "lepton-x402-reader",
+  "version": "1.0.0",
+  "description": "Hackathon project for Lepton: Pay-per-read RSS Reader using Circle nanopayments on Arc network.",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.1",
+    "express": "^4.19.2"
+  }
+}
