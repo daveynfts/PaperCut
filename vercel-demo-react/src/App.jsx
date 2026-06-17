@@ -46,9 +46,18 @@ function App() {
   const [error, setError] = useState("");
   const [chainId, setChainId] = useState(null);
 
-  // Circle Wallet States
   const [circleWallet, setCircleWallet] = useState(null);
   const [isLoadingWallet, setIsLoadingWallet] = useState(false);
+  const [showWalletModal, setShowWalletModal] = useState(false);
+  const [copyStatus, setCopyStatus] = useState("Click address to copy");
+
+  const handleCopyAddress = (addr) => {
+    if (!addr) return;
+    navigator.clipboard.writeText(addr).then(() => {
+      setCopyStatus("Copied Address!");
+      setTimeout(() => setCopyStatus("Click address to copy"), 1500);
+    });
+  };
 
   // Load unlocked states from storage on mount
   useEffect(() => {
@@ -211,7 +220,7 @@ function App() {
             <button className="btn btn-sm" onClick={login}>Login (Gmail/Wallet)</button>
           ) : (
             <div className="wallet-info-group">
-              <div className="wallet-info">
+              <div className="wallet-info" onClick={() => setShowWalletModal(true)} style={{ cursor: 'pointer' }} title="Click to view wallet & QR code">
                 <span className="status-dot"></span>
                 <span>
                   {smartWalletAddress 
@@ -333,6 +342,48 @@ function App() {
           )}
         </section>
       </main>
+
+      {/* WALLET DEPOSIT & QR MODAL */}
+      {showWalletModal && (
+        <div className="modal-overlay" onClick={() => setShowWalletModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">Your Circle MPC Wallet</h3>
+            
+            <div className="modal-address-container" onClick={() => handleCopyAddress(smartWalletAddress || activeWallet?.address || user?.wallet?.address)} title="Click to copy address">
+              <div style={{ fontSize: '9px', color: 'var(--g600)', textTransform: 'uppercase', marginBottom: '4px', letterSpacing: '0.05em' }}>
+                Wallet Address (Click to Copy)
+              </div>
+              <div style={{ wordBreak: 'break-all', fontSize: '11px', color: 'var(--g100)', padding: '4px', fontFamily: 'monospace' }}>
+                {smartWalletAddress || activeWallet?.address || user?.wallet?.address}
+              </div>
+              <div style={{ fontSize: '8px', color: 'var(--accent)', marginTop: '4px', fontFamily: 'monospace' }}>
+                {copyStatus}
+              </div>
+            </div>
+
+            <div className="modal-balance-label">USDC Balance</div>
+            <div className="modal-balance-value">
+              {parseFloat(circleWallet?.balance || "0.0000").toFixed(4)} <span style={{ fontSize: '14px', fontWeight: 'normal', color: 'var(--g200)' }}>USDC</span>
+            </div>
+
+            <div className="qr-code-container">
+              <img 
+                className="qr-code-img" 
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${smartWalletAddress || activeWallet?.address || user?.wallet?.address}`} 
+                alt="Wallet QR Code" 
+              />
+            </div>
+
+            <div className="modal-net-info">
+              Network: <span style={{ color: 'var(--accent)' }}>Arc Testnet</span>
+            </div>
+
+            <button className="btn-modal-close" onClick={() => setShowWalletModal(false)}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

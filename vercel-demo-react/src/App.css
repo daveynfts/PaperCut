@@ -563,3 +563,126 @@ body {
   }
 }
 
+/* ============ WALLET MODAL & QR CODE ============ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 9, 7, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.modal-content {
+  background: var(--g900);
+  border: 1px solid var(--accent-border);
+  border-radius: 4px;
+  width: 340px;
+  padding: 28px 24px;
+  text-align: center;
+  position: relative;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  animation: slideUp 0.25s ease-out;
+}
+
+.modal-content::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+}
+
+.modal-title {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  color: var(--accent);
+  margin-bottom: 18px;
+  font-weight: normal;
+  letter-spacing: 0.04em;
+}
+
+.modal-address-container {
+  background: var(--black);
+  border: 1px solid var(--g800);
+  padding: 10px;
+  border-radius: 2px;
+  margin-bottom: 16px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.modal-address-container:hover {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 10px rgba(230, 184, 76, 0.05);
+}
+
+.modal-balance-label {
+  font-size: 10px;
+  color: var(--g400);
+  text-transform: uppercase;
+  margin-top: 14px;
+  margin-bottom: 4px;
+  letter-spacing: 0.06em;
+}
+
+.modal-balance-value {
+  font-size: 32px;
+  font-weight: bold;
+  color: var(--accent);
+  margin-bottom: 20px;
+  font-family: var(--font-mono);
+}
+
+.qr-code-container {
+  background: var(--white);
+  padding: 12px;
+  border-radius: 4px;
+  display: inline-block;
+  margin-bottom: 18px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25);
+}
+
+.qr-code-img {
+  width: 150px;
+  height: 150px;
+  display: block;
+}
+
+.modal-net-info {
+  font-size: 11px;
+  color: var(--g400);
+  margin-bottom: 24px;
+  font-family: var(--font-mono);
+}
+
+.btn-modal-close {
+  background: var(--accent);
+  color: var(--black);
+  border: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 10px 24px;
+  cursor: pointer;
+  border-radius: 2px;
+  letter-spacing: 0.05em;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.btn-modal-close:hover {
+  opacity: 0.85;
+}
+
+.btn-modal-close:active {
+  transform: scale(0.97);
+}
+
+
