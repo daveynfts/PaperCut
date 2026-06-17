@@ -123,7 +123,6 @@ function App() {
 
   const [selectedArticle, setSelectedArticle] = useState(null);
   const [unlockedArticles, setUnlockedArticles] = useState({});
-  const [activeTab, setActiveTab] = useState("dispatches");
   const [txStatus, setTxStatus] = useState("");
   const [txHash, setTxHash] = useState("");
   const [error, setError] = useState("");
@@ -465,400 +464,221 @@ function App() {
       <main className="main-container">
         {/* LEFT SIDEBAR */}
         <section className="sidebar">
-          <div className="sidebar-tabs">
-            <button 
-              className={`sidebar-tab-btn ${activeTab === 'dispatches' ? 'active' : ''}`}
-              onClick={() => setActiveTab('dispatches')}
-            >
-              📰 DISPATCHES
-            </button>
-            <button 
-              className={`sidebar-tab-btn ${activeTab === 'analytics' ? 'active' : ''}`}
-              onClick={() => setActiveTab('analytics')}
-            >
-              📊 USDC STATS
-            </button>
+          <div className="section-title">
+            <h2>LATEST DISPATCHES</h2>
+            <span className="item-count">{articles.length} columns published</span>
           </div>
-
-          {activeTab === 'dispatches' ? (
-            <>
-              <div className="section-title">
-                <h2>LATEST DISPATCHES</h2>
-                <span className="item-count">{articles.length} columns published</span>
-              </div>
-              <div className="article-list">
-                {articles.map((art) => (
-                  <div
-                    key={art.id}
-                    className={`article-card ${selectedArticle?.id === art.id ? 'active' : ''}`}
-                    onClick={() => handleSelectArticle(art)}
-                  >
-                    <div className="card-title">{art.title}</div>
-                    <div className="card-meta">
-                      <span>By {art.author}</span>
-                      <span className="price-tag">
-                        <UsdcCoinIcon size={12} className="coin-sidebar" style={{ marginRight: '3px', marginTop: '-2px' }} />
-                        {art.price}
-                      </span>
-                    </div>
-                    <div className="card-snippet">{art.snippet}</div>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="section-title">
-                <h2>MARKET TELEMETRY</h2>
-                <span className="item-count">USDC Analytics</span>
-              </div>
-              <div className="sidebar-helper-card" style={{ padding: '16px 0' }}>
-                <p className="mono-text text-muted" style={{ padding: '0 16px 16px', fontSize: '11px', lineHeight: '1.5', textAlign: 'justify' }}>
-                  Perusing the on-chain USD Coin telemetry. This panel showcases real-time market capitalisation, liquidity metrics, and price charts of the USDC contract on BSC network.
-                </p>
-                <div style={{ padding: '0 16px' }}>
-                  <button className="btn btn-sm" style={{ width: '100%' }} onClick={() => setActiveTab('dispatches')}>
-                    RETURN TO DISPATCHES
-                  </button>
+          <div className="article-list">
+            {articles.map((art) => (
+              <div
+                key={art.id}
+                className={`article-card ${selectedArticle?.id === art.id ? 'active' : ''}`}
+                onClick={() => handleSelectArticle(art)}
+              >
+                <div className="card-title">{art.title}</div>
+                <div className="card-meta">
+                  <span>By {art.author}</span>
+                  <span className="price-tag">
+                    <UsdcCoinIcon size={12} className="coin-sidebar" style={{ marginRight: '3px', marginTop: '-2px' }} />
+                    {art.price}
+                  </span>
                 </div>
+                <div className="card-snippet">{art.snippet}</div>
               </div>
-            </>
-          )}
+            ))}
+          </div>
         </section>
 
         {/* RIGHT CONTENT */}
         <section className="viewer">
-          {activeTab === "analytics" ? (
-            <div className="analytics-container">
-              {/* Token Header Row */}
-              <div className="analytics-header">
-                <div className="token-profile">
-                  <UsdcCoinIcon size={48} className="coin-balance-icon" />
-                  <div className="token-names">
-                    <div className="token-title-row">
-                      <h1 className="token-name">USD Coin</h1>
-                      <span className="token-symbol-badge">USDC</span>
-                    </div>
-                    <div className="token-address-row">
-                      <span className="token-address-label">BEP-20 Contract:</span>
-                      <span className="token-address-value mono-text">0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d</span>
-                      <button 
-                        className="btn-copy-address-mini" 
-                        onClick={() => {
-                          navigator.clipboard.writeText("0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d");
-                          alert("Copied BEP-20 USDC address!");
-                        }}
-                        title="Copy Address"
-                      >
-                        📋
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <div className="token-price-section">
-                  <div className="token-price">$1.0002</div>
-                  <div className="token-price-change green-text">+0.02% (24H)</div>
+          {!selectedArticle ? (
+            <div id="viewer-default" className="viewer-state">
+              <div className="greek-key"></div>
+              <h1 className="serif-title font-italic">Select a Dispatch to Peruse</h1>
+              <p className="mono-text text-muted">Demonstrating a Modern Electronic Ledger & Gasless Micro-Tariff System.</p>
+              <div className="badge-row">
+                <span className="chain-badge">Sign Register</span>
+                <span className="chain-badge">Secured Ledger Vault</span>
+                <span className="chain-badge">Arc Testnet</span>
+              </div>
+            </div>
+          ) : (
+            <div id="viewer-active" className="viewer-state">
+              <div className="article-header">
+                <h1 className="serif-title">{selectedArticle.title}</h1>
+                <div className="article-meta">
+                  <span>By <strong style={{ color: 'var(--white)' }}>{selectedArticle.author}</strong></span>
+                  <span className="divider">•</span>
+                  <span className="price-badge">TARIFF: <UsdcCoinIcon size={14} className="coin-inline" style={{ marginRight: '4px', marginTop: '-3px' }} /> {selectedArticle.price} USDC Coinage</span>
                 </div>
               </div>
 
               <div className="greek-key tight"></div>
 
-              {/* Layout: Left Column (Chart) & Right Column (Metrics & Info) */}
-              <div className="analytics-layout">
-                {/* Chart Panel */}
-                <div className="analytics-pane-left">
-                  <div className="panel-card chart-card">
-                    <div className="card-header-vintage">
-                      <h3>USDC PRICE STABILITY CHART (7D)</h3>
-                      <span className="chart-range-badge">PEGGED TO USD</span>
-                    </div>
-                    <div className="svg-chart-container">
-                      <svg viewBox="0 0 500 200" className="price-chart-svg">
-                        <defs>
-                          <linearGradient id="chart-area-grad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="var(--ink-red)" stopOpacity="0.15" />
-                            <stop offset="100%" stopColor="var(--ink-red)" stopOpacity="0" />
-                          </linearGradient>
-                        </defs>
-                        {/* Grid lines */}
-                        <line x1="50" y1="20" x2="480" y2="20" stroke="#a69b88" strokeWidth="0.5" strokeDasharray="3,3" opacity="0.3" />
-                        <line x1="50" y1="60" x2="480" y2="60" stroke="#a69b88" strokeWidth="0.5" strokeDasharray="3,3" opacity="0.3" />
-                        <line x1="50" y1="100" x2="480" y2="100" stroke="#a69b88" strokeWidth="0.5" strokeDasharray="3,3" opacity="0.3" />
-                        <line x1="50" y1="140" x2="480" y2="140" stroke="#a69b88" strokeWidth="0.5" strokeDasharray="3,3" opacity="0.3" />
-                        <line x1="50" y1="180" x2="480" y2="180" stroke="#a69b88" strokeWidth="0.5" strokeDasharray="3,3" opacity="0.3" />
-                        
-                        {/* Y Axis Labels */}
-                        <text x="15" y="25" className="chart-label mono-text" fontSize="9" fill="var(--ink-grey)">$1.0010</text>
-                        <text x="15" y="65" className="chart-label mono-text" fontSize="9" fill="var(--ink-grey)">$1.0005</text>
-                        <text x="15" y="105" className="chart-label mono-text" fontSize="9" fill="var(--ink-grey)">$1.0000</text>
-                        <text x="15" y="145" className="chart-label mono-text" fontSize="9" fill="var(--ink-grey)">$0.9995</text>
-                        <text x="15" y="185" className="chart-label mono-text" fontSize="9" fill="var(--ink-grey)">$0.9990</text>
-
-                        {/* Area path under chart line */}
-                        <path 
-                          d="M 50 180 L 50 100 L 100 95 L 150 105 L 200 98 L 250 102 L 300 96 L 350 101 L 400 97 L 450 102 L 480 99 L 480 180 Z" 
-                          fill="url(#chart-area-grad)" 
-                        />
-                        
-                        {/* Chart Line */}
-                        <path 
-                          d="M 50 100 L 100 95 L 150 105 L 200 98 L 250 102 L 300 96 L 350 101 L 400 97 L 450 102 L 480 99" 
-                          fill="none" 
-                          stroke="var(--ink-red)" 
-                          strokeWidth="2.5" 
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                        
-                        {/* Highlight dot at current value */}
-                        <circle cx="480" cy="99" r="4" fill="var(--ink-red)" stroke="#ffffff" strokeWidth="1" />
-                      </svg>
-                    </div>
+              <div className="article-body">
+                {unlockedArticles[selectedArticle.id] ? (
+                  <div className="content-text premium-unlocked">
+                    {selectedArticle.content}
                   </div>
-                </div>
+                ) : (
+                  <>
+                    <div className="content-text">
+                      {selectedArticle.snippet}
+                    </div>
 
-                {/* Metrics & Details Pane */}
-                <div className="analytics-pane-right">
-                  {/* Metrics Card */}
-                  <div className="panel-card metrics-card">
-                    <div className="card-header-vintage">
-                      <h3>USDC PANCAKESWAP LIQUIDITY STATS</h3>
-                    </div>
-                    <div className="metrics-list">
-                      <div className="metric-row">
-                        <span className="metric-label">Liquidity (USD)</span>
-                        <span className="metric-value mono-text">$24,520,180</span>
-                      </div>
-                      <div className="metric-row">
-                        <span className="metric-label">Volume 24H</span>
-                        <span className="metric-value mono-text">$1,284,950</span>
-                      </div>
-                      <div className="metric-row">
-                        <span className="metric-label">Transactions 24H</span>
-                        <span className="metric-value mono-text">8,410 txs</span>
-                      </div>
-                      <div className="metric-row">
-                        <span className="metric-label">Contract Decimals</span>
-                        <span className="metric-value mono-text">18</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Links & Info Card */}
-                  <div className="panel-card info-card">
-                    <div className="card-header-vintage">
-                      <h3>OFFICIAL ACCREDITATIONS</h3>
-                    </div>
-                    <div className="links-list">
-                      <a href="https://bscscan.com/token/0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d" target="_blank" rel="noopener noreferrer" className="link-item">
-                        <span>View BEP-20 on BscScan</span>
-                        <span>↗</span>
-                      </a>
-                      <a href="https://www.circle.com/en/usdc" target="_blank" rel="noopener noreferrer" className="link-item">
-                        <span>Circle Official Website</span>
-                        <span>↗</span>
-                      </a>
-                      <a href="https://pancakeswap.finance/info/tokens/0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d" target="_blank" rel="noopener noreferrer" className="link-item text-accent-cyan" style={{ fontWeight: 'bold' }}>
-                        <span>PancakeSwap Info Page</span>
-                        <span>↗</span>
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <>
-              {!selectedArticle ? (
-                <div id="viewer-default" className="viewer-state">
-                  <div className="greek-key"></div>
-                  <h1 className="serif-title font-italic">Select a Dispatch to Peruse</h1>
-                  <p className="mono-text text-muted">Demonstrating a Modern Electronic Ledger & Gasless Micro-Tariff System.</p>
-                  <div className="badge-row">
-                    <span className="chain-badge">Sign Register</span>
-                    <span className="chain-badge">Secured Ledger Vault</span>
-                    <span className="chain-badge">Arc Testnet</span>
-                  </div>
-                </div>
-              ) : (
-                <div id="viewer-active" className="viewer-state">
-                  <div className="article-header">
-                    <h1 className="serif-title">{selectedArticle.title}</h1>
-                    <div className="article-meta">
-                      <span>By <strong style={{ color: 'var(--white)' }}>{selectedArticle.author}</strong></span>
-                      <span className="divider">•</span>
-                      <span className="price-badge">TARIFF: <UsdcCoinIcon size={14} className="coin-inline" style={{ marginRight: '4px', marginTop: '-3px' }} /> {selectedArticle.price} USDC Coinage</span>
-                    </div>
-                  </div>
-
-                  <div className="greek-key tight"></div>
-
-                  <div className="article-body">
-                    {unlockedArticles[selectedArticle.id] ? (
-                      <div className="content-text premium-unlocked">
-                        {selectedArticle.content}
-                      </div>
-                    ) : (
-                      <>
-                        <div className="content-text">
-                          {selectedArticle.snippet}
+                    {/* PAYWALL */}
+                    <div className="paywall-card">
+                      <div className="paywall-title">TOLL BARRIER: TARIFF DUE</div>
+                      
+                      <div className="paywall-options-container">
+                        {/* Option 1: Human Reader */}
+                        <div className="paywall-option-box">
+                          <div className="option-icon">🖋️</div>
+                          <div className="option-title">HUMAN READER</div>
+                          <p className="paywall-desc">
+                            {!authenticated 
+                              ? "Sign the register to create a Ledger Vault." 
+                              : `Vault: ${shortenAddress(circleWallet?.address)} | Bal: ${parseFloat(circleWallet?.balance || '0.00').toFixed(4)} USDC`
+                            }
+                          </p>
+                          {!txStatus && (
+                            <button className="btn btn-sm btn-paywall" onClick={handleUnlockOnChain}>
+                              {!authenticated ? "SIGN REGISTER" : (
+                                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                                  PAY {selectedArticle.price} <UsdcCoinIcon size={14} className="coin-inline" /> USDC
+                                </span>
+                              )}
+                            </button>
+                          )}
                         </div>
 
-                        {/* PAYWALL */}
-                        <div className="paywall-card">
-                          <div className="paywall-title">TOLL BARRIER: TARIFF DUE</div>
+                        {/* Divider Line */}
+                        <div className="paywall-option-divider"></div>
+
+                        {/* Option 2: AI Agent */}
+                        <div className="paywall-option-box">
+                          <div className="option-icon">🤖</div>
+                          <div className="option-title">AI SCRAPER AGENT</div>
                           
-                          <div className="paywall-options-container">
-                            {/* Option 1: Human Reader */}
-                            <div className="paywall-option-box">
-                              <div className="option-icon">🖋️</div>
-                              <div className="option-title">HUMAN READER</div>
+                          {!isScraping ? (
+                            <>
                               <p className="paywall-desc">
-                                {!authenticated 
-                                  ? "Sign the register to create a Ledger Vault." 
-                                  : `Vault: ${shortenAddress(circleWallet?.address)} | Bal: ${parseFloat(circleWallet?.balance || '0.00').toFixed(4)} USDC`
-                                }
+                                Trigger simulated robot scraping sequence & micro-payments.
                               </p>
-                              {!txStatus && (
-                                <button className="btn btn-sm btn-paywall" onClick={handleUnlockOnChain}>
-                                  {!authenticated ? "SIGN REGISTER" : (
-                                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                                      PAY {selectedArticle.price} <UsdcCoinIcon size={14} className="coin-inline" /> USDC
-                                    </span>
-                                  )}
-                                </button>
-                              )}
-                            </div>
-
-                            {/* Divider Line */}
-                            <div className="paywall-option-divider"></div>
-
-                            {/* Option 2: AI Agent */}
-                            <div className="paywall-option-box">
-                              <div className="option-icon">🤖</div>
-                              <div className="option-title">AI SCRAPER AGENT</div>
-                              
-                              {!isScraping ? (
-                                <>
-                                  <p className="paywall-desc">
-                                    Trigger simulated robot scraping sequence & micro-payments.
-                                  </p>
-                                  <button 
-                                    className="btn btn-sm btn-paywall btn-secondary"
-                                    onClick={triggerScrapeSimulation}
-                                  >
-                                    LAUNCH AGENT
-                                  </button>
-                                </>
-                              ) : (
-                                /* Live Terminal Mockup Simulator Screen */
-                                <div className="scraper-terminal">
-                                  <div className="terminal-header">
-                                    <span className="term-dot red"></span>
-                                    <span className="term-dot yellow"></span>
-                                    <span className="term-dot green"></span>
-                                    <span className="term-title">AI-Agent Terminal @ ScraperPort</span>
+                              <button 
+                                className="btn btn-sm btn-paywall btn-secondary"
+                                onClick={triggerScrapeSimulation}
+                              >
+                                LAUNCH AGENT
+                              </button>
+                            </>
+                          ) : (
+                            /* Live Terminal Mockup Simulator Screen */
+                            <div className="scraper-terminal">
+                              <div className="terminal-header">
+                                <span className="term-dot red"></span>
+                                <span className="term-dot yellow"></span>
+                                <span className="term-dot green"></span>
+                                <span className="term-title">AI-Agent Terminal @ ScraperPort</span>
+                              </div>
+                              <div className="terminal-body mono-text">
+                                {scrapeStep >= 1 && (
+                                  <div className="term-line prompt">
+                                    <span className="term-accent">&gt;</span> query --prompt "{selectedArticle.title}"
                                   </div>
-                                  <div className="terminal-body mono-text">
-                                    {scrapeStep >= 1 && (
-                                      <div className="term-line prompt">
-                                        <span className="term-accent">&gt;</span> query --prompt "{selectedArticle.title}"
-                                      </div>
-                                    )}
-                                    {scrapeStep === 1 && (
-                                      <div className="term-line loading">
-                                        Scanning database for target dispatches...
-                                      </div>
-                                    )}
-                                    {scrapeStep >= 2 && (
-                                      <>
-                                        <div className="term-line success">
-                                          Dispatch found. ID: {selectedArticle.id}. Size: 84 words.
-                                        </div>
-                                        <div className="term-line prompt">
-                                          <span className="term-accent">&gt;</span> settle-tariff --amount {selectedArticle.price} --network arc-testnet
-                                        </div>
-                                      </>
-                                    )}
-                                    {scrapeStep === 2 && (
-                                      <div className="term-line loading">
-                                        Executing Circle MPC wallet gasless transfer...
-                                      </div>
-                                    )}
-                                    {scrapeStep >= 3 && (
-                                      <>
-                                        <div className="term-line success">
-                                          Tx settled. Hash: 0x8fd...35e0.
-                                        </div>
-                                        <div className="term-line prompt">
-                                          <span className="term-accent">&gt;</span> scrape --target content --stream-read
-                                        </div>
-                                        <div className="term-line info highlight-box">
-                                          <span>[STREAMING DATA]</span><br/>
-                                          <span>Words Read: <strong>{scrapeWords} / 84</strong></span><br/>
-                                          <span>Current Cost: <strong>{scrapeCost.toFixed(6)}</strong> <UsdcCoinIcon size={12} className="coin-inline" style={{ margin: '0 2px 0 4px', marginTop: '-2px' }} /> USDC</span>
-                                        </div>
-                                      </>
-                                    )}
-                                    {scrapeStep === 3 && (
-                                      <div className="term-line loading">
-                                        Cawing premium column paragraphs...
-                                      </div>
-                                    )}
-                                    {scrapeStep >= 4 && (
-                                      <>
-                                        <div className="term-line success" style={{ color: '#5cd15c', fontWeight: 'bold' }}>
-                                          Scraping complete. Settle total: {scrapeCost.toFixed(4)} <UsdcCoinIcon size={12} className="coin-inline" style={{ margin: '0 2px 0 4px', marginTop: '-2px' }} /> USDC.
-                                        </div>
-                                        <div className="term-line prompt">
-                                          <span className="term-accent">&gt;</span> summarize-report --llm-refine
-                                        </div>
-                                        <div className="term-report-box">
-                                          {scrapeResult}
-                                        </div>
-                                        <button 
-                                          className="btn btn-sm" 
-                                          style={{ marginTop: '8px', fontSize: '9px', padding: '2px 8px', float: 'right' }}
-                                          onClick={() => {
-                                            setIsScraping(false);
-                                            setScrapeStep(0);
-                                            setScrapeWords(0);
-                                            setScrapeCost(0);
-                                            setScrapeResult("");
-                                          }}
-                                        >
-                                          RESET BOT
-                                        </button>
-                                      </>
-                                    )}
+                                )}
+                                {scrapeStep === 1 && (
+                                  <div className="term-line loading">
+                                    Scanning database for target dispatches...
                                   </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                          {txStatus && (
-                            <div className="tx-status-box" style={{ marginTop: '20px', width: '100%' }}>
-                              <span className="spinner"></span>
-                              <span>{txStatus}</span>
-                              {txHash && (
-                                <div className="tx-hash-link">
-                                  <a href={getExplorerUrl(chainId, txHash)} target="_blank" rel="noopener noreferrer">
-                                    Verify Ledger Record ↗
-                                  </a>
-                                </div>
-                              )}
+                                )}
+                                {scrapeStep >= 2 && (
+                                  <>
+                                    <div className="term-line success">
+                                      Dispatch found. ID: {selectedArticle.id}. Size: 84 words.
+                                    </div>
+                                    <div className="term-line prompt">
+                                      <span className="term-accent">&gt;</span> settle-tariff --amount {selectedArticle.price} --network arc-testnet
+                                    </div>
+                                  </>
+                                )}
+                                {scrapeStep === 2 && (
+                                  <div className="term-line loading">
+                                    Executing Circle MPC wallet gasless transfer...
+                                  </div>
+                                )}
+                                {scrapeStep >= 3 && (
+                                  <>
+                                    <div className="term-line success">
+                                      Tx settled. Hash: 0x8fd...35e0.
+                                    </div>
+                                    <div className="term-line prompt">
+                                      <span className="term-accent">&gt;</span> scrape --target content --stream-read
+                                    </div>
+                                    <div className="term-line info highlight-box">
+                                      <span>[STREAMING DATA]</span><br/>
+                                      <span>Words Read: <strong>{scrapeWords} / 84</strong></span><br/>
+                                      <span>Current Cost: <strong>{scrapeCost.toFixed(6)}</strong> <UsdcCoinIcon size={12} className="coin-inline" style={{ margin: '0 2px 0 4px', marginTop: '-2px' }} /> USDC</span>
+                                    </div>
+                                  </>
+                                )}
+                                {scrapeStep === 3 && (
+                                  <div className="term-line loading">
+                                    Cawing premium column paragraphs...
+                                  </div>
+                                )}
+                                {scrapeStep >= 4 && (
+                                  <>
+                                    <div className="term-line success" style={{ color: '#5cd15c', fontWeight: 'bold' }}>
+                                      Scraping complete. Settle total: {scrapeCost.toFixed(4)} <UsdcCoinIcon size={12} className="coin-inline" style={{ margin: '0 2px 0 4px', marginTop: '-2px' }} /> USDC.
+                                    </div>
+                                    <div className="term-line prompt">
+                                      <span className="term-accent">&gt;</span> summarize-report --llm-refine
+                                    </div>
+                                    <div className="term-report-box">
+                                      {scrapeResult}
+                                    </div>
+                                    <button 
+                                      className="btn btn-sm" 
+                                      style={{ marginTop: '8px', fontSize: '9px', padding: '2px 8px', float: 'right' }}
+                                      onClick={() => {
+                                        setIsScraping(false);
+                                        setScrapeStep(0);
+                                        setScrapeWords(0);
+                                        setScrapeCost(0);
+                                        setScrapeResult("");
+                                      }}
+                                    >
+                                      RESET BOT
+                                    </button>
+                                  </>
+                                )}
+                              </div>
                             </div>
                           )}
-
-                          {error && <div className="paywall-error" style={{ marginTop: '15px', width: '100%' }}>{error}</div>}
                         </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-            </>
+                      </div>
+
+                      {txStatus && (
+                        <div className="tx-status-box" style={{ marginTop: '20px', width: '100%' }}>
+                          <span className="spinner"></span>
+                          <span>{txStatus}</span>
+                          {txHash && (
+                            <div className="tx-hash-link">
+                              <a href={getExplorerUrl(chainId, txHash)} target="_blank" rel="noopener noreferrer">
+                                Verify Ledger Record ↗
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {error && <div className="paywall-error" style={{ marginTop: '15px', width: '100%' }}>{error}</div>}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
           )}
         </section>
       </main>
