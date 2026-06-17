@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
-import { useSmartWallets } from '@privy-io/react-auth/smart-wallets';
 import { ethers } from 'ethers';
 import './App.css';
 
@@ -37,7 +36,6 @@ const articles = [
 function App() {
   const { login, logout, authenticated, user } = usePrivy();
   const { wallets } = useWallets();
-  const { client } = useSmartWallets();
 
   const [selectedArticle, setSelectedArticle] = useState(null);
   const [unlockedArticles, setUnlockedArticles] = useState({});
@@ -45,6 +43,10 @@ function App() {
   const [txHash, setTxHash] = useState("");
   const [error, setError] = useState("");
   const [chainId, setChainId] = useState(null);
+
+  // Circle Wallet States
+  const [circleWallet, setCircleWallet] = useState(null);
+  const [isLoadingWallet, setIsLoadingWallet] = useState(false);
 
   // Load unlocked states from storage on mount
   useEffect(() => {
@@ -61,9 +63,50 @@ function App() {
     }
   }, [wallets]);
 
+  // Fetch or create user's Circle Programmable Wallet on backend upon login
+  useEffect(() => {
+    const fetchUserCircleWallet = async () => {
+      if (!authenticated || !user) {
+        setCircleWallet(null);
+        return;
+      }
+      
+      setIsLoadingWallet(true);
+      setError("");
+      
+      const userEmail = user.email?.address || user.id || "anonymous-user";
+      
+      try {
+        const response = await fetch("http://localhost:4000/api/user/wallet", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ email: userEmail })
+        });
+        const data = await response.json();
+        if (response.ok) {
+          setCircleWallet({
+            address: data.address,
+            balance: data.balance,
+            walletId: data.walletId
+          });
+        } else {
+          setError(data.error || "Failed to load Circle MPC wallet.");
+        }
+      } catch (err) {
+        console.error("Error fetching Circle wallet:", err);
+        setError("Backend server connection failed. Make sure port 4000 is running.");
+      } finally {
+        setIsLoadingWallet(false);
+      }
+    };
+    
+    fetchUserCircleWallet();
+  }, [authenticated, user]);
+
   const activeWallet = wallets ? wallets[0] : null;
-  const smartWallet = user?.linkedAccounts?.find((account) => account.type === 'smart_wallet');
-  const smartWalletAddress = smartWallet?.address;
+  const smartWalletAddress = circleWallet?.address;
 
   const shortenAddress = (addr) => {
     if (!addr) return "";
@@ -87,60 +130,53 @@ function App() {
       return;
     }
 
-    if (!client) {
-      setError("Smart Wallet client is initializing. Please try again in a few seconds.");
+    if (!circleWallet) {
+      setError("Circle wallet is not ready. Please try logging in again.");
       return;
     }
 
-    setTxStatus("Please confirm the micro-transaction in your Privy wallet...");
+    setTxStatus("Authorizing pay-per-read micropayment via Circle W3S...");
+
+    const userEmail = user?.email?.address || user?.id || "anonymous-user";
 
     try {
-      console.log("[PaperCut React] Sending sponsored transaction via Smart Wallet:", smartWalletAddress);
-
-      // Send 0.0001 USDC (native token/gas token on Arc Testnet) representing the payment
-      const hash = await client.sendTransaction({
-        to: selectedArticle.payee,
-        value: 100000000000000n, // 0.0001 USDC (18 decimals on Arc Testnet)
+      const response = await fetch("http://localhost:4000/api/articles/unlock", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          email: userEmail,
+          articleId: selectedArticle.id
+        })
       });
-
-      console.log("[PaperCut React] Smart Wallet transaction submitted:", hash);
-      setTxHash(hash);
-      setTxStatus("Transaction submitted. Waiting for on-chain confirmation...");
-
-      // Wait for confirmation by polling Arc Testnet RPC directly
-      const provider = new ethers.JsonRpcProvider("https://rpc.testnet.arc.network");
-      let receipt = null;
-      for (let i = 0; i < 20; i++) {
-        receipt = await provider.getTransactionReceipt(hash);
-        if (receipt) break;
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+      
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Micropayment failed.");
       }
 
-      if (!receipt) {
-        throw new Error("Confirmation timeout. Please check your transaction status on ArcScan.");
-      }
+      console.log("[PaperCut React] Micropayment transfer successful:", data.txHash);
+      setTxHash(data.txHash);
+      setTxStatus("Payment settled on Arc Testnet!");
 
-      console.log("[PaperCut React] Smart Wallet transaction confirmed in block:", receipt.blockNumber);
+      // Update local wallet balance state
+      setCircleWallet(prev => prev ? { ...prev, balance: data.balance } : null);
 
       // Save unlocked state
       const updatedUnlocked = { ...unlockedArticles, [selectedArticle.id]: true };
       setUnlockedArticles(updatedUnlocked);
       localStorage.setItem("papercut_unlocked_articles", JSON.stringify(updatedUnlocked));
       
-      setTxStatus("Success! Article unlocked.");
       setTimeout(() => {
         setTxStatus("");
         setTxHash("");
       }, 2000);
 
     } catch (err) {
-      console.error("Payment transaction failed:", err);
+      console.error("Micropayment error:", err);
       setTxStatus("");
-      if (err.code === "ACTION_REJECTED" || err.message?.includes("rejected")) {
-        setError("User rejected the transaction.");
-      } else {
-        setError("Transaction failed. Make sure your gas sponsor policy is active and wallet is funded.");
-      }
+      setError(err.message || "Transaction failed. Do you have enough USDC balance?");
     }
   };
 
@@ -177,14 +213,14 @@ function App() {
                 <span className="status-dot"></span>
                 <span>
                   {smartWalletAddress 
-                    ? `Smart: ${shortenAddress(smartWalletAddress)}` 
+                    ? `Circle MPC: ${shortenAddress(smartWalletAddress)}` 
                     : shortenAddress(activeWallet?.address || user?.wallet?.address)
                   }
                 </span>
               </div>
               {smartWalletAddress && (
                 <span className="badge-sponsored" style={{ marginLeft: '8px', fontSize: '11px', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(230, 184, 76, 0.2)', color: '#e6b84c', border: '1px solid #e6b84c' }}>
-                  Gasless Enabled
+                  Circle Gasless
                 </span>
               )}
               <button className="btn btn-sm btn-secondary" onClick={logout} style={{ marginLeft: '8px' }}>Logout</button>
@@ -262,7 +298,7 @@ function App() {
                       <p className="paywall-desc">
                         {!authenticated 
                           ? "Log in with your Google account to automatically create an embedded Web3 wallet and read."
-                          : `Unlock this article on-chain by sending a micro-transaction of 0.0001 Testnet USDC (approx. $0.02) to the publisher (Gas sponsored by publisher).`
+                          : `Your Circle MPC Wallet: ${circleWallet?.address || 'Loading...'} | Balance: ${circleWallet?.balance || '0.0000'} USDC. Unlock this article on-chain by sending a micro-transaction of 0.0001 USDC (Gas sponsored by publisher).`
                         }
                       </p>
                       

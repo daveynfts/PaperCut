@@ -3,7 +3,6 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
 import { PrivyProvider } from '@privy-io/react-auth'
-import { SmartWalletsProvider } from '@privy-io/react-auth/smart-wallets'
 
 // Define Arc Testnet as a custom EVM chain in Privy
 const arcTestnet = {
@@ -50,18 +49,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         },
         embeddedWallets: {
           createOnLogin: 'users-without-wallets',
-        },
-        // 2. Enable Smart Wallets (Account Abstraction) for gas sponsorship
-        smartWallets: {
-          biconomy: {
-            enabled: true,
-          }
         }
       }}
     >
-      <SmartWalletsProvider>
-        <App />
-      </SmartWalletsProvider>
+      <App />
     </PrivyProvider>
   </React.StrictMode>,
 )
