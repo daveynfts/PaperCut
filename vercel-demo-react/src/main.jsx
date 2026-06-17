@@ -41,7 +41,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         // 1. Lock Privy strictly to Arc Testnet
         supportedChains: [arcTestnet],
         defaultChain: arcTestnet,
-        loginMethods: ['google', 'email', 'wallet'],
+        loginMethods: ['email', 'wallet'],
         appearance: {
           theme: 'dark',
           accentColor: '#e6b84c',

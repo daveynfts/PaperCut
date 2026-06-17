@@ -298,7 +298,7 @@ function App() {
         </div>
         <div className="nav-controls">
           {!authenticated ? (
-            <button className="btn btn-sm" onClick={login}>Sign Register (Gmail)</button>
+            <button className="btn btn-sm" onClick={login}>Sign Register</button>
           ) : (
             <div className="wallet-info-group">
               <button 
@@ -386,7 +386,7 @@ function App() {
                       <div className="paywall-title">TOLL BARRIER: TARIFF DUE</div>
                       <p className="paywall-desc">
                         {!authenticated 
-                          ? "Honored reader, please sign the dispatch register (via Google) to instantiate your personal Ledger Vault and peruse this column."
+                          ? "Honored reader, please sign the dispatch register to instantiate your personal Ledger Vault and peruse this column."
                           : `YOUR LEDGER PORTFOLIO: ${circleWallet?.address || 'Loading...'} | VAULT BALANCE: ${parseFloat(circleWallet?.balance || '0.0000').toFixed(6)} USDC. Please settle a micro-tariff of 0.0001 USDC to unlock this column for reading. The printing house has sponsored the network dispatch fee.`
                         }
                       </p>
