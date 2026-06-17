@@ -59,6 +59,34 @@ function App() {
     });
   };
 
+  const handleSyncBalance = async () => {
+    if (!authenticated || !user || !circleWallet) return;
+    setCopyStatus("Syncing balance...");
+    try {
+      const userEmail = user.email?.address || user.id || "anonymous-user";
+      const response = await fetch(`${BACKEND_URL}/api/user/wallet`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ email: userEmail })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setCircleWallet(prev => prev ? { ...prev, balance: data.balance } : null);
+        setCopyStatus("Balance updated!");
+        setTimeout(() => setCopyStatus("Click address to copy"), 1500);
+      } else {
+        setCopyStatus("Sync failed.");
+        setTimeout(() => setCopyStatus("Click address to copy"), 1500);
+      }
+    } catch (err) {
+      console.error(err);
+      setCopyStatus("Sync failed.");
+      setTimeout(() => setCopyStatus("Click address to copy"), 1500);
+    }
+  };
+
   // Load unlocked states from storage on mount
   useEffect(() => {
     const data = localStorage.getItem("papercut_unlocked_articles");
@@ -362,8 +390,28 @@ function App() {
             </div>
 
             <div className="modal-balance-label">USDC Balance</div>
-            <div className="modal-balance-value">
-              {parseFloat(circleWallet?.balance || "0.0000").toFixed(4)} <span style={{ fontSize: '14px', fontWeight: 'normal', color: 'var(--g200)' }}>USDC</span>
+            <div className="modal-balance-value" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+              <span>{parseFloat(circleWallet?.balance || "0.0000").toFixed(4)}</span>
+              <span style={{ fontSize: '14px', fontWeight: 'normal', color: 'var(--g200)' }}>USDC</span>
+              <button 
+                onClick={handleSyncBalance} 
+                style={{ 
+                  background: 'none', 
+                  border: 'none', 
+                  color: 'var(--accent)', 
+                  cursor: 'pointer', 
+                  fontSize: '16px', 
+                  display: 'flex', 
+                  alignItems: 'center',
+                  padding: '4px',
+                  borderRadius: '50%',
+                  transition: 'transform 0.2s'
+                }} 
+                title="Sync Balance"
+                className="btn-sync-balance"
+              >
+                🔄
+              </button>
             </div>
 
             <div className="qr-code-container">

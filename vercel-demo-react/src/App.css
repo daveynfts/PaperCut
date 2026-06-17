@@ -685,4 +685,8 @@ body {
   transform: scale(0.97);
 }
 
+.btn-sync-balance:hover {
+  transform: rotate(180deg);
+}
+
 
