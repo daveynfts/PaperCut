@@ -301,21 +301,18 @@ function App() {
             <button className="btn btn-sm" onClick={login}>Sign Register (Gmail)</button>
           ) : (
             <div className="wallet-info-group">
-              <div className="wallet-info" onClick={() => setShowWalletModal(true)} style={{ cursor: 'pointer' }} title="Click to view wallet & QR code">
-                <span className="status-dot"></span>
-                <span>
-                  {smartWalletAddress 
-                    ? `Ledger Account: ${shortenAddress(smartWalletAddress)}` 
-                    : `Account: ${shortenAddress(activeWallet?.address || user?.wallet?.address)}`
-                  }
-                </span>
-              </div>
-              {smartWalletAddress && (
-                <span className="badge-sponsored" style={{ marginLeft: '8px', fontSize: '11px', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(230, 184, 76, 0.2)', color: '#e6b84c', border: '1px solid #e6b84c' }}>
-                  Gas Tariff Sponsored
-                </span>
-              )}
-              <button className="btn btn-sm btn-secondary" onClick={logout} style={{ marginLeft: '8px' }}>Sign Out</button>
+              <button 
+                className="btn-wallet-icon" 
+                onClick={() => setShowWalletModal(true)} 
+                title={`Open Ledger Vault Wallet (${smartWalletAddress || activeWallet?.address || user?.wallet?.address})`}
+              >
+                <svg width="18" height="16" viewBox="0 0 20 18" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
+                  <path d="M17 4H3C1.89543 4 1 4.89543 1 6V15C1 16.1046 1.89543 17 3 17H17C18.1046 17 19 16.1046 19 15V6C19 4.89543 18.1046 4 17 4Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M19 8H14.5C13.6716 8 13 8.67157 13 9.5C13 10.3284 13.6716 11 14.5 11H19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M1 8.5C1 4.5 4.5 1 9.5 1H17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+              <button className="btn btn-sm btn-secondary" onClick={logout} style={{ marginLeft: '12px' }}>Sign Out</button>
             </div>
           )}
         </div>

@@ -1,5 +1,4 @@
-@import url('https://fontlibrary.org/face/chomsky');
-@import url('https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Playfair+Display:ital,wght@0,700;0,900;1,700;1,900&family=Special+Elite&family=UnifrakturMaguntia&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Playfair+Display:ital,wght@0,700;0,900;1,700;1,900&family=Special+Elite&family=UnifrakturMaguntia&family=UnifrakturCook:wght@700&family=Pirata+One&display=swap');
 
 :root {
   --paper-bg: #f5eed3; /* Aged cream paper */
@@ -16,7 +15,7 @@
   
   --font-serif: 'Libre Baskerville', Georgia, serif;
   --font-headline: 'Playfair Display', Georgia, serif;
-  --font-gothic: 'ChomskyRegular', 'UnifrakturMaguntia', serif;
+  --font-gothic: 'Pirata One', 'UnifrakturCook', 'UnifrakturMaguntia', serif;
   --font-mono: 'Special Elite', 'Courier Prime', Courier, monospace;
   
   --nav-height: 120px; /* Taller nav header to act as a proper newspaper masthead */
@@ -985,4 +984,29 @@ body {
     bottom: 10px;
     right: 10px;
   }
+}
+
+/* Navbar Wallet Button (Vintage Pocket style) */
+.btn-wallet-icon {
+  background: var(--paper-accent);
+  color: var(--ink-black);
+  border: 1px solid var(--ink-black);
+  padding: 6px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  box-shadow: 2px 2px 0px var(--ink-black);
+}
+
+.btn-wallet-icon:hover {
+  background-color: var(--ink-red);
+  color: var(--paper-bg);
+  border-color: var(--ink-red);
+}
+
+.btn-wallet-icon:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0px var(--ink-black);
 }
