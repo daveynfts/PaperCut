@@ -70,7 +70,11 @@ function App() {
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ email: userEmail })
+        body: JSON.stringify({ 
+          email: userEmail,
+          walletId: circleWallet.walletId,
+          address: circleWallet.address
+        })
       });
       const data = await response.json();
       if (response.ok) {
@@ -147,21 +151,38 @@ function App() {
       
       const userEmail = user.email?.address || user.id || "anonymous-user";
       
+      // Load local wallet backup if available to recover mapping on serverless cold starts
+      let localBackup = null;
+      try {
+        const stored = localStorage.getItem(`circle_wallet_${userEmail}`);
+        if (stored) {
+          localBackup = JSON.parse(stored);
+        }
+      } catch (e) {
+        console.error("Failed to read local wallet backup:", e);
+      }
+      
       try {
         const response = await fetch(`${BACKEND_URL}/api/user/wallet`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({ email: userEmail })
+          body: JSON.stringify({ 
+            email: userEmail,
+            walletId: localBackup?.walletId,
+            address: localBackup?.address
+          })
         });
         const data = await response.json();
         if (response.ok) {
-          setCircleWallet({
+          const walletData = {
             address: data.address,
             balance: data.balance,
             walletId: data.walletId
-          });
+          };
+          setCircleWallet(walletData);
+          localStorage.setItem(`circle_wallet_${userEmail}`, JSON.stringify(walletData));
         } else {
           setError(data.error || "Failed to load Circle MPC wallet.");
         }

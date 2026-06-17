@@ -51,17 +51,33 @@ const articles = [
 ];
 
 // Local JSON Database for mappings (email -> walletId, address, balance)
-const USERS_DB_PATH = path.join(__dirname, "users.json");
+const USERS_DB_PATH = process.env.VERCEL
+  ? "/tmp/users.json"
+  : path.join(__dirname, "users.json");
 
 function readUsersDb() {
   if (!fs.existsSync(USERS_DB_PATH)) {
-    fs.writeFileSync(USERS_DB_PATH, JSON.stringify({}));
+    const seedPath = path.join(__dirname, "users.json");
+    if (fs.existsSync(seedPath)) {
+      try {
+        const seedData = fs.readFileSync(seedPath, "utf8");
+        fs.writeFileSync(USERS_DB_PATH, seedData);
+      } catch (err) {
+        fs.writeFileSync(USERS_DB_PATH, JSON.stringify({}));
+      }
+    } else {
+      fs.writeFileSync(USERS_DB_PATH, JSON.stringify({}));
+    }
   }
   return JSON.parse(fs.readFileSync(USERS_DB_PATH, "utf8"));
 }
 
 function writeUsersDb(db) {
-  fs.writeFileSync(USERS_DB_PATH, JSON.stringify(db, null, 2));
+  try {
+    fs.writeFileSync(USERS_DB_PATH, JSON.stringify(db, null, 2));
+  } catch (err) {
+    console.error("Failed to write users DB:", err);
+  }
 }
 
 // Circle W3S Configuration
@@ -356,13 +372,24 @@ app.get("/api/articles/:id", (req, res) => {
 
 // Endpoint to get/create user wallet
 app.post("/api/user/wallet", async (req, res) => {
-  const { email } = req.body;
+  const { email, walletId, address } = req.body;
   if (!email) {
     return res.status(400).json({ error: "Email is required" });
   }
 
   try {
     const db = readUsersDb();
+    
+    // Restore wallet mapping from client storage if it was lost on serverless cold start
+    if (!db[email] && walletId && address) {
+      console.log(`[Circle W3S] Restoring wallet for ${email} from client: ${address}`);
+      db[email] = {
+        walletId,
+        address,
+        balance: "0.0"
+      };
+      writeUsersDb(db);
+    }
     
     if (db[email]) {
       const balance = await getWalletUsdcBalance(db[email].walletId);
