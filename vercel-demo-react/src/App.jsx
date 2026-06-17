@@ -52,6 +52,13 @@ function App() {
   const [copyStatus, setCopyStatus] = useState("Click address to copy");
   const [faucetLoading, setFaucetLoading] = useState(false);
 
+  // Scraper Simulation States
+  const [isScraping, setIsScraping] = useState(false);
+  const [scrapeStep, setScrapeStep] = useState(0); // 0=idle, 1=query, 2=payment, 3=downloading, 4=done
+  const [scrapeWords, setScrapeWords] = useState(0);
+  const [scrapeCost, setScrapeCost] = useState(0);
+  const [scrapeResult, setScrapeResult] = useState("");
+
   const handleCopyAddress = (addr) => {
     if (!addr) return;
     navigator.clipboard.writeText(addr).then(() => {
@@ -210,6 +217,57 @@ function App() {
     setTxStatus("");
     setTxHash("");
     setError("");
+    // Reset scraper simulation
+    setIsScraping(false);
+    setScrapeStep(0);
+    setScrapeWords(0);
+    setScrapeCost(0);
+    setScrapeResult("");
+  };
+
+  const triggerScrapeSimulation = () => {
+    if (isScraping) return;
+    setIsScraping(true);
+    setScrapeStep(1); // query
+    setScrapeWords(0);
+    setScrapeCost(0);
+    setScrapeResult("");
+
+    // Step 1: Query article info (2s)
+    setTimeout(() => {
+      setScrapeStep(2); // payment processing
+      
+      // Step 2: Pay on-chain micropayment tariff (3s)
+      setTimeout(() => {
+        setScrapeStep(3); // scraping / word count counting up
+        
+        // Simulating the word count scraper (4s)
+        let count = 0;
+        const totalWords = 84; // Mock word length of the premium column
+        const interval = setInterval(() => {
+          count += 7;
+          if (count >= totalWords) {
+            clearInterval(interval);
+            setScrapeWords(totalWords);
+            setScrapeCost(0.0001);
+            
+            // Step 4: Finished scraping, displaying the synthesized analysis summary (1.5s)
+            setTimeout(() => {
+              setScrapeStep(4); // done
+              setScrapeResult(
+                `[AI ANALYTICAL REPORT] "AI-Agent Economies: How Bots Earn and Spend on the Arc Blockchain" reveals a revolutionary shifts from traditional subscription-bundled payment models to programmatic API-driven micropayment channels. Equipped with Circle MPC Wallets, autonomous LLM agents buy web infrastructure, GPU computing, and premium information directly. Arc's EIP-3009 off-chain transactions reduce friction, creating an efficient long-tail machine economy.`
+              );
+            }, 1000);
+          } else {
+            setScrapeWords(count);
+            // Increment cost proportionally to cawed words
+            setScrapeCost((count / totalWords) * 0.0001);
+          }
+        }, 300);
+
+      }, 3000);
+
+    }, 2000);
   };
 
   const handleUnlockOnChain = async () => {
@@ -410,15 +468,103 @@ function App() {
                         <div className="paywall-option-box">
                           <div className="option-icon">🤖</div>
                           <div className="option-title">AI SCRAPER AGENT</div>
-                          <p className="paywall-desc">
-                            Autonomously retrieve clean text via program terminal.
-                          </p>
-                          <button 
-                            className="btn btn-sm btn-paywall btn-secondary"
-                            onClick={() => alert(`To access programmatically as an AI Agent, run this cURL request:\n\ncurl -X POST "${BACKEND_URL}/api/articles/unlock" \\\n  -H "Content-Type: application/json" \\\n  -d '{"email": "${user?.email?.address || "your-registered-email"}", "articleId": "${selectedArticle.id}"}'`)}
-                          >
-                            GET API CMD
-                          </button>
+                          
+                          {!isScraping ? (
+                            <>
+                              <p className="paywall-desc">
+                                Trigger simulated robot scraping sequence & micro-payments.
+                              </p>
+                              <button 
+                                className="btn btn-sm btn-paywall btn-secondary"
+                                onClick={triggerScrapeSimulation}
+                              >
+                                LAUNCH AGENT
+                              </button>
+                            </>
+                          ) : (
+                            /* Live Terminal Mockup Simulator Screen */
+                            <div className="scraper-terminal">
+                              <div className="terminal-header">
+                                <span className="term-dot red"></span>
+                                <span className="term-dot yellow"></span>
+                                <span className="term-dot green"></span>
+                                <span className="term-title">AI-Agent Terminal @ ScraperPort</span>
+                              </div>
+                              <div className="terminal-body mono-text">
+                                {scrapeStep >= 1 && (
+                                  <div className="term-line prompt">
+                                    <span className="term-accent">&gt;</span> query --prompt "How Bots Earn and Spend on the Arc Blockchain"
+                                  </div>
+                                )}
+                                {scrapeStep === 1 && (
+                                  <div className="term-line loading">
+                                    Scanning database for target dispatches...
+                                  </div>
+                                )}
+                                {scrapeStep >= 2 && (
+                                  <>
+                                    <div className="term-line success">
+                                      Dispatch found. ID: {selectedArticle.id}. Size: 84 words.
+                                    </div>
+                                    <div className="term-line prompt">
+                                      <span className="term-accent">&gt;</span> settle-tariff --amount 0.0001 --network arc-testnet
+                                    </div>
+                                  </>
+                                )}
+                                {scrapeStep === 2 && (
+                                  <div className="term-line loading">
+                                    Executing Circle MPC wallet gasless transfer...
+                                  </div>
+                                )}
+                                {scrapeStep >= 3 && (
+                                  <>
+                                    <div className="term-line success">
+                                      Tx settled. Hash: 0x8fd...35e0.
+                                    </div>
+                                    <div className="term-line prompt">
+                                      <span className="term-accent">&gt;</span> scrape --target content --stream-read
+                                    </div>
+                                    <div className="term-line info highlight-box">
+                                      <span>[STREAMING DATA]</span><br/>
+                                      <span>Words Read: <strong>{scrapeWords} / 84</strong></span><br/>
+                                      <span>Current Cost: <strong>{scrapeCost.toFixed(6)} USDC</strong></span>
+                                    </div>
+                                  </>
+                                )}
+                                {scrapeStep === 3 && (
+                                  <div className="term-line loading">
+                                    Cawing premium column paragraphs...
+                                  </div>
+                                )}
+                                {scrapeStep >= 4 && (
+                                  <>
+                                    <div className="term-line success" style={{ color: '#5cd15c', fontWeight: 'bold' }}>
+                                      Scraping complete. Settle total: {scrapeCost.toFixed(4)} USDC.
+                                    </div>
+                                    <div className="term-line prompt">
+                                      <span className="term-accent">&gt;</span> summarize-report --llm-refine
+                                    </div>
+                                    <div className="term-report-box">
+                                      {scrapeResult}
+                                    </div>
+                                    <button 
+                                      className="btn btn-sm" 
+                                      style={{ marginTop: '8px', fontSize: '9px', padding: '2px 8px', float: 'right' }}
+                                      onClick={() => {
+                                        setIsScraping(false);
+                                        setScrapeStep(0);
+                                        setScrapeWords(0);
+                                        setScrapeCost(0);
+                                        setScrapeResult("");
+                                      }}
+                                    >
+                                      RESET BOT
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
 
