@@ -214,9 +214,7 @@ async function transferCircleUsdc(sourceWalletId, destAddress, amount) {
       destinationAddress: destAddress,
       amounts: [amount.toString()],
       blockchain: "ARC-TESTNET",
-      fee: {
-        feeLevel: "MEDIUM"
-      }
+      feeLevel: "MEDIUM"
     })
   });
   const json = await response.json();
