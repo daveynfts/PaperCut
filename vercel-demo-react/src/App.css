@@ -1,3 +1,4 @@
+@import url('https://fontlibrary.org/face/chomsky');
 @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Playfair+Display:ital,wght@0,700;0,900;1,700;1,900&family=Special+Elite&family=UnifrakturMaguntia&display=swap');
 
 :root {
@@ -15,7 +16,7 @@
   
   --font-serif: 'Libre Baskerville', Georgia, serif;
   --font-headline: 'Playfair Display', Georgia, serif;
-  --font-gothic: 'UnifrakturMaguntia', serif;
+  --font-gothic: 'ChomskyRegular', 'UnifrakturMaguntia', serif;
   --font-mono: 'Special Elite', 'Courier Prime', Courier, monospace;
   
   --nav-height: 120px; /* Taller nav header to act as a proper newspaper masthead */
