@@ -33,6 +33,8 @@ const articles = [
   }
 ];
 
+const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+
 function App() {
   const { login, logout, authenticated, user } = usePrivy();
   const { wallets } = useWallets();
@@ -77,7 +79,7 @@ function App() {
       const userEmail = user.email?.address || user.id || "anonymous-user";
       
       try {
-        const response = await fetch("http://localhost:4000/api/user/wallet", {
+        const response = await fetch(`${BACKEND_URL}/api/user/wallet`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
@@ -140,7 +142,7 @@ function App() {
     const userEmail = user?.email?.address || user?.id || "anonymous-user";
 
     try {
-      const response = await fetch("http://localhost:4000/api/articles/unlock", {
+      const response = await fetch(`${BACKEND_URL}/api/articles/unlock`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"

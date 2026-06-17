@@ -483,6 +483,10 @@ app.post("/api/articles/unlock", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`[Server] Lepton x402 Publisher running on http://localhost:${PORT}`);
-});
+if (process.env.NODE_ENV !== "production") {
+  app.listen(PORT, () => {
+    console.log(`[Server] Lepton x402 Publisher running on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
