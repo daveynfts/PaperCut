@@ -4,39 +4,86 @@ document.addEventListener("DOMContentLoaded", () => {
   const dailyLimitInput = document.getElementById("daily-limit");
   const spentTodayEl = document.getElementById("spent-today");
   const btnSaveLimit = document.getElementById("btn-save-limit");
-  const btnFaucet = document.getElementById("btn-faucet");
+  const btnSync = document.getElementById("btn-sync");
   const txListEl = document.getElementById("tx-list");
 
-  let privateKey = null;
+  // New elements
+  const emailInput = document.getElementById("user-email");
+  const btnSaveEmail = document.getElementById("btn-save-email");
+  const emailStatusEl = document.getElementById("email-status");
+
+  let email = null;
   let address = null;
-  let balance = 1.00; // Default starter balance
+  let balance = 0.00;
   let dailyLimit = 0.10;
   let spentToday = 0.00;
   let transactions = [];
 
+  // Helper to fetch wallet info from backend
+  async function fetchWalletDetails(emailVal) {
+    if (!emailVal) return;
+    try {
+      emailStatusEl.textContent = "Syncing wallet info...";
+      emailStatusEl.style.color = "#e6b84c";
+
+      const response = await fetch("http://localhost:4000/api/user/wallet", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ email: emailVal })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        address = data.address;
+        balance = parseFloat(data.balance);
+        
+        await new Promise(resolve => {
+          chrome.storage.local.set({
+            email: emailVal,
+            circleAddress: address,
+            circleBalance: balance
+          }, resolve);
+        });
+
+        addressEl.textContent = shortenAddress(address);
+        addressEl.title = address;
+        balanceEl.textContent = balance.toFixed(4);
+        emailStatusEl.textContent = "Connected with Circle!";
+        emailStatusEl.style.color = "#2ecc71";
+      } else {
+        emailStatusEl.textContent = data.error || "Failed to sync wallet.";
+        emailStatusEl.style.color = "#e74c3c";
+      }
+    } catch (err) {
+      console.error(err);
+      emailStatusEl.textContent = "Backend offline (Check port 4000).";
+      emailStatusEl.style.color = "#e74c3c";
+    }
+  }
+
   // Load wallet & configurations from Chrome storage
-  chrome.storage.local.get(["privateKey", "balance", "dailyLimit", "spentToday", "transactions", "lastSpentDate"], (data) => {
-    // 1. Setup Wallet
-    if (data.privateKey) {
-      privateKey = data.privateKey;
-      const wallet = new ethers.Wallet(privateKey);
-      address = wallet.address;
+  chrome.storage.local.get(["email", "circleAddress", "circleBalance", "dailyLimit", "spentToday", "transactions", "lastSpentDate"], (data) => {
+    // 1. Setup Email Connection
+    if (data.email) {
+      email = data.email;
+      emailInput.value = email;
+      fetchWalletDetails(email);
     } else {
-      // Generate a new random wallet
-      const wallet = ethers.Wallet.createRandom();
-      privateKey = wallet.privateKey;
-      address = wallet.address;
-      chrome.storage.local.set({ privateKey, balance });
+      addressEl.textContent = "Not Connected";
+      emailStatusEl.textContent = "Enter your Gmail to connect.";
     }
 
-    addressEl.textContent = shortenAddress(address);
-    addressEl.title = address;
-
-    // 2. Setup Balance
-    if (data.balance !== undefined) {
-      balance = data.balance;
+    // 2. Setup Address & Balance from storage cache
+    if (data.circleAddress) {
+      address = data.circleAddress;
+      addressEl.textContent = shortenAddress(address);
+      addressEl.title = address;
     }
-    balanceEl.textContent = balance.toFixed(2);
+    if (data.circleBalance !== undefined) {
+      balance = data.circleBalance;
+      balanceEl.textContent = balance.toFixed(4);
+    }
 
     // 3. Setup Daily Limit
     if (data.dailyLimit !== undefined) {
@@ -65,6 +112,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Shorten Address (e.g. 0x1234...abcd)
   function shortenAddress(addr) {
+    if (!addr) return "Not Connected";
     return addr.substring(0, 8) + "..." + addr.substring(addr.length - 8);
   }
 
@@ -83,6 +131,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // Save Email Connection
+  btnSaveEmail.addEventListener("click", () => {
+    const enteredEmail = emailInput.value.trim();
+    if (enteredEmail) {
+      email = enteredEmail;
+      fetchWalletDetails(email);
+    } else {
+      emailStatusEl.textContent = "Please enter a valid email.";
+      emailStatusEl.style.color = "#e74c3c";
+    }
+  });
+
   // Save Daily Limit
   btnSaveLimit.addEventListener("click", () => {
     const limit = parseFloat(dailyLimitInput.value);
@@ -97,18 +157,14 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Faucet simulation (Refills $5.00 USDC for testing)
-  btnFaucet.addEventListener("click", () => {
-    balance += 5.00;
-    chrome.storage.local.set({ balance }, () => {
-      balanceEl.textContent = balance.toFixed(2);
-      
-      // Flash balance gold
-      balanceEl.style.color = "#ffffff";
-      setTimeout(() => {
-        balanceEl.style.color = "#e6b84c";
-      }, 500);
-    });
+  // Sync wallet details manually
+  btnSync.addEventListener("click", () => {
+    if (email) {
+      fetchWalletDetails(email);
+    } else {
+      emailStatusEl.textContent = "Connect Gmail first.";
+      emailStatusEl.style.color = "#e74c3c";
+    }
   });
 
   // Render recent readings in HTML list
@@ -125,7 +181,7 @@ document.addEventListener("DOMContentLoaded", () => {
         (tx) => `
         <div class="tx-item">
           <span class="tx-title" title="${tx.title}">${tx.title}</span>
-          <span class="tx-amount">-$${tx.amount.toFixed(2)}</span>
+          <span class="tx-amount">-$${tx.amount.toFixed(4)}</span>
         </div>
       `
       )
@@ -134,9 +190,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Listen for storage updates in background (re-renders popup on live readings)
   chrome.storage.onChanged.addListener((changes) => {
-    if (changes.balance) {
-      balance = changes.balance.newValue;
-      balanceEl.textContent = balance.toFixed(2);
+    if (changes.circleBalance) {
+      balance = changes.circleBalance.newValue;
+      balanceEl.textContent = balance.toFixed(4);
     }
     if (changes.spentToday) {
       spentToday = changes.spentToday.newValue;

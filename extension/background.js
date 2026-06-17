@@ -1,8 +1,6 @@
-// Load ethers.js in the Manifest V3 service worker context
-importScripts("ethers.umd.min.js");
+// Background service worker for Lepton Wallet Chrome Extension
 
-const ARC_CHAIN_ID = 54321;
-const ARC_USDC_ADDRESS = "0x0000000000000000000000000000000000001010";
+const BACKEND_URL = "http://localhost:4000";
 
 // Helper to get raw Chrome storage data asynchronously
 function getStorageData(keys) {
@@ -30,36 +28,34 @@ chrome.runtime.onMessageExternal.addListener((request, sender, sendResponse) => 
 
 // 1. Handle Wallet Info queries
 async function handleGetWalletInfo(sendResponse) {
-  const data = await getStorageData(["privateKey", "balance", "dailyLimit", "spentToday"]);
-  if (!data.privateKey) {
-    sendResponse({ success: false, error: "Wallet not initialized" });
+  const data = await getStorageData(["email", "circleAddress", "circleBalance", "dailyLimit", "spentToday"]);
+  if (!data.email || !data.circleAddress) {
+    sendResponse({ success: false, error: "Wallet not connected. Open the extension popup to connect your Gmail." });
     return;
   }
 
-  const wallet = new ethers.Wallet(data.privateKey);
   sendResponse({
     success: true,
-    address: wallet.address,
-    balance: data.balance || 0,
+    address: data.circleAddress,
+    balance: data.circleBalance || 0,
     dailyLimit: data.dailyLimit || 0.10,
     spentToday: data.spentToday || 0.00
   });
 }
 
-// 2. Handle EIP-3009 Signature Request with Auto-Sign Budget logic
+// 2. Handle EIP-3009 Signature Request with Auto-Sign Budget logic using Circle backend
 async function handleRequestSignature(data, sendResponse) {
   const { payee, amountUsdc, articleId, title } = data;
   const price = parseFloat(amountUsdc);
 
-  const storage = await getStorageData(["privateKey", "balance", "dailyLimit", "spentToday", "transactions"]);
+  const storage = await getStorageData(["email", "circleAddress", "circleBalance", "dailyLimit", "spentToday", "transactions"]);
   
-  if (!storage.privateKey) {
-    sendResponse({ success: false, error: "Wallet not initialized" });
+  if (!storage.email || !storage.circleAddress) {
+    sendResponse({ success: false, error: "Wallet not connected. Open the extension popup to connect your Gmail." });
     return;
   }
 
-  const wallet = new ethers.Wallet(storage.privateKey);
-  const currentBalance = storage.balance || 0;
+  const currentBalance = storage.circleBalance || 0;
   const currentLimit = storage.dailyLimit || 0.10;
   const currentSpent = storage.spentToday || 0.00;
   const txs = storage.transactions || [];
@@ -75,55 +71,38 @@ async function handleRequestSignature(data, sendResponse) {
     sendResponse({ 
       success: false, 
       error: "LIMIT_EXCEEDED", 
-      message: `Paying $${price.toFixed(2)} USDC exceeds your daily cap of $${currentLimit.toFixed(2)} USDC. Please authorize manually.`
+      message: `Paying $${price.toFixed(4)} USDC exceeds your daily cap of $${currentLimit.toFixed(2)} USDC. Please authorize manually.`
     });
     return;
   }
 
   try {
-    // USDC uses 6 decimals (1 USDC = 1,000,000 micro-USDC)
     const microUsdcValue = Math.round(price * 1000000);
     
-    // Generate valid EIP-3009 arguments
-    const validAfter = 0;
-    const validBefore = Math.floor(Date.now() / 1000) + 3600; // 1 hour expiry
-    const nonce = ethers.hexlify(ethers.randomBytes(32));
+    console.log(`[Extension Background] Requesting backend to unlock article ${articleId} for ${storage.email}...`);
 
-    // EIP-712 Domain Separator
-    const domain = {
-      name: "USD Coin",
-      version: "2",
-      chainId: ARC_CHAIN_ID,
-      verifyingContract: ARC_USDC_ADDRESS
-    };
+    // Call backend to execute the transfer on-chain via Circle Developer-Controlled wallets
+    const response = await fetch(`${BACKEND_URL}/api/articles/unlock`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        email: storage.email,
+        articleId: articleId
+      })
+    });
 
-    // EIP-3009 Types Definition
-    const types = {
-      TransferWithAuthorization: [
-        { name: "from", type: "address" },
-        { name: "to", type: "address" },
-        { name: "value", type: "uint256" },
-        { name: "validAfter", type: "uint256" },
-        { name: "validBefore", type: "uint256" },
-        { name: "nonce", type: "bytes32" }
-      ]
-    };
+    const result = await response.json();
+    if (!response.ok) {
+      sendResponse({ success: false, error: result.error || "Failed to unlock article via Circle backend." });
+      return;
+    }
 
-    // Message payload
-    const message = {
-      from: wallet.address,
-      to: payee,
-      value: BigInt(microUsdcValue),
-      validAfter: BigInt(validAfter),
-      validBefore: BigInt(validBefore),
-      nonce
-    };
-
-    // Cryptographic signing on Arc L1 config
-    const signature = await wallet.signTypedData(domain, types, message);
+    console.log(`[Extension Background] Backend unlock successful. New balance: ${result.balance}`);
 
     // Update wallet state in storage
-    const newBalance = currentBalance - price;
+    const newBalance = parseFloat(result.balance);
     const newSpent = currentSpent + price;
     
     const newTx = {
@@ -136,27 +115,27 @@ async function handleRequestSignature(data, sendResponse) {
 
     await new Promise((resolve) => {
       chrome.storage.local.set({
-        balance: newBalance,
+        circleBalance: newBalance,
         spentToday: newSpent,
         transactions: txs,
         lastSpentDate: new Date().toDateString()
       }, resolve);
     });
 
-    // Return the EIP-3009 authentication block back to the website
+    // Return the response back to the website with circle-authorized bypass tag
     sendResponse({
       success: true,
-      from: wallet.address,
+      from: storage.circleAddress,
       to: payee,
       value: microUsdcValue.toString(),
-      validAfter,
-      validBefore,
-      nonce,
-      signature
+      validAfter: 0,
+      validBefore: 0,
+      nonce: "0x",
+      signature: "circle-authorized" // Bypassed signature tag
     });
 
   } catch (error) {
-    console.error("Signing failed in extension backend worker:", error);
+    console.error("Circle backend payment execution failed:", error);
     sendResponse({ success: false, error: "SIGNING_FAILED" });
   }
 }

@@ -245,6 +245,16 @@
     <span class="status">Arc L1</span>
   </header>
 
+  <!-- Privy / Circle Connection -->
+  <div class="form-group" style="margin-bottom: 16px;">
+    <label class="form-label" for="user-email">Privy Gmail / Email</label>
+    <div class="input-row">
+      <input type="text" id="user-email" placeholder="your-email@gmail.com" style="flex: 1; background: var(--black); border: 1px solid var(--g800); color: var(--white); padding: 6px; border-radius: 2px; font-family: var(--font-mono); font-size: 11px;">
+      <button class="btn" id="btn-save-email" style="width: auto; margin-top: 0; padding: 6px 12px;">Connect</button>
+    </div>
+    <div id="email-status" style="font-size: 9px; color: var(--accent); margin-top: 4px;"></div>
+  </div>
+
   <div class="card">
     <div class="card-label">Your Wallet Address (Click to Copy)</div>
     <div class="address" id="wallet-address" title="Click to copy">Loading...</div>
@@ -255,7 +265,7 @@
         <span class="balance" id="wallet-balance">0.00</span>
         <span class="balance-unit">USDC</span>
       </div>
-      <button class="btn btn-secondary" id="btn-faucet" style="width: auto; padding: 4px 8px; font-size: 10px; margin-top: 0;">Faucet</button>
+      <button class="btn btn-secondary" id="btn-sync" style="width: auto; padding: 4px 8px; font-size: 10px; margin-top: 0;">Sync</button>
     </div>
   </div>
 
