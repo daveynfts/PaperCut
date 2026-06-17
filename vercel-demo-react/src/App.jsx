@@ -294,7 +294,7 @@ function App() {
       <nav className="nav">
         <div className="nav-brand">
           <span className="logo-symbol">Λ</span>
-          <span className="logo-text">PaperCut Live</span>
+          <span className="logo-text">The PaperCut Ledger</span>
         </div>
         <div className="nav-controls">
           {!authenticated ? (
