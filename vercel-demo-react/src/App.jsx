@@ -1,0 +1,282 @@
+import React, { useState, useEffect } from 'react';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { ethers } from 'ethers';
+import './App.css';
+
+const articles = [
+  {
+    id: "1",
+    title: "The Rebirth of the Lepton: Why Nanopayments are the Future of Web3",
+    author: "Alice Sterling",
+    snippet: "For decades, subscription models have forced users to pay for bundled content. But what if you could pay $0.02 to read a single article...",
+    content: "For decades, subscription models have forced users to pay for bundled content. But what if you could pay $0.02 to read a single article? Nanopayments remove the floor. Using Circle's Arc network and EIP-3009 off-chain signatures, we can settle value as small as $0.000001 instantly and gaslessly. This enables creators to sell individual articles, songs, or photos directly to users, opening up a new long-tail economy that subscriptions priced out.",
+    price: "0.02",
+    payee: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+  },
+  {
+    id: "2",
+    title: "AI-Agent Economies: How Bots Earn and Spend on the Arc Blockchain",
+    author: "Bob Vances",
+    snippet: "AI agents are no longer just tools; they are economic actors. By equipping LLMs with programmable wallets, they can autonomously pay...",
+    content: "AI agents are no longer just tools; they are economic actors. By equipping LLMs with programmable wallets, they can autonomously pay for APIs, compute, and premium data feeds per request. On the Arc network, an agent can pay $0.001 to summarize a paragraph or $0.01 to generate an image. This eliminates subscription overhead, allowing agents to route request queries to the cheapest, fastest providers dynamically on a strict daily budget.",
+    price: "0.05",
+    payee: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+  },
+  {
+    id: "3",
+    title: "Decentralized GPU Markets: Renting Compute by the Millisecond",
+    author: "Charlie Hacker",
+    snippet: "Renting GPUs usually requires high deposit minimums. Continuous payment streams on Arc allow renting GPU compute by the second...",
+    content: "Renting GPUs usually requires high deposit minimums. Continuous payment streams on Arc allow renting GPU compute by the second. A user opens a payment channel that streams $0.0001 USDC per second to the provider. The moment the computation finishes, the connection terminates, the payment stops, and the user is only billed for the exact seconds of server runtime used. This maximizes utility for fine-tuning models and batch processing.",
+    price: "0.03",
+    payee: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+  }
+];
+
+function App() {
+  const { login, logout, authenticated, user } = usePrivy();
+  const { wallets } = useWallets();
+
+  const [selectedArticle, setSelectedArticle] = useState(null);
+  const [unlockedArticles, setUnlockedArticles] = useState({});
+  const [txStatus, setTxStatus] = useState("");
+  const [txHash, setTxHash] = useState("");
+  const [error, setError] = useState("");
+  const [chainId, setChainId] = useState(null);
+
+  // Load unlocked states from storage on mount
+  useEffect(() => {
+    const data = localStorage.getItem("papercut_unlocked_articles");
+    if (data) {
+      setUnlockedArticles(JSON.parse(data));
+    }
+  }, []);
+
+  // Update active wallet chain ID when wallet changes
+  useEffect(() => {
+    if (wallets && wallets[0]) {
+      setChainId(wallets[0].chainId);
+    }
+  }, [wallets]);
+
+  const activeWallet = wallets ? wallets[0] : null;
+
+  const shortenAddress = (addr) => {
+    if (!addr) return "";
+    return addr.substring(0, 6) + "..." + addr.substring(addr.length - 4);
+  };
+
+  const handleSelectArticle = (art) => {
+    setSelectedArticle(art);
+    setTxStatus("");
+    setTxHash("");
+    setError("");
+  };
+
+  const handleUnlockOnChain = async () => {
+    setError("");
+    setTxStatus("");
+    setTxHash("");
+
+    if (!authenticated) {
+      login();
+      return;
+    }
+
+    if (!activeWallet) {
+      setError("No wallet available. Make sure social login completes wallet generation.");
+      return;
+    }
+
+    setTxStatus("Please confirm the micro-transaction in your Privy wallet...");
+
+    try {
+      // 1. Get the EIP1193 provider from Privy embedded/social wallet
+      const eip1193Provider = await activeWallet.getProvider();
+      
+      // 2. Wrap in ethers.js BrowserProvider
+      const provider = new ethers.BrowserProvider(eip1193Provider);
+      const signer = await provider.getSigner();
+
+      // 3. Send 0.0001 Testnet Gas Token representing the $0.02 payment
+      const tx = await signer.sendTransaction({
+        to: selectedArticle.payee,
+        value: ethers.parseEther("0.0001") 
+      });
+
+      console.log("[PaperCut React] Transaction submitted:", tx.hash);
+      setTxHash(tx.hash);
+      setTxStatus("Transaction broadcasting. Waiting for on-chain block confirmation...");
+
+      // 4. Wait for 1 block confirmation
+      const receipt = await tx.wait();
+      console.log("[PaperCut React] Transaction confirmed in block:", receipt.blockNumber);
+
+      // Save unlocked state
+      const updatedUnlocked = { ...unlockedArticles, [selectedArticle.id]: true };
+      setUnlockedArticles(updatedUnlocked);
+      localStorage.setItem("papercut_unlocked_articles", JSON.stringify(updatedUnlocked));
+      
+      setTxStatus("Success! Article unlocked.");
+      setTimeout(() => {
+        setTxStatus("");
+        setTxHash("");
+      }, 2000);
+
+    } catch (err) {
+      console.error("Payment transaction failed:", err);
+      setTxStatus("");
+      if (err.code === "ACTION_REJECTED" || err.message?.includes("rejected")) {
+        setError("User rejected the transaction.");
+      } else {
+        setError("Transaction failed. Do you have testnet gas tokens?");
+      }
+    }
+  };
+
+  const getExplorerUrl = (id, hash) => {
+    const numericId = Number(id?.replace("eip155:", "") || "1");
+    switch (numericId) {
+      case 11155111:
+        return `https://sepolia.etherscan.io/tx/${hash}`;
+      case 84532:
+        return `https://sepolia.basescan.org/tx/${hash}`;
+      case 421614:
+        return `https://sepolia.arbiscan.io/tx/${hash}`;
+      case 5042002:
+        return `https://testnet.arcscan.app/tx/${hash}`;
+      default:
+        return `https://etherscan.io/tx/${hash}`;
+    }
+  };
+
+  return (
+    <div className="app-root">
+      {/* NAV BAR */}
+      <nav className="nav">
+        <div className="nav-brand">
+          <span className="logo-symbol">Λ</span>
+          <span className="logo-text">PaperCut Live</span>
+        </div>
+        <div className="nav-controls">
+          {!authenticated ? (
+            <button className="btn btn-sm" onClick={login}>Login (Gmail/Wallet)</button>
+          ) : (
+            <div className="wallet-info-group">
+              <div className="wallet-info">
+                <span className="status-dot"></span>
+                <span>{shortenAddress(activeWallet?.address || user?.wallet?.address)}</span>
+              </div>
+              <button class="btn btn-sm btn-secondary" onClick={logout} style={{ marginLeft: '8px' }}>Logout</button>
+            </div>
+          )}
+        </div>
+      </nav>
+
+      {/* MAIN CONTAINER */}
+      <main className="main-container">
+        {/* LEFT SIDEBAR */}
+        <section className="sidebar">
+          <div className="section-title">
+            <h2>PREMIUM ARTICLES</h2>
+            <span className="item-count">{articles.length} articles</span>
+          </div>
+          <div className="article-list">
+            {articles.map((art) => (
+              <div
+                key={art.id}
+                className={`article-card ${selectedArticle?.id === art.id ? 'active' : ''}`}
+                onClick={() => handleSelectArticle(art)}
+              >
+                <div className="card-title">{art.title}</div>
+                <div className="card-meta">
+                  <span>By {art.author}</span>
+                  <span className="price-tag">${art.price}</span>
+                </div>
+                <div className="card-snippet">{art.snippet}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* RIGHT CONTENT */}
+        <section className="viewer">
+          {!selectedArticle ? (
+            <div id="viewer-default" className="viewer-state">
+              <div className="greek-key"></div>
+              <h1 className="serif-title font-italic">Select an article</h1>
+              <p className="mono-text text-muted">Web3 Social Login + Micropayments live demo.</p>
+              <div className="badge-row">
+                <span className="chain-badge">Login with Google</span>
+                <span className="chain-badge">Embedded Wallet</span>
+                <span className="chain-badge">Arc Testnet</span>
+              </div>
+            </div>
+          ) : (
+            <div id="viewer-active" className="viewer-state">
+              <div className="article-header">
+                <h1 className="serif-title">{selectedArticle.title}</h1>
+                <div className="article-meta">
+                  <span>By <strong style={{ color: 'var(--white)' }}>{selectedArticle.author}</strong></span>
+                  <span className="divider">•</span>
+                  <span className="price-badge">${selectedArticle.price} USDC Equiv</span>
+                </div>
+              </div>
+
+              <div className="greek-key tight"></div>
+
+              <div className="article-body">
+                {unlockedArticles[selectedArticle.id] ? (
+                  <div className="content-text premium-unlocked">
+                    {selectedArticle.content}
+                  </div>
+                ) : (
+                  <>
+                    <div className="content-text">
+                      {selectedArticle.snippet}
+                    </div>
+
+                    {/* PAYWALL */}
+                    <div className="paywall-card">
+                      <div className="paywall-title">Web3 Paywall Required</div>
+                      <p className="paywall-desc">
+                        {!authenticated 
+                          ? "Log in with your Google account to automatically create an embedded Web3 wallet and read."
+                          : `Unlock this article on-chain by sending a micro-transaction of 0.0001 Testnet Gas Token (approx. $0.02) to the publisher.`
+                        }
+                      </p>
+                      
+                      {!txStatus && (
+                        <button className="btn btn-lg" onClick={handleUnlockOnChain}>
+                          {!authenticated ? "Login to Unlock" : "Unlock on-chain"}
+                        </button>
+                      )}
+
+                      {txStatus && (
+                        <div className="tx-status-box">
+                          <span className="spinner"></span>
+                          <span>{txStatus}</span>
+                          {txHash && (
+                            <div className="tx-hash-link">
+                              <a href={getExplorerUrl(chainId, txHash)} target="_blank" rel="noopener noreferrer">
+                                View on Block Explorer ↗
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {error && <div className="paywall-error">{error}</div>}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
+      </main>
+    </div>
+  );
+}
+
+export default App;
