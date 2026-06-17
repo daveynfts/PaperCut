@@ -40,78 +40,16 @@ const UsdcCoinIcon = ({ size = 24, className = "", style = {} }) => {
     <svg 
       width={size} 
       height={size} 
-      viewBox="0 0 100 100" 
-      className={`usdc-3d-coin ${className}`}
+      viewBox="0 0 32 32" 
+      className={`usdc-2d-coin ${className}`}
       style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
     >
-      <defs>
-        {/* Shadow for the entire coin to give it depth */}
-        <filter id="coin-shadow" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="1.5" dy="3" stdDeviation="2" floodColor="#0d284a" floodOpacity="0.4" />
-        </filter>
-        
-        {/* Outer 3D side edge gradient (darker blue metal) */}
-        <linearGradient id="edge-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#226cb8" />
-          <stop offset="50%" stopColor="#154980" />
-          <stop offset="100%" stopColor="#0c2d52" />
-        </linearGradient>
-
-        {/* Outer rim front face gradient (medium-light USDC blue) */}
-        <linearGradient id="rim-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#5fa1eb" />
-          <stop offset="40%" stopColor="#2775CA" />
-          <stop offset="100%" stopColor="#18569c" />
-        </linearGradient>
-
-        {/* Inner recessed face gradient - reverse lighting to simulate depth */}
-        <linearGradient id="face-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#154980" />
-          <stop offset="50%" stopColor="#2775CA" />
-          <stop offset="100%" stopColor="#5fa1eb" />
-        </linearGradient>
-
-        {/* Raised symbol ice white gradient */}
-        <linearGradient id="symbol-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#ffffff" />
-          <stop offset="60%" stopColor="#f0f5fd" />
-          <stop offset="100%" stopColor="#d5e4f7" />
-        </linearGradient>
-
-        {/* Emboss shadow filters for the USDC symbol */}
-        <filter id="emboss-filter">
-          <feDropShadow dx="-0.4" dy="-0.4" stdDeviation="0.2" floodColor="#ffffff" floodOpacity="0.9" />
-          <feDropShadow dx="0.6" dy="0.6" stdDeviation="0.4" floodColor="#0c2d52" floodOpacity="0.8" />
-        </filter>
-      </defs>
-
-      {/* 3D Side/Edge (Extruded cylinder part) */}
-      <path 
-        d="M 70.87 17.13 A 38 38 0 0 1 17.13 70.87 L 25.13 78.87 A 38 38 0 0 0 78.87 25.13 Z" 
-        fill="url(#edge-grad)" 
-        stroke="#0c2d52" 
-        strokeWidth="1.5" 
-        strokeLinejoin="round"
-      />
-
-      {/* Main Front Face Rim (Top Circle) */}
-      <circle cx="44" cy="44" r="38" fill="url(#rim-grad)" stroke="#0c2d52" strokeWidth="1.5" />
-      
-      {/* Inner Rim ridge ring */}
-      <circle cx="44" cy="44" r="34" fill="none" stroke="#0c2d52" strokeWidth="0.8" strokeDasharray="2,2" opacity="0.6" />
-      
-      {/* Recessed Coin Face */}
-      <circle cx="44" cy="44" r="30" fill="url(#face-grad)" stroke="#0c2d52" strokeWidth="1.2" />
-
-      {/* USDC ($) Symbol Group centered at (44,44) */}
-      <g transform="translate(44, 44) scale(2.4) translate(-12, -12)" filter="url(#emboss-filter)">
-        {/* S-shape backdrop outline */}
-        <path d="M12 6V18M12 6C9.5 6 9.5 9 12 9C14.5 9 14.5 12 12 12C9.5 12 9.5 15 12 15C14.5 15 14.5 18 12 18" stroke="#0c2d52" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M9.5 9.5C9.5 7.5 10.5 6 12 6C13.5 6 14.5 7.5 14.5 9.5M9.5 14.5C9.5 16.5 10.5 18 12 18C13.5 18 14.5 16.5 14.5 14.5" stroke="#0c2d52" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"/>
-
-        {/* Foreground Symbol stroke */}
-        <path d="M12 6V18M12 6C9.5 6 9.5 9 12 9C14.5 9 14.5 12 12 12C9.5 12 9.5 15 12 15C14.5 15 14.5 18 12 18" stroke="url(#symbol-grad)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M9.5 9.5C9.5 7.5 10.5 6 12 6C13.5 6 14.5 7.5 14.5 9.5M9.5 14.5C9.5 16.5 10.5 18 12 18C13.5 18 14.5 16.5 14.5 14.5" stroke="url(#symbol-grad)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+      <g fill="none">
+        <circle fill="#2775CA" cx="16" cy="16" r="16"/>
+        <g fill="#FFF">
+          <path d="M20.022 18.124c0-2.124-1.28-2.852-3.84-3.156-1.828-.243-2.193-.728-2.193-1.578 0-.85.61-1.396 1.828-1.396 1.097 0 1.707.364 2.011 1.275a.458.458 0 00.427.303h.975a.416.416 0 00.427-.425v-.06a3.04 3.04 0 00-2.743-2.489V9.142c0-.243-.183-.425-.487-.486h-.915c-.243 0-.426.182-.487.486v1.396c-1.829.242-2.986 1.456-2.986 2.974 0 2.002 1.218 2.791 3.778 3.095 1.707.303 2.255.668 2.255 1.639 0 .97-.853 1.638-2.011 1.638-1.585 0-2.133-.667-2.316-1.578-.06-.242-.244-.364-.427-.364h-1.036a.416.416 0 00-.426.425v.06c.243 1.518 1.219 2.61 3.23 2.914v1.457c0 .242.183.425.487.485h.915c.243 0 .426-.182.487-.485V21.34c1.829-.303 3.047-1.578 3.047-3.217z"/>
+          <path d="M12.892 24.497c-4.754-1.7-7.192-6.98-5.424-11.653.914-2.55 2.925-4.491 5.424-5.402.244-.121.365-.303.365-.607v-.85c0-.242-.121-.424-.365-.485-.061 0-.183 0-.244.06a10.895 10.895 0 00-7.13 13.717c1.096 3.4 3.717 6.01 7.13 7.102.244.121.488 0 .548-.243.061-.06.061-.122.061-.243v-.85c0-.182-.182-.424-.365-.546zm6.46-18.936c-.244-.122-.488 0-.548.242-.061.061-.061.122-.061.243v.85c0 .243.182.485.365.607 4.754 1.7 7.192 6.98 5.424 11.653-.914 2.55-2.925 4.491-5.424 5.402-.244.121-.365.303-.365.607v.85c0 .242.121.424.365.485.061 0 .183 0 .244-.06a10.895 10.895 0 007.13-13.717c-1.096-3.46-3.778-6.07-7.13-7.162z"/>
+        </g>
       </g>
     </svg>
   );
