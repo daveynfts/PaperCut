@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { useSmartWallets } from '@privy-io/react-auth/smart-wallets';
 import { ethers } from 'ethers';
 import './App.css';
 
@@ -36,6 +37,7 @@ const articles = [
 function App() {
   const { login, logout, authenticated, user } = usePrivy();
   const { wallets } = useWallets();
+  const { client } = useSmartWallets();
 
   const [selectedArticle, setSelectedArticle] = useState(null);
   const [unlockedArticles, setUnlockedArticles] = useState({});
@@ -60,6 +62,8 @@ function App() {
   }, [wallets]);
 
   const activeWallet = wallets ? wallets[0] : null;
+  const smartWallet = user?.linkedAccounts?.find((account) => account.type === 'smart_wallet');
+  const smartWalletAddress = smartWallet?.address;
 
   const shortenAddress = (addr) => {
     if (!addr) return "";
@@ -83,34 +87,40 @@ function App() {
       return;
     }
 
-    if (!activeWallet) {
-      setError("No wallet available. Make sure social login completes wallet generation.");
+    if (!client) {
+      setError("Smart Wallet client is initializing. Please try again in a few seconds.");
       return;
     }
 
     setTxStatus("Please confirm the micro-transaction in your Privy wallet...");
 
     try {
-      // 1. Get the EIP1193 provider from Privy embedded/social wallet
-      const eip1193Provider = await activeWallet.getProvider();
-      
-      // 2. Wrap in ethers.js BrowserProvider
-      const provider = new ethers.BrowserProvider(eip1193Provider);
-      const signer = await provider.getSigner();
+      console.log("[PaperCut React] Sending sponsored transaction via Smart Wallet:", smartWalletAddress);
 
-      // 3. Send 0.0001 Testnet Gas Token representing the $0.02 payment
-      const tx = await signer.sendTransaction({
+      // Send 0.0001 USDC (native token/gas token on Arc Testnet) representing the payment
+      const hash = await client.sendTransaction({
         to: selectedArticle.payee,
-        value: ethers.parseEther("0.0001") 
+        value: 100000000000000n, // 0.0001 USDC (18 decimals on Arc Testnet)
       });
 
-      console.log("[PaperCut React] Transaction submitted:", tx.hash);
-      setTxHash(tx.hash);
-      setTxStatus("Transaction broadcasting. Waiting for on-chain block confirmation...");
+      console.log("[PaperCut React] Smart Wallet transaction submitted:", hash);
+      setTxHash(hash);
+      setTxStatus("Transaction submitted. Waiting for on-chain confirmation...");
 
-      // 4. Wait for 1 block confirmation
-      const receipt = await tx.wait();
-      console.log("[PaperCut React] Transaction confirmed in block:", receipt.blockNumber);
+      // Wait for confirmation by polling Arc Testnet RPC directly
+      const provider = new ethers.JsonRpcProvider("https://rpc.testnet.arc.network");
+      let receipt = null;
+      for (let i = 0; i < 20; i++) {
+        receipt = await provider.getTransactionReceipt(hash);
+        if (receipt) break;
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+
+      if (!receipt) {
+        throw new Error("Confirmation timeout. Please check your transaction status on ArcScan.");
+      }
+
+      console.log("[PaperCut React] Smart Wallet transaction confirmed in block:", receipt.blockNumber);
 
       // Save unlocked state
       const updatedUnlocked = { ...unlockedArticles, [selectedArticle.id]: true };
@@ -129,7 +139,7 @@ function App() {
       if (err.code === "ACTION_REJECTED" || err.message?.includes("rejected")) {
         setError("User rejected the transaction.");
       } else {
-        setError("Transaction failed. Do you have testnet gas tokens?");
+        setError("Transaction failed. Make sure your gas sponsor policy is active and wallet is funded.");
       }
     }
   };
@@ -165,9 +175,19 @@ function App() {
             <div className="wallet-info-group">
               <div className="wallet-info">
                 <span className="status-dot"></span>
-                <span>{shortenAddress(activeWallet?.address || user?.wallet?.address)}</span>
+                <span>
+                  {smartWalletAddress 
+                    ? `Smart: ${shortenAddress(smartWalletAddress)}` 
+                    : shortenAddress(activeWallet?.address || user?.wallet?.address)
+                  }
+                </span>
               </div>
-              <button class="btn btn-sm btn-secondary" onClick={logout} style={{ marginLeft: '8px' }}>Logout</button>
+              {smartWalletAddress && (
+                <span className="badge-sponsored" style={{ marginLeft: '8px', fontSize: '11px', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(230, 184, 76, 0.2)', color: '#e6b84c', border: '1px solid #e6b84c' }}>
+                  Gasless Enabled
+                </span>
+              )}
+              <button className="btn btn-sm btn-secondary" onClick={logout} style={{ marginLeft: '8px' }}>Logout</button>
             </div>
           )}
         </div>
@@ -242,7 +262,7 @@ function App() {
                       <p className="paywall-desc">
                         {!authenticated 
                           ? "Log in with your Google account to automatically create an embedded Web3 wallet and read."
-                          : `Unlock this article on-chain by sending a micro-transaction of 0.0001 Testnet Gas Token (approx. $0.02) to the publisher.`
+                          : `Unlock this article on-chain by sending a micro-transaction of 0.0001 Testnet USDC (approx. $0.02) to the publisher (Gas sponsored by publisher).`
                         }
                       </p>
                       

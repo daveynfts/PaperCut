@@ -3,6 +3,33 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
 import { PrivyProvider } from '@privy-io/react-auth'
+import { SmartWalletsProvider } from '@privy-io/react-auth/smart-wallets'
+
+// Define Arc Testnet as a custom EVM chain in Privy
+const arcTestnet = {
+  id: 5042002,
+  network: 'arc-testnet',
+  name: 'Arc Testnet',
+  nativeCurrency: {
+    name: 'USDC',
+    symbol: 'USDC',
+    decimals: 18,
+  },
+  rpcUrls: {
+    default: {
+      http: ['https://rpc.testnet.arc.network'],
+    },
+    public: {
+      http: ['https://rpc.testnet.arc.network'],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: 'ArcScan',
+      url: 'https://testnet.arcscan.app',
+    },
+  },
+};
 
 // Default Demo App ID from Privy for testing, or user can replace with their own from dashboard.privy.io
 const PRIVY_APP_ID = "clqh45d0c00t2mc0f6u7q08g9"; 
@@ -12,6 +39,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <PrivyProvider
       appId={PRIVY_APP_ID}
       config={{
+        // 1. Lock Privy strictly to Arc Testnet
+        supportedChains: [arcTestnet],
+        defaultChain: arcTestnet,
         loginMethods: ['google', 'email', 'wallet'],
         appearance: {
           theme: 'dark',
@@ -21,9 +51,17 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         embeddedWallets: {
           createOnLogin: 'users-without-wallets',
         },
+        // 2. Enable Smart Wallets (Account Abstraction) for gas sponsorship
+        smartWallets: {
+          biconomy: {
+            enabled: true,
+          }
+        }
       }}
     >
-      <App />
+      <SmartWalletsProvider>
+        <App />
+      </SmartWalletsProvider>
     </PrivyProvider>
   </React.StrictMode>,
 )
