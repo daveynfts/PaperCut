@@ -384,21 +384,46 @@ function App() {
                     {/* PAYWALL */}
                     <div className="paywall-card">
                       <div className="paywall-title">TOLL BARRIER: TARIFF DUE</div>
-                      <p className="paywall-desc">
-                        {!authenticated 
-                          ? "Honored reader, please sign the dispatch register to instantiate your personal Ledger Vault and peruse this column."
-                          : `YOUR LEDGER PORTFOLIO: ${circleWallet?.address || 'Loading...'} | VAULT BALANCE: ${parseFloat(circleWallet?.balance || '0.0000').toFixed(6)} USDC. Please settle a micro-tariff of 0.0001 USDC to unlock this column for reading. The printing house has sponsored the network dispatch fee.`
-                        }
-                      </p>
                       
-                      {!txStatus && (
-                        <button className="btn btn-lg" onClick={handleUnlockOnChain}>
-                          {!authenticated ? "SIGN REGISTER TO READ" : "PAY MICRO-TARIFF TO READ"}
-                        </button>
-                      )}
+                      <div className="paywall-options-container">
+                        {/* Option 1: Human Reader */}
+                        <div className="paywall-option-box">
+                          <div className="option-icon">🖋️</div>
+                          <div className="option-title">HUMAN READER</div>
+                          <p className="paywall-desc">
+                            {!authenticated 
+                              ? "Sign the register to create a Ledger Vault." 
+                              : `Vault: ${shortenAddress(circleWallet?.address)} | Bal: ${parseFloat(circleWallet?.balance || '0.00').toFixed(4)} USDC`
+                            }
+                          </p>
+                          {!txStatus && (
+                            <button className="btn btn-sm btn-paywall" onClick={handleUnlockOnChain}>
+                              {!authenticated ? "SIGN REGISTER" : "PAY 0.0001 USDC"}
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Divider Line */}
+                        <div className="paywall-option-divider"></div>
+
+                        {/* Option 2: AI Agent */}
+                        <div className="paywall-option-box">
+                          <div className="option-icon">🤖</div>
+                          <div className="option-title">AI SCRAPER AGENT</div>
+                          <p className="paywall-desc">
+                            Autonomously retrieve clean text via program terminal.
+                          </p>
+                          <button 
+                            className="btn btn-sm btn-paywall btn-secondary"
+                            onClick={() => alert(`To access programmatically as an AI Agent, run this cURL request:\n\ncurl -X POST "${BACKEND_URL}/api/articles/unlock" \\\n  -H "Content-Type: application/json" \\\n  -d '{"email": "${user?.email?.address || "your-registered-email"}", "articleId": "${selectedArticle.id}"}'`)}
+                          >
+                            GET API CMD
+                          </button>
+                        </div>
+                      </div>
 
                       {txStatus && (
-                        <div className="tx-status-box">
+                        <div className="tx-status-box" style={{ marginTop: '20px', width: '100%' }}>
                           <span className="spinner"></span>
                           <span>{txStatus}</span>
                           {txHash && (
@@ -411,7 +436,7 @@ function App() {
                         </div>
                       )}
 
-                      {error && <div className="paywall-error">{error}</div>}
+                      {error && <div className="paywall-error" style={{ marginTop: '15px', width: '100%' }}>{error}</div>}
                     </div>
                   </>
                 )}
