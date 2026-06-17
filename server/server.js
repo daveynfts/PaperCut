@@ -534,7 +534,7 @@ app.post("/api/articles/unlock", async (req, res) => {
     const userWalletAddress = db[email].address;
     
     const currentBalance = await getWalletUsdcBalance(userWalletId);
-    const cost = 0.0001;
+    const cost = parseFloat(article.price);
     
     if (parseFloat(currentBalance) < cost) {
       return res.status(402).json({ error: "Insufficient balance", balance: currentBalance });

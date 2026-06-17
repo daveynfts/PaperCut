@@ -233,6 +233,8 @@ function App() {
     setScrapeCost(0);
     setScrapeResult("");
 
+    const costPerRead = parseFloat(selectedArticle?.price || "0.0001");
+
     // Step 1: Query article info (2s)
     setTimeout(() => {
       setScrapeStep(2); // payment processing
@@ -249,19 +251,19 @@ function App() {
           if (count >= totalWords) {
             clearInterval(interval);
             setScrapeWords(totalWords);
-            setScrapeCost(0.0001);
+            setScrapeCost(costPerRead);
             
             // Step 4: Finished scraping, displaying the synthesized analysis summary (1.5s)
             setTimeout(() => {
               setScrapeStep(4); // done
               setScrapeResult(
-                `[AI ANALYTICAL REPORT] "AI-Agent Economies: How Bots Earn and Spend on the Arc Blockchain" reveals a revolutionary shifts from traditional subscription-bundled payment models to programmatic API-driven micropayment channels. Equipped with Circle MPC Wallets, autonomous LLM agents buy web infrastructure, GPU computing, and premium information directly. Arc's EIP-3009 off-chain transactions reduce friction, creating an efficient long-tail machine economy.`
+                `[AI ANALYTICAL REPORT] "${selectedArticle?.title || "Dispatch"}" reveals a revolutionary shift from traditional subscription-bundled payment models to programmatic API-driven micropayment channels. Equipped with Circle MPC Wallets, autonomous LLM agents buy web infrastructure, GPU computing, and premium information directly. Settle total of ${costPerRead} USDC was successfully processed on-chain.`
               );
             }, 1000);
           } else {
             setScrapeWords(count);
             // Increment cost proportionally to cawed words
-            setScrapeCost((count / totalWords) * 0.0001);
+            setScrapeCost((count / totalWords) * costPerRead);
           }
         }, 300);
 
@@ -463,7 +465,7 @@ function App() {
                           </p>
                           {!txStatus && (
                             <button className="btn btn-sm btn-paywall" onClick={handleUnlockOnChain}>
-                              {!authenticated ? "SIGN REGISTER" : "PAY 0.0001 USDC"}
+                              {!authenticated ? "SIGN REGISTER" : `PAY ${selectedArticle.price} USDC`}
                             </button>
                           )}
                         </div>
@@ -500,7 +502,7 @@ function App() {
                               <div className="terminal-body mono-text">
                                 {scrapeStep >= 1 && (
                                   <div className="term-line prompt">
-                                    <span className="term-accent">&gt;</span> query --prompt "How Bots Earn and Spend on the Arc Blockchain"
+                                    <span className="term-accent">&gt;</span> query --prompt "{selectedArticle.title}"
                                   </div>
                                 )}
                                 {scrapeStep === 1 && (
@@ -514,7 +516,7 @@ function App() {
                                       Dispatch found. ID: {selectedArticle.id}. Size: 84 words.
                                     </div>
                                     <div className="term-line prompt">
-                                      <span className="term-accent">&gt;</span> settle-tariff --amount 0.0001 --network arc-testnet
+                                      <span className="term-accent">&gt;</span> settle-tariff --amount {selectedArticle.price} --network arc-testnet
                                     </div>
                                   </>
                                 )}
