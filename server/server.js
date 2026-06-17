@@ -422,6 +422,71 @@ app.post("/api/user/wallet", async (req, res) => {
   }
 });
 
+// Endpoint to request faucet from publisher wallet
+app.post("/api/user/faucet", async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: "Email is required" });
+  }
+
+  try {
+    const db = readUsersDb();
+    if (!db[email]) {
+      return res.status(400).json({ error: "User wallet not initialized" });
+    }
+
+    // Cooldown check (30 minutes)
+    const now = Date.now();
+    const lastFaucet = db[email].lastFaucetTime || 0;
+    const cooldown = 30 * 60 * 1000; // 30 minutes in ms
+    const timePassed = now - lastFaucet;
+
+    if (timePassed < cooldown) {
+      const timeLeftMs = cooldown - timePassed;
+      const timeLeftMins = Math.ceil(timeLeftMs / 1000 / 60);
+      return res.status(429).json({
+        error: `Faucet cooldown active. Please wait ${timeLeftMins} minute(s) before requesting again.`
+      });
+    }
+
+    const userWalletId = db[email].walletId;
+    const userAddress = db[email].address;
+    const amount = 0.05;
+
+    console.log(`[Circle W3S] Fauceting ${amount} USDC from publisher wallet to ${userAddress}`);
+
+    let txHash;
+    if (isMockMode) {
+      txHash = "0x" + crypto.randomBytes(32).toString("hex");
+      const currentBal = parseFloat(db[email].balance || "0.0");
+      db[email].balance = (currentBal + amount).toFixed(4);
+      db[email].lastFaucetTime = now;
+      writeUsersDb(db);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      console.log(`[Mock Faucet] Added ${amount} USDC to ${email}`);
+    } else {
+      const txId = await transferCircleUsdc(process.env.PUBLISHER_WALLET_ID, userAddress, amount);
+      const result = await pollTransactionStatus(txId);
+      txHash = result.txHash;
+      db[email].lastFaucetTime = now;
+    }
+
+    const finalBalance = await getWalletUsdcBalance(userWalletId);
+    db[email].balance = finalBalance;
+    writeUsersDb(db);
+
+    res.json({
+      success: true,
+      txHash,
+      balance: finalBalance
+    });
+
+  } catch (error) {
+    console.error("Faucet error:", error);
+    res.status(500).json({ error: error.message || "Failed to execute faucet transfer" });
+  }
+});
+
 // Endpoint to unlock an article
 app.post("/api/articles/unlock", async (req, res) => {
   const { email, articleId } = req.body;

@@ -50,6 +50,7 @@ function App() {
   const [isLoadingWallet, setIsLoadingWallet] = useState(false);
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [copyStatus, setCopyStatus] = useState("Click address to copy");
+  const [faucetLoading, setFaucetLoading] = useState(false);
 
   const handleCopyAddress = (addr) => {
     if (!addr) return;
@@ -84,6 +85,37 @@ function App() {
       console.error(err);
       setCopyStatus("Sync failed.");
       setTimeout(() => setCopyStatus("Click address to copy"), 1500);
+    }
+  };
+
+  const handleRequestFaucet = async () => {
+    if (!authenticated || !user || !circleWallet) return;
+    setFaucetLoading(true);
+    setCopyStatus("Requesting faucet...");
+    try {
+      const userEmail = user.email?.address || user.id || "anonymous-user";
+      const response = await fetch(`${BACKEND_URL}/api/user/faucet`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ email: userEmail })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setCircleWallet(prev => prev ? { ...prev, balance: data.balance } : null);
+        setCopyStatus("Faucet complete (+0.05 USDC)!");
+        setTimeout(() => setCopyStatus("Click address to copy"), 2000);
+      } else {
+        setCopyStatus(data.error || "Faucet failed.");
+        setTimeout(() => setCopyStatus("Click address to copy"), 5000);
+      }
+    } catch (err) {
+      console.error(err);
+      setCopyStatus("Faucet offline.");
+      setTimeout(() => setCopyStatus("Click address to copy"), 5000);
+    } finally {
+      setFaucetLoading(false);
     }
   };
 
@@ -425,6 +457,26 @@ function App() {
             <div className="modal-net-info">
               Network: <span style={{ color: 'var(--accent)' }}>Arc Testnet</span>
             </div>
+
+            <button 
+              className="btn-modal-close" 
+              onClick={handleRequestFaucet} 
+              disabled={faucetLoading}
+              style={{ 
+                width: '100%', 
+                marginBottom: '10px', 
+                backgroundColor: 'rgba(230, 184, 76, 0.15)', 
+                color: 'var(--accent)',
+                border: '1px solid var(--accent-border)',
+                textTransform: 'uppercase',
+                fontSize: '11px',
+                padding: '8px',
+                borderRadius: '2px',
+                fontFamily: 'monospace'
+              }}
+            >
+              {faucetLoading ? "Processing Faucet..." : "Claim 0.05 USDC Faucet"}
+            </button>
 
             <button className="btn-modal-close" onClick={() => setShowWalletModal(false)}>
               Close
