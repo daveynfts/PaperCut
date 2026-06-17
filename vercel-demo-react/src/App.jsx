@@ -35,6 +35,88 @@ const articles = [
 
 const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
+const UsdcCoinIcon = ({ size = 24, className = "", style = {} }) => {
+  return (
+    <svg 
+      width={size} 
+      height={size} 
+      viewBox="0 0 100 100" 
+      className={`usdc-3d-coin ${className}`}
+      style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
+    >
+      <defs>
+        {/* Shadow for the entire coin to give it depth */}
+        <filter id="coin-shadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="1.5" dy="3" stdDeviation="2" floodColor="#1a1713" floodOpacity="0.5" />
+        </filter>
+        
+        {/* Outer 3D side edge gradient (darker bronze metal) */}
+        <linearGradient id="edge-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#8f7f5f" />
+          <stop offset="50%" stopColor="#6b5e46" />
+          <stop offset="100%" stopColor="#3e3525" />
+        </linearGradient>
+
+        {/* Outer rim front face gradient (light gold/bronze) */}
+        <linearGradient id="rim-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#f5eed3" />
+          <stop offset="40%" stopColor="#ebdcb9" />
+          <stop offset="100%" stopColor="#8f7f5f" />
+        </linearGradient>
+
+        {/* Inner recessed face gradient - reverse lighting to simulate depth */}
+        <linearGradient id="face-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#8f7f5f" />
+          <stop offset="50%" stopColor="#cbbfa1" />
+          <stop offset="100%" stopColor="#f5eed3" />
+        </linearGradient>
+
+        {/* Raised symbol gold gradient */}
+        <linearGradient id="symbol-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#ffffff" />
+          <stop offset="70%" stopColor="#ebdcb9" />
+          <stop offset="100%" stopColor="#a89d7e" />
+        </linearGradient>
+
+        {/* Emboss shadow filters for the USDC symbol */}
+        <filter id="emboss-filter">
+          <feDropShadow dx="-0.4" dy="-0.4" stdDeviation="0.2" floodColor="#ffffff" floodOpacity="0.9" />
+          <feDropShadow dx="0.6" dy="0.6" stdDeviation="0.4" floodColor="#1a1713" floodOpacity="0.8" />
+        </filter>
+      </defs>
+
+      {/* 3D Side/Edge (Extruded cylinder part) */}
+      <path 
+        d="M 70.87 17.13 A 38 38 0 0 1 17.13 70.87 L 25.13 78.87 A 38 38 0 0 0 78.87 25.13 Z" 
+        fill="url(#edge-grad)" 
+        stroke="#1a1713" 
+        strokeWidth="1.5" 
+        strokeLinejoin="round"
+      />
+
+      {/* Main Front Face Rim (Top Circle) */}
+      <circle cx="44" cy="44" r="38" fill="url(#rim-grad)" stroke="#1a1713" strokeWidth="1.5" />
+      
+      {/* Inner Rim ridge ring */}
+      <circle cx="44" cy="44" r="34" fill="none" stroke="#1a1713" strokeWidth="0.8" strokeDasharray="2,2" opacity="0.6" />
+      
+      {/* Recessed Coin Face */}
+      <circle cx="44" cy="44" r="30" fill="url(#face-grad)" stroke="#1a1713" strokeWidth="1.2" />
+
+      {/* USDC ($) Symbol Group centered at (44,44) */}
+      <g transform="translate(44, 44) scale(2.4) translate(-12, -12)" filter="url(#emboss-filter)">
+        {/* S-shape backdrop outline */}
+        <path d="M12 6V18M12 6C9.5 6 9.5 9 12 9C14.5 9 14.5 12 12 12C9.5 12 9.5 15 12 15C14.5 15 14.5 18 12 18" stroke="#1a1713" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M9.5 9.5C9.5 7.5 10.5 6 12 6C13.5 6 14.5 7.5 14.5 9.5M9.5 14.5C9.5 16.5 10.5 18 12 18C13.5 18 14.5 16.5 14.5 14.5" stroke="#1a1713" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"/>
+
+        {/* Foreground Symbol stroke */}
+        <path d="M12 6V18M12 6C9.5 6 9.5 9 12 9C14.5 9 14.5 12 12 12C9.5 12 9.5 15 12 15C14.5 15 14.5 18 12 18" stroke="url(#symbol-grad)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M9.5 9.5C9.5 7.5 10.5 6 12 6C13.5 6 14.5 7.5 14.5 9.5M9.5 14.5C9.5 16.5 10.5 18 12 18C13.5 18 14.5 16.5 14.5 14.5" stroke="url(#symbol-grad)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+      </g>
+    </svg>
+  );
+};
+
 function App() {
   const { login, logout, authenticated, user } = usePrivy();
   const { wallets } = useWallets();
@@ -397,11 +479,7 @@ function App() {
                 <div className="card-meta">
                   <span>By {art.author}</span>
                   <span className="price-tag">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '3px', marginTop: '-2px' }}>
-                      <circle cx="12" cy="12" r="11" fill="#2775CA"/>
-                      <path d="M12 6V18M12 6C9.5 6 9.5 9 12 9C14.5 9 14.5 12 12 12C9.5 12 9.5 15 12 15C14.5 15 14.5 18 12 18" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M9.5 9.5C9.5 7.5 10.5 6 12 6C13.5 6 14.5 7.5 14.5 9.5M9.5 14.5C9.5 16.5 10.5 18 12 18C13.5 18 14.5 16.5 14.5 14.5" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
+                    <UsdcCoinIcon size={12} className="coin-sidebar" style={{ marginRight: '3px', marginTop: '-2px' }} />
                     {art.price}
                   </span>
                 </div>
@@ -431,7 +509,7 @@ function App() {
                 <div className="article-meta">
                   <span>By <strong style={{ color: 'var(--white)' }}>{selectedArticle.author}</strong></span>
                   <span className="divider">•</span>
-                  <span className="price-badge">TARIFF: {selectedArticle.price} USDC Coinage</span>
+                  <span className="price-badge">TARIFF: <UsdcCoinIcon size={14} className="coin-inline" style={{ marginRight: '4px', marginTop: '-3px' }} /> {selectedArticle.price} USDC Coinage</span>
                 </div>
               </div>
 
@@ -465,7 +543,11 @@ function App() {
                           </p>
                           {!txStatus && (
                             <button className="btn btn-sm btn-paywall" onClick={handleUnlockOnChain}>
-                              {!authenticated ? "SIGN REGISTER" : `PAY ${selectedArticle.price} USDC`}
+                              {!authenticated ? "SIGN REGISTER" : (
+                                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                                  PAY {selectedArticle.price} <UsdcCoinIcon size={14} className="coin-inline" /> USDC
+                                </span>
+                              )}
                             </button>
                           )}
                         </div>
@@ -536,7 +618,7 @@ function App() {
                                     <div className="term-line info highlight-box">
                                       <span>[STREAMING DATA]</span><br/>
                                       <span>Words Read: <strong>{scrapeWords} / 84</strong></span><br/>
-                                      <span>Current Cost: <strong>{scrapeCost.toFixed(6)} USDC</strong></span>
+                                      <span>Current Cost: <strong>{scrapeCost.toFixed(6)}</strong> <UsdcCoinIcon size={12} className="coin-inline" style={{ margin: '0 2px 0 4px', marginTop: '-2px' }} /> USDC</span>
                                     </div>
                                   </>
                                 )}
@@ -548,7 +630,7 @@ function App() {
                                 {scrapeStep >= 4 && (
                                   <>
                                     <div className="term-line success" style={{ color: '#5cd15c', fontWeight: 'bold' }}>
-                                      Scraping complete. Settle total: {scrapeCost.toFixed(4)} USDC.
+                                      Scraping complete. Settle total: {scrapeCost.toFixed(4)} <UsdcCoinIcon size={12} className="coin-inline" style={{ margin: '0 2px 0 4px', marginTop: '-2px' }} /> USDC.
                                     </div>
                                     <div className="term-line prompt">
                                       <span className="term-accent">&gt;</span> summarize-report --llm-refine
@@ -642,7 +724,8 @@ function App() {
 
                 <div className="wallet-id-group">
                   <div className="wallet-id-label">CURRENT BALANCE</div>
-                  <div className="wallet-balance-row">
+                  <div className="wallet-balance-row" style={{ display: 'flex', alignItems: 'center' }}>
+                    <UsdcCoinIcon size={24} className="coin-balance-icon" style={{ marginRight: '6px' }} />
                     <span className="balance-num">{parseFloat(circleWallet?.balance || "0.0000").toFixed(4)}</span>
                     <span className="balance-denom">USDC</span>
                     <button 
@@ -650,7 +733,10 @@ function App() {
                       className="btn-sync-balance-vintage"
                       title="Sync Balance with Ledger"
                     >
-                      🔄
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+                        <path d="M23 4v6h-6" />
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                      </svg>
                     </button>
                   </div>
                 </div>
