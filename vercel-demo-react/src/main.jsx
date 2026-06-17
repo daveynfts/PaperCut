@@ -30,8 +30,8 @@ const arcTestnet = {
   },
 };
 
-// Default Demo App ID from Privy for testing, or user can replace with their own from dashboard.privy.io
-const PRIVY_APP_ID = "clqh45d0c00t2mc0f6u7q08g9"; 
+// User's custom Privy App ID
+const PRIVY_APP_ID = "cmqhlq3yb009i0ci5vvnjwqnf"; 
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
