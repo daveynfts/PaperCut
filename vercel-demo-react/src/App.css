@@ -506,3 +506,60 @@ body {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+
+/* ============ RESPONSIVE MEDIA QUERIES ============ */
+@media (max-width: 768px) {
+  body {
+    overflow-y: auto;
+    height: auto;
+  }
+  
+  .app-root {
+    height: auto;
+  }
+
+  .nav {
+    padding: 0 16px;
+    height: auto;
+    min-height: var(--nav-height);
+    flex-direction: column;
+    gap: 12px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .nav-controls {
+    width: 100%;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .wallet-info-group {
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .main-container {
+    flex-direction: column;
+    height: auto;
+  }
+
+  .sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--g800);
+    height: auto;
+    max-height: 300px;
+  }
+
+  .viewer {
+    width: 100%;
+    height: auto;
+    min-height: calc(100vh - var(--nav-height) - 300px);
+    overflow-y: visible;
+    padding: 24px 16px;
+  }
+}
+

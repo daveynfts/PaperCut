@@ -13,7 +13,7 @@ app.use(cors());
 app.use(express.json());
 
 // Mock Publisher Wallet Address (Recipient of micropayments)
-const PUBLISHER_WALLET = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"; // Hardhat #0
+let PUBLISHER_WALLET = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"; // Hardhat #0
 
 // Mock USDC Contract Address on Arc L1
 const ARC_USDC_ADDRESS = "0x0000000000000000000000000000000000001010"; // Mock USDC
@@ -72,6 +72,27 @@ if (isMockMode) {
 } else {
   console.log("[Publisher Backend] Running in LIVE MODE using Circle Web3 Services API.");
 }
+
+async function initPublisherWallet() {
+  if (isMockMode) return;
+  try {
+    const response = await fetch(`https://api.circle.com/v1/w3s/wallets/${process.env.PUBLISHER_WALLET_ID}`, {
+      headers: {
+        "Authorization": `Bearer ${process.env.CIRCLE_API_KEY}`
+      }
+    });
+    const json = await response.json();
+    if (json.data?.wallet?.address) {
+      PUBLISHER_WALLET = json.data.wallet.address;
+      console.log(`[Circle W3S] Publisher wallet address initialized dynamically: ${PUBLISHER_WALLET}`);
+    } else {
+      console.warn("[Circle W3S] Could not fetch publisher wallet address, using mock address.", json);
+    }
+  } catch (err) {
+    console.error("Failed to initialize publisher wallet address from Circle:", err);
+  }
+}
+initPublisherWallet();
 
 // Helper: RSA Encryption using Node's native crypto module
 async function fetchCirclePublicKey() {
@@ -148,7 +169,7 @@ async function createCircleWallet() {
       idempotencyKey,
       entitySecretCiphertext: ciphertext,
       walletSetId: process.env.CIRCLE_WALLET_SET_ID,
-      blockchain: "ARC-TESTNET",
+      blockchains: ["ARC-TESTNET"],
       count: 1
     })
   });
