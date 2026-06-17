@@ -394,7 +394,14 @@ function App() {
                 <div className="card-title">{art.title}</div>
                 <div className="card-meta">
                   <span>By {art.author}</span>
-                  <span className="price-tag">${art.price}</span>
+                  <span className="price-tag">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '3px', marginTop: '-2px' }}>
+                      <circle cx="12" cy="12" r="11" fill="#2775CA"/>
+                      <path d="M12 6V18M12 6C9.5 6 9.5 9 12 9C14.5 9 14.5 12 12 12C9.5 12 9.5 15 12 15C14.5 15 14.5 18 12 18" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M9.5 9.5C9.5 7.5 10.5 6 12 6C13.5 6 14.5 7.5 14.5 9.5M9.5 14.5C9.5 16.5 10.5 18 12 18C13.5 18 14.5 16.5 14.5 14.5" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    {art.price}
+                  </span>
                 </div>
                 <div className="card-snippet">{art.snippet}</div>
               </div>
