@@ -298,24 +298,24 @@ function App() {
         </div>
         <div className="nav-controls">
           {!authenticated ? (
-            <button className="btn btn-sm" onClick={login}>Login (Gmail/Wallet)</button>
+            <button className="btn btn-sm" onClick={login}>Sign Register (Gmail)</button>
           ) : (
             <div className="wallet-info-group">
               <div className="wallet-info" onClick={() => setShowWalletModal(true)} style={{ cursor: 'pointer' }} title="Click to view wallet & QR code">
                 <span className="status-dot"></span>
                 <span>
                   {smartWalletAddress 
-                    ? `Circle MPC: ${shortenAddress(smartWalletAddress)}` 
-                    : shortenAddress(activeWallet?.address || user?.wallet?.address)
+                    ? `Ledger Account: ${shortenAddress(smartWalletAddress)}` 
+                    : `Account: ${shortenAddress(activeWallet?.address || user?.wallet?.address)}`
                   }
                 </span>
               </div>
               {smartWalletAddress && (
                 <span className="badge-sponsored" style={{ marginLeft: '8px', fontSize: '11px', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(230, 184, 76, 0.2)', color: '#e6b84c', border: '1px solid #e6b84c' }}>
-                  Circle Gasless
+                  Gas Tariff Sponsored
                 </span>
               )}
-              <button className="btn btn-sm btn-secondary" onClick={logout} style={{ marginLeft: '8px' }}>Logout</button>
+              <button className="btn btn-sm btn-secondary" onClick={logout} style={{ marginLeft: '8px' }}>Sign Out</button>
             </div>
           )}
         </div>
@@ -326,8 +326,8 @@ function App() {
         {/* LEFT SIDEBAR */}
         <section className="sidebar">
           <div className="section-title">
-            <h2>PREMIUM ARTICLES</h2>
-            <span className="item-count">{articles.length} articles</span>
+            <h2>LATEST DISPATCHES</h2>
+            <span className="item-count">{articles.length} columns published</span>
           </div>
           <div className="article-list">
             {articles.map((art) => (
@@ -352,11 +352,11 @@ function App() {
           {!selectedArticle ? (
             <div id="viewer-default" className="viewer-state">
               <div className="greek-key"></div>
-              <h1 className="serif-title font-italic">Select an article</h1>
-              <p className="mono-text text-muted">Web3 Social Login + Micropayments live demo.</p>
+              <h1 className="serif-title font-italic">Select a Dispatch to Peruse</h1>
+              <p className="mono-text text-muted">Demonstrating a Modern Electronic Ledger & Gasless Micro-Tariff System.</p>
               <div className="badge-row">
-                <span className="chain-badge">Login with Google</span>
-                <span className="chain-badge">Embedded Wallet</span>
+                <span className="chain-badge">Sign Register</span>
+                <span className="chain-badge">Secured Ledger Vault</span>
                 <span className="chain-badge">Arc Testnet</span>
               </div>
             </div>
@@ -367,7 +367,7 @@ function App() {
                 <div className="article-meta">
                   <span>By <strong style={{ color: 'var(--white)' }}>{selectedArticle.author}</strong></span>
                   <span className="divider">•</span>
-                  <span className="price-badge">${selectedArticle.price} USDC Equiv</span>
+                  <span className="price-badge">TARIFF: {selectedArticle.price} USDC Coinage</span>
                 </div>
               </div>
 
@@ -386,17 +386,17 @@ function App() {
 
                     {/* PAYWALL */}
                     <div className="paywall-card">
-                      <div className="paywall-title">Web3 Paywall Required</div>
+                      <div className="paywall-title">TOLL BARRIER: TARIFF DUE</div>
                       <p className="paywall-desc">
                         {!authenticated 
-                          ? "Log in with your Google account to automatically create an embedded Web3 wallet and read."
-                          : `Your Circle MPC Wallet: ${circleWallet?.address || 'Loading...'} | Balance: ${circleWallet?.balance || '0.0000'} USDC. Unlock this article on-chain by sending a micro-transaction of 0.0001 USDC (Gas sponsored by publisher).`
+                          ? "Honored reader, please sign the dispatch register (via Google) to instantiate your personal Ledger Vault and peruse this column."
+                          : `YOUR LEDGER PORTFOLIO: ${circleWallet?.address || 'Loading...'} | VAULT BALANCE: ${parseFloat(circleWallet?.balance || '0.0000').toFixed(6)} USDC. Please settle a micro-tariff of 0.0001 USDC to unlock this column for reading. The printing house has sponsored the network dispatch fee.`
                         }
                       </p>
                       
                       {!txStatus && (
                         <button className="btn btn-lg" onClick={handleUnlockOnChain}>
-                          {!authenticated ? "Login to Unlock" : "Unlock on-chain"}
+                          {!authenticated ? "SIGN REGISTER TO READ" : "PAY MICRO-TARIFF TO READ"}
                         </button>
                       )}
 
@@ -407,7 +407,7 @@ function App() {
                           {txHash && (
                             <div className="tx-hash-link">
                               <a href={getExplorerUrl(chainId, txHash)} target="_blank" rel="noopener noreferrer">
-                                View on Block Explorer ↗
+                                Verify Ledger Record ↗
                               </a>
                             </div>
                           )}
