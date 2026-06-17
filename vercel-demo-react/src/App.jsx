@@ -427,81 +427,106 @@ function App() {
       {/* WALLET DEPOSIT & QR MODAL */}
       {showWalletModal && (
         <div className="modal-overlay" onClick={() => setShowWalletModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3 className="modal-title">Your Circle MPC Wallet</h3>
+          <div className="modal-content vintage-wallet-modal" onClick={(e) => e.stopPropagation()}>
+            {/* Vintage Close Button in the upper right corner */}
+            <button className="wallet-close-btn" onClick={() => setShowWalletModal(false)}>×</button>
             
-            <div className="modal-address-container" onClick={() => handleCopyAddress(smartWalletAddress || activeWallet?.address || user?.wallet?.address)} title="Click to copy address">
-              <div style={{ fontSize: '9px', color: 'var(--g600)', textTransform: 'uppercase', marginBottom: '4px', letterSpacing: '0.05em' }}>
-                Wallet Address (Click to Copy)
+            <div className="vintage-wallet-container">
+              {/* LEFT COLUMN: IDs & INFO */}
+              <div className="wallet-pane-left">
+                <div className="wallet-header">
+                  <div className="wallet-seal">★ OFFICIAL IDENTITY CARD ★</div>
+                  <h3 className="wallet-title">THE PAPERCUT LEDGER</h3>
+                  <div className="wallet-subtitle">TARIFF ACCOUNT & PORTFOLIO</div>
+                </div>
+                
+                <div className="wallet-divider-double"></div>
+                
+                <div className="wallet-id-group">
+                  <div className="wallet-id-label">HOLDER IDENTITY (EMAIL)</div>
+                  <div className="wallet-id-value mono-text">
+                    {user?.email?.address || user?.id || "ANONYMOUS READER"}
+                  </div>
+                </div>
+
+                <div className="wallet-id-group">
+                  <div className="wallet-id-label">ACCOUNT NO. (CIRCLE ADDRESS)</div>
+                  <div 
+                    className="wallet-address-box mono-text" 
+                    onClick={() => handleCopyAddress(smartWalletAddress || activeWallet?.address || user?.wallet?.address)}
+                    title="Click to copy address"
+                  >
+                    <span className="address-text">
+                      {smartWalletAddress || activeWallet?.address || user?.wallet?.address}
+                    </span>
+                    <span className="copy-badge">{copyStatus}</span>
+                  </div>
+                </div>
+
+                <div className="wallet-id-group">
+                  <div className="wallet-id-label">CURRENT BALANCE</div>
+                  <div className="wallet-balance-row">
+                    <span className="balance-num">{parseFloat(circleWallet?.balance || "0.0000").toFixed(4)}</span>
+                    <span className="balance-denom">USDC</span>
+                    <button 
+                      onClick={handleSyncBalance} 
+                      className="btn-sync-balance-vintage"
+                      title="Sync Balance with Ledger"
+                    >
+                      🔄
+                    </button>
+                  </div>
+                </div>
+
+                <div className="wallet-id-group-row">
+                  <div className="wallet-id-group half">
+                    <div className="wallet-id-label">ISSUING BLOCKCHAIN</div>
+                    <div className="wallet-id-value mono-text text-accent">ARC TESTNET</div>
+                  </div>
+                  <div className="wallet-id-group half">
+                    <div className="wallet-id-label">GAS FEE SPONSOR</div>
+                    <div className="wallet-id-value mono-text text-stamp">PUBLISHER PAID</div>
+                  </div>
+                </div>
+
+                <div className="wallet-actions-section">
+                  <button 
+                    className="btn-faucet-stamp" 
+                    onClick={handleRequestFaucet} 
+                    disabled={faucetLoading}
+                  >
+                    {faucetLoading ? "STAMPING TARIFF..." : "CLAIM 0.05 USDC FAUCET"}
+                  </button>
+                </div>
               </div>
-              <div style={{ wordBreak: 'break-all', fontSize: '11px', color: 'var(--g100)', padding: '4px', fontFamily: 'monospace' }}>
-                {smartWalletAddress || activeWallet?.address || user?.wallet?.address}
+              
+              {/* MIDDLE FOLD SPINE */}
+              <div className="wallet-pane-spine">
+                <div className="spine-stitch"></div>
               </div>
-              <div style={{ fontSize: '8px', color: 'var(--accent)', marginTop: '4px', fontFamily: 'monospace' }}>
-                {copyStatus}
+
+              {/* RIGHT COLUMN: QR CODE STAMP */}
+              <div className="wallet-pane-right">
+                <div className="qr-stamp-frame">
+                  <div className="qr-stamp-header">PORTRAIT / ACCREDITATION</div>
+                  <div className="qr-code-wrapper">
+                    <img 
+                      className="qr-code-img-vintage" 
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${smartWalletAddress || activeWallet?.address || user?.wallet?.address}`} 
+                      alt="Wallet QR Code" 
+                    />
+                  </div>
+                  <div className="qr-stamp-footer">SCAN TO DEPOSIT FUNDS</div>
+                </div>
+
+                <div className="wallet-stamp-seal">
+                  <div className="stamp-seal-circle">
+                    <span>PAID</span>
+                    <span className="stamp-date">1926</span>
+                  </div>
+                </div>
               </div>
             </div>
-
-            <div className="modal-balance-label">USDC Balance</div>
-            <div className="modal-balance-value" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-              <span>{parseFloat(circleWallet?.balance || "0.0000").toFixed(4)}</span>
-              <span style={{ fontSize: '14px', fontWeight: 'normal', color: 'var(--g200)' }}>USDC</span>
-              <button 
-                onClick={handleSyncBalance} 
-                style={{ 
-                  background: 'none', 
-                  border: 'none', 
-                  color: 'var(--accent)', 
-                  cursor: 'pointer', 
-                  fontSize: '16px', 
-                  display: 'flex', 
-                  alignItems: 'center',
-                  padding: '4px',
-                  borderRadius: '50%',
-                  transition: 'transform 0.2s'
-                }} 
-                title="Sync Balance"
-                className="btn-sync-balance"
-              >
-                🔄
-              </button>
-            </div>
-
-            <div className="qr-code-container">
-              <img 
-                className="qr-code-img" 
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${smartWalletAddress || activeWallet?.address || user?.wallet?.address}`} 
-                alt="Wallet QR Code" 
-              />
-            </div>
-
-            <div className="modal-net-info">
-              Network: <span style={{ color: 'var(--accent)' }}>Arc Testnet</span>
-            </div>
-
-            <button 
-              className="btn-modal-close" 
-              onClick={handleRequestFaucet} 
-              disabled={faucetLoading}
-              style={{ 
-                width: '100%', 
-                marginBottom: '10px', 
-                backgroundColor: 'rgba(230, 184, 76, 0.15)', 
-                color: 'var(--accent)',
-                border: '1px solid var(--accent-border)',
-                textTransform: 'uppercase',
-                fontSize: '11px',
-                padding: '8px',
-                borderRadius: '2px',
-                fontFamily: 'monospace'
-              }}
-            >
-              {faucetLoading ? "Processing Faucet..." : "Claim 0.05 USDC Faucet"}
-            </button>
-
-            <button className="btn-modal-close" onClick={() => setShowWalletModal(false)}>
-              Close
-            </button>
           </div>
         </div>
       )}

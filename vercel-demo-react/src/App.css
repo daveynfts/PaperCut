@@ -611,107 +611,377 @@ body {
   animation: fadeIn 0.2s ease-out;
 }
 
-.modal-content {
-  background: var(--paper-bg);
-  border: 3px solid var(--ink-black);
+.vintage-wallet-modal {
+  background: #e8dfbe; /* Slightly darker aged paper inside */
+  border: 6px solid #3d2f25; /* Leather outer cover color */
+  outline: 2px dashed #a69b88; /* Leather stitching lines */
+  outline-offset: -8px;
   border-radius: 0;
-  width: 360px;
-  padding: 28px 24px;
-  text-align: center;
+  width: 720px;
+  max-width: 95%;
+  padding: 0 !important;
   position: relative;
-  box-shadow: 8px 8px 0px var(--ink-black);
+  box-shadow: 12px 12px 0px rgba(0, 0, 0, 0.4);
   animation: slideUp 0.25s ease-out;
+  overflow: hidden;
 }
 
-.modal-title {
-  font-family: var(--font-gothic);
-  font-size: 26px;
+.wallet-close-btn {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 22px;
+  font-weight: bold;
   color: var(--ink-black);
-  margin-bottom: 18px;
-  font-weight: normal;
-  border-bottom: 2px solid var(--ink-black);
-  padding-bottom: 10px;
-}
-
-.modal-address-container {
-  background: var(--paper-bg-darker);
-  border: 1px dashed var(--ink-grey);
-  padding: 10px;
-  border-radius: 0;
-  margin-bottom: 16px;
   cursor: pointer;
-  transition: border-color 0.15s;
+  z-index: 10;
+  line-height: 1;
+  transition: color 0.15s;
 }
 
-.modal-address-container:hover {
+.wallet-close-btn:hover {
+  color: var(--ink-red);
+}
+
+.vintage-wallet-container {
+  display: flex;
+  flex-direction: row;
+  min-height: 420px;
+}
+
+/* Left Pane (IDs, balance, faucet) */
+.wallet-pane-left {
+  flex: 1.25;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.wallet-header {
+  margin-bottom: 12px;
+  text-align: center;
+}
+
+.wallet-seal {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: var(--ink-red);
+  letter-spacing: 0.15em;
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+
+.wallet-title {
+  font-family: var(--font-gothic) !important;
+  font-size: 24px !important;
+  color: var(--ink-black);
+  margin: 0 !important;
+  padding: 0 !important;
+  border-bottom: none !important;
+  line-height: 1.1;
+  text-align: center;
+}
+
+.wallet-subtitle {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: var(--ink-grey);
+  letter-spacing: 0.08em;
+  margin-top: 2px;
+  text-transform: uppercase;
+}
+
+.wallet-divider-double {
+  border-bottom: 3px double var(--ink-black);
+  margin-bottom: 14px;
+  width: 100%;
+}
+
+.wallet-id-group {
+  margin-bottom: 12px;
+}
+
+.wallet-id-group-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.wallet-id-group.half {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.wallet-id-label {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: var(--ink-grey);
+  letter-spacing: 0.05em;
+  margin-bottom: 3px;
+  text-transform: uppercase;
+  font-weight: bold;
+}
+
+.wallet-id-value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-black);
+  word-break: break-all;
+}
+
+.text-accent {
+  color: var(--ink-red) !important;
+  font-weight: bold;
+}
+
+.text-stamp {
+  color: #3b5f3a !important; /* Vintage stamp green */
+  font-weight: bold;
+}
+
+.wallet-address-box {
+  background: #dfd5b3;
+  border: 1px dashed var(--ink-light-grey);
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 10px;
+  word-break: break-all;
+  position: relative;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.wallet-address-box:hover {
+  background: #ebdcb9;
   border-color: var(--ink-red);
 }
 
-.modal-balance-label {
+.copy-badge {
+  display: block;
+  font-size: 8px;
+  color: var(--ink-red);
+  margin-top: 2px;
+  text-align: right;
   font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-grey);
-  text-transform: uppercase;
-  margin-top: 14px;
-  margin-bottom: 4px;
 }
 
-.modal-balance-value {
-  font-size: 30px;
+.wallet-balance-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.balance-num {
+  font-family: var(--font-mono);
+  font-size: 26px;
   font-weight: bold;
   color: var(--ink-red);
-  margin-bottom: 20px;
+  line-height: 1;
+}
+
+.balance-denom {
   font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-grey);
+  font-weight: bold;
 }
 
-.qr-code-container {
-  background: var(--paper-bg);
+.btn-sync-balance-vintage {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px;
+  margin-left: 4px;
+  display: inline-flex;
+  align-items: center;
+  transition: transform 0.3s ease;
+}
+
+.btn-sync-balance-vintage:hover {
+  transform: rotate(180deg);
+}
+
+.wallet-actions-section {
+  margin-top: auto;
+  padding-top: 10px;
+}
+
+.btn-faucet-stamp {
+  width: 100%;
+  background: rgba(143, 45, 27, 0.08);
+  color: var(--ink-red);
+  border: 2px dashed var(--ink-red);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: bold;
+  padding: 8px 12px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: all 0.2s;
+  box-shadow: 4px 4px 0px rgba(143, 45, 27, 0.12);
+}
+
+.btn-faucet-stamp:hover:not(:disabled) {
+  background: var(--ink-red);
+  color: #f5eed3;
+  border-style: solid;
+  box-shadow: 2px 2px 0px var(--ink-black);
+}
+
+.btn-faucet-stamp:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Spine / Fold */
+.wallet-pane-spine {
+  width: 16px;
+  background: #d8cfae;
+  border-left: 1px solid rgba(0, 0, 0, 0.12);
+  border-right: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: inset 3px 0 5px rgba(0, 0, 0, 0.08), inset -3px 0 5px rgba(0, 0, 0, 0.08);
+  position: relative;
+}
+
+.spine-stitch {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  border-left: 2px dashed #9d9275;
+}
+
+/* Right Pane (QR Code Stamp) */
+.wallet-pane-right {
+  flex: 0.85;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #e4dac0; /* different tint for paper fold contrast */
+  position: relative;
+}
+
+.qr-stamp-frame {
   border: 2px solid var(--ink-black);
-  padding: 10px;
-  border-radius: 0;
-  display: inline-block;
-  margin-bottom: 18px;
-  box-shadow: 4px 4px 0px var(--ink-grey);
+  padding: 10px 10px 6px 10px;
+  background: #fdfaf2;
+  box-shadow: 5px 5px 0px rgba(0, 0, 0, 0.12);
+  text-align: center;
+  transform: rotate(-1deg);
+  transition: transform 0.2s;
 }
 
-.qr-code-img {
+.qr-stamp-frame:hover {
+  transform: rotate(0deg) scale(1.02);
+}
+
+.qr-stamp-header {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: var(--ink-grey);
+  margin-bottom: 6px;
+  letter-spacing: 0.08em;
+  font-weight: bold;
+  border-bottom: 1px dashed var(--ink-light-grey);
+  padding-bottom: 4px;
+}
+
+.qr-code-wrapper {
+  background: white;
+  padding: 6px;
+  border: 1px solid var(--ink-light-grey);
+  display: inline-block;
+}
+
+.qr-code-img-vintage {
   width: 150px;
   height: 150px;
   display: block;
-  filter: contrast(1.1) brightness(0.95); /* Make it look slightly printed */
+  filter: sepia(0.2) contrast(1.1) brightness(0.95);
 }
 
-.modal-net-info {
-  font-size: 11px;
+.qr-stamp-footer {
+  font-family: var(--font-mono);
+  font-size: 8px;
   color: var(--ink-grey);
-  margin-bottom: 24px;
-  font-family: var(--font-mono);
+  margin-top: 6px;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
-.btn-modal-close {
-  background: var(--ink-black);
-  color: var(--paper-bg);
-  border: none;
+.wallet-stamp-seal {
+  position: absolute;
+  bottom: 15px;
+  right: 15px;
+  opacity: 0.75;
+  pointer-events: none;
+  transform: rotate(15deg);
+}
+
+.stamp-seal-circle {
+  width: 54px;
+  height: 54px;
+  border: 2px dashed var(--ink-red);
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-red);
+  font-family: var(--font-gothic);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.stamp-date {
   font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: bold;
-  text-transform: uppercase;
-  padding: 10px 24px;
-  cursor: pointer;
-  border-radius: 0;
-  box-shadow: 3px 3px 0px var(--ink-grey);
-  transition: background-color 0.15s;
+  font-size: 7px;
+  letter-spacing: 0.05em;
+  margin-top: 2px;
 }
 
-.btn-modal-close:hover {
-  background-color: var(--ink-red);
-}
-
-.btn-modal-close:active {
-  transform: translateY(1px);
-}
-
-.btn-sync-balance:hover {
-  transform: rotate(180deg);
+/* Responsive Wallet layout */
+@media (max-width: 680px) {
+  .vintage-wallet-container {
+    flex-direction: column;
+    min-height: auto;
+  }
+  .wallet-pane-spine {
+    width: 100%;
+    height: 14px;
+    border-left: none;
+    border-right: none;
+    border-top: 1px solid rgba(0, 0, 0, 0.12);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+    box-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.08), inset 0 -3px 5px rgba(0, 0, 0, 0.08);
+  }
+  .spine-stitch {
+    left: 0;
+    right: 0;
+    top: 50%;
+    width: 100%;
+    height: 2px;
+    transform: translateY(-50%);
+    border-left: none;
+    border-top: 2px dashed #9d9275;
+  }
+  .wallet-pane-left {
+    padding: 20px;
+  }
+  .wallet-pane-right {
+    padding: 24px 20px;
+    background: #dfd5ba;
+  }
+  .wallet-stamp-seal {
+    bottom: 10px;
+    right: 10px;
+  }
 }
