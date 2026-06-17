@@ -47,41 +47,41 @@ const UsdcCoinIcon = ({ size = 24, className = "", style = {} }) => {
       <defs>
         {/* Shadow for the entire coin to give it depth */}
         <filter id="coin-shadow" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="1.5" dy="3" stdDeviation="2" floodColor="#1a1713" floodOpacity="0.5" />
+          <feDropShadow dx="1.5" dy="3" stdDeviation="2" floodColor="#0d284a" floodOpacity="0.4" />
         </filter>
         
-        {/* Outer 3D side edge gradient (darker bronze metal) */}
+        {/* Outer 3D side edge gradient (darker blue metal) */}
         <linearGradient id="edge-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#8f7f5f" />
-          <stop offset="50%" stopColor="#6b5e46" />
-          <stop offset="100%" stopColor="#3e3525" />
+          <stop offset="0%" stopColor="#226cb8" />
+          <stop offset="50%" stopColor="#154980" />
+          <stop offset="100%" stopColor="#0c2d52" />
         </linearGradient>
 
-        {/* Outer rim front face gradient (light gold/bronze) */}
+        {/* Outer rim front face gradient (medium-light USDC blue) */}
         <linearGradient id="rim-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#f5eed3" />
-          <stop offset="40%" stopColor="#ebdcb9" />
-          <stop offset="100%" stopColor="#8f7f5f" />
+          <stop offset="0%" stopColor="#5fa1eb" />
+          <stop offset="40%" stopColor="#2775CA" />
+          <stop offset="100%" stopColor="#18569c" />
         </linearGradient>
 
         {/* Inner recessed face gradient - reverse lighting to simulate depth */}
         <linearGradient id="face-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#8f7f5f" />
-          <stop offset="50%" stopColor="#cbbfa1" />
-          <stop offset="100%" stopColor="#f5eed3" />
+          <stop offset="0%" stopColor="#154980" />
+          <stop offset="50%" stopColor="#2775CA" />
+          <stop offset="100%" stopColor="#5fa1eb" />
         </linearGradient>
 
-        {/* Raised symbol gold gradient */}
+        {/* Raised symbol ice white gradient */}
         <linearGradient id="symbol-grad" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#ffffff" />
-          <stop offset="70%" stopColor="#ebdcb9" />
-          <stop offset="100%" stopColor="#a89d7e" />
+          <stop offset="60%" stopColor="#f0f5fd" />
+          <stop offset="100%" stopColor="#d5e4f7" />
         </linearGradient>
 
         {/* Emboss shadow filters for the USDC symbol */}
         <filter id="emboss-filter">
           <feDropShadow dx="-0.4" dy="-0.4" stdDeviation="0.2" floodColor="#ffffff" floodOpacity="0.9" />
-          <feDropShadow dx="0.6" dy="0.6" stdDeviation="0.4" floodColor="#1a1713" floodOpacity="0.8" />
+          <feDropShadow dx="0.6" dy="0.6" stdDeviation="0.4" floodColor="#0c2d52" floodOpacity="0.8" />
         </filter>
       </defs>
 
@@ -89,25 +89,25 @@ const UsdcCoinIcon = ({ size = 24, className = "", style = {} }) => {
       <path 
         d="M 70.87 17.13 A 38 38 0 0 1 17.13 70.87 L 25.13 78.87 A 38 38 0 0 0 78.87 25.13 Z" 
         fill="url(#edge-grad)" 
-        stroke="#1a1713" 
+        stroke="#0c2d52" 
         strokeWidth="1.5" 
         strokeLinejoin="round"
       />
 
       {/* Main Front Face Rim (Top Circle) */}
-      <circle cx="44" cy="44" r="38" fill="url(#rim-grad)" stroke="#1a1713" strokeWidth="1.5" />
+      <circle cx="44" cy="44" r="38" fill="url(#rim-grad)" stroke="#0c2d52" strokeWidth="1.5" />
       
       {/* Inner Rim ridge ring */}
-      <circle cx="44" cy="44" r="34" fill="none" stroke="#1a1713" strokeWidth="0.8" strokeDasharray="2,2" opacity="0.6" />
+      <circle cx="44" cy="44" r="34" fill="none" stroke="#0c2d52" strokeWidth="0.8" strokeDasharray="2,2" opacity="0.6" />
       
       {/* Recessed Coin Face */}
-      <circle cx="44" cy="44" r="30" fill="url(#face-grad)" stroke="#1a1713" strokeWidth="1.2" />
+      <circle cx="44" cy="44" r="30" fill="url(#face-grad)" stroke="#0c2d52" strokeWidth="1.2" />
 
       {/* USDC ($) Symbol Group centered at (44,44) */}
       <g transform="translate(44, 44) scale(2.4) translate(-12, -12)" filter="url(#emboss-filter)">
         {/* S-shape backdrop outline */}
-        <path d="M12 6V18M12 6C9.5 6 9.5 9 12 9C14.5 9 14.5 12 12 12C9.5 12 9.5 15 12 15C14.5 15 14.5 18 12 18" stroke="#1a1713" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M9.5 9.5C9.5 7.5 10.5 6 12 6C13.5 6 14.5 7.5 14.5 9.5M9.5 14.5C9.5 16.5 10.5 18 12 18C13.5 18 14.5 16.5 14.5 14.5" stroke="#1a1713" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M12 6V18M12 6C9.5 6 9.5 9 12 9C14.5 9 14.5 12 12 12C9.5 12 9.5 15 12 15C14.5 15 14.5 18 12 18" stroke="#0c2d52" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M9.5 9.5C9.5 7.5 10.5 6 12 6C13.5 6 14.5 7.5 14.5 9.5M9.5 14.5C9.5 16.5 10.5 18 12 18C13.5 18 14.5 16.5 14.5 14.5" stroke="#0c2d52" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"/>
 
         {/* Foreground Symbol stroke */}
         <path d="M12 6V18M12 6C9.5 6 9.5 9 12 9C14.5 9 14.5 12 12 12C9.5 12 9.5 15 12 15C14.5 15 14.5 18 12 18" stroke="url(#symbol-grad)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
