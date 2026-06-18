@@ -354,7 +354,11 @@ function App() {
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ email: userEmail })
+        body: JSON.stringify({ 
+          email: userEmail,
+          walletId: circleWallet.walletId,
+          address: circleWallet.address
+        })
       });
       const data = await response.json();
       if (response.ok) {
@@ -576,7 +580,9 @@ function App() {
         },
         body: JSON.stringify({
           email: userEmail,
-          articleId: selectedArticle.id
+          articleId: selectedArticle.id,
+          walletId: circleWallet.walletId,
+          address: circleWallet.address
         })
       });
       

@@ -453,13 +453,25 @@ app.post("/api/user/wallet", async (req, res) => {
 
 // Endpoint to request faucet from publisher wallet
 app.post("/api/user/faucet", async (req, res) => {
-  const { email } = req.body;
+  const { email, walletId, address } = req.body;
   if (!email) {
     return res.status(400).json({ error: "Email is required" });
   }
 
   try {
     const db = readUsersDb();
+    
+    // Restore wallet mapping from client storage if it was lost on serverless cold start
+    if (!db[email] && walletId && address) {
+      console.log(`[Circle W3S] Restoring wallet for ${email} from client: ${address}`);
+      db[email] = {
+        walletId,
+        address,
+        balance: "0.0"
+      };
+      writeUsersDb(db);
+    }
+
     if (!db[email]) {
       return res.status(400).json({ error: "User wallet not initialized" });
     }
@@ -518,7 +530,7 @@ app.post("/api/user/faucet", async (req, res) => {
 
 // Endpoint to unlock an article
 app.post("/api/articles/unlock", async (req, res) => {
-  const { email, articleId } = req.body;
+  const { email, articleId, walletId, address } = req.body;
   if (!email || !articleId) {
     return res.status(400).json({ error: "Email and articleId are required" });
   }
@@ -530,6 +542,18 @@ app.post("/api/articles/unlock", async (req, res) => {
 
   try {
     const db = readUsersDb();
+    
+    // Restore wallet mapping from client storage if it was lost on serverless cold start
+    if (!db[email] && walletId && address) {
+      console.log(`[Circle W3S] Restoring wallet for ${email} from client: ${address}`);
+      db[email] = {
+        walletId,
+        address,
+        balance: "0.0"
+      };
+      writeUsersDb(db);
+    }
+
     if (!db[email]) {
       return res.status(400).json({ error: "User wallet not initialized. Please log in again." });
     }
