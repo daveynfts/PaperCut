@@ -120,7 +120,7 @@ body {
 }
 
 .nav-front-page-btn:active {
-  transform: translateX(-2px);
+  transform: translateY(1px);
 }
 
 .wallet-info-group {
