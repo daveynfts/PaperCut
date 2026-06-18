@@ -396,7 +396,8 @@ app.post("/api/user/wallet", async (req, res) => {
       return res.json({
         walletId: db[email].walletId,
         address: db[email].address,
-        balance
+        balance,
+        isMock: isMockMode
       });
     }
 
@@ -438,7 +439,8 @@ app.post("/api/user/wallet", async (req, res) => {
     res.json({
       walletId: newWalletId,
       address: newAddress,
-      balance: finalBalance
+      balance: finalBalance,
+      isMock: isMockMode
     });
 
   } catch (error) {
@@ -564,7 +566,8 @@ app.post("/api/articles/unlock", async (req, res) => {
     res.json({
       success: true,
       txHash,
-      balance: finalBalance
+      balance: finalBalance,
+      isMock: isMockMode
     });
 
   } catch (error) {

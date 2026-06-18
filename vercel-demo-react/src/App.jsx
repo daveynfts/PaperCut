@@ -374,6 +374,34 @@ function App() {
     }
   };
 
+  const getUnlockedDetails = (artId) => {
+    const val = unlockedArticles[artId];
+    if (!val) return null;
+    if (typeof val === 'object' && val !== null && 'txHash' in val) {
+      return val;
+    }
+    if (typeof val === 'string') {
+      return {
+        txHash: val,
+        isMock: val.startsWith("0x8fdc") || val.length === 66
+      };
+    }
+    return {
+      txHash: "0x8fdc9dfa539f8fc0d13cf941f81e14d3d4aa182035e0",
+      isMock: true
+    };
+  };
+
+  const handleViewTx = (e, artId) => {
+    const details = getUnlockedDetails(artId);
+    if (!details) return;
+    
+    if (details.isMock) {
+      e.preventDefault();
+      alert(`★ SIMULATED TRANSACTION ★\n\nThis app is currently running in Mock Mode because Circle API keys are not configured in Vercel.\n\nTransaction Hash: ${details.txHash}\nStatus: Settled (Simulated)\nChain: Arc Testnet (Simulated)\n\nNote: To run in Live Mode with real on-chain explorer validation, configure your CIRCLE_API_KEY and CIRCLE_ENTITY_SECRET in the Vercel project environment variables.`);
+    }
+  };
+
   // Load unlocked states from storage on mount
   useEffect(() => {
     const data = localStorage.getItem("papercut_unlocked_articles");
@@ -565,7 +593,13 @@ function App() {
       setCircleWallet(prev => prev ? { ...prev, balance: data.balance } : null);
 
       // Save unlocked state
-      const updatedUnlocked = { ...unlockedArticles, [selectedArticle.id]: data.txHash || true };
+      const updatedUnlocked = { 
+        ...unlockedArticles, 
+        [selectedArticle.id]: {
+          txHash: data.txHash || "0x8fdc9dfa539f8fc0d13cf941f81e14d3d4aa182035e0",
+          isMock: !!data.isMock
+        } 
+      };
       setUnlockedArticles(updatedUnlocked);
       localStorage.setItem("papercut_unlocked_articles", JSON.stringify(updatedUnlocked));
       
@@ -866,13 +900,14 @@ function App() {
                   <span className="divider">•</span>
                   <span className="price-badge">
                     TARIFF: <UsdcCoinIcon size={14} className="coin-inline" style={{ marginRight: '4px', marginTop: '-3px' }} /> {selectedArticle.price} USDC Coinage
-                    {unlockedArticles[selectedArticle.id] && (
+                    {getUnlockedDetails(selectedArticle.id) && (
                       <a 
-                        href={getExplorerUrl("5042002", typeof unlockedArticles[selectedArticle.id] === 'string' ? unlockedArticles[selectedArticle.id] : "0x8fdc9dfa539f8fc0d13cf941f81e14d3d4aa182035e0")} 
+                        href={getExplorerUrl("5042002", getUnlockedDetails(selectedArticle.id).txHash)} 
                         target="_blank" 
                         rel="noopener noreferrer" 
-                        title="View transaction on-chain"
-                        style={{ marginLeft: '6px', textDecoration: 'none', display: 'inline-block', fontSize: '13px' }}
+                        onClick={(e) => handleViewTx(e, selectedArticle.id)}
+                        title={getUnlockedDetails(selectedArticle.id).isMock ? "Simulated Transaction - Click for info" : "View transaction on-chain"}
+                        style={{ marginLeft: '6px', textDecoration: 'none', display: 'inline-block', fontSize: '13px', cursor: 'pointer' }}
                       >
                         🔗
                       </a>
