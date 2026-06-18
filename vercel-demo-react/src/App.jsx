@@ -472,10 +472,45 @@ function App() {
               <div className="greek-key"></div>
               <h1 className="serif-title font-italic">Select a Dispatch to Peruse</h1>
               <p className="mono-text text-muted">Demonstrating a Modern Electronic Ledger & Gasless Micro-Tariff System.</p>
-              <div className="badge-row">
-                <span className="chain-badge">Sign Register</span>
-                <span className="chain-badge">Secured Ledger Vault</span>
-                <span className="chain-badge">Arc Testnet</span>
+              <div className="stamp-row">
+                {/* Stamp 1: Register Status */}
+                {!authenticated ? (
+                  <div 
+                    className="rubber-stamp stamp-red clickable-stamp" 
+                    onClick={login}
+                    title="Click to Sign the Register"
+                  >
+                    ★ REGISTER: UNSIGNED ★
+                  </div>
+                ) : (
+                  <div className="rubber-stamp stamp-green">
+                    ✔ REGISTER: SIGNED
+                  </div>
+                )}
+
+                {/* Stamp 2: Vault Status */}
+                {(!authenticated || !circleWallet) ? (
+                  <div 
+                    className="rubber-stamp stamp-red clickable-stamp"
+                    onClick={login}
+                    title="Click to Sign Register and activate Vault"
+                  >
+                    ★ VAULT: EMPTY ★
+                  </div>
+                ) : (
+                  <div 
+                    className="rubber-stamp stamp-green clickable-stamp"
+                    onClick={() => setShowWalletModal(true)}
+                    title="Click to open your Secure Ledger Vault"
+                  >
+                    ✔ VAULT: ACTIVE
+                  </div>
+                )}
+
+                {/* Stamp 3: Network Status */}
+                <div className="rubber-stamp stamp-black">
+                  ✦ ARC TESTNET ✦
+                </div>
               </div>
             </div>
           ) : (

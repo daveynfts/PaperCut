@@ -345,21 +345,70 @@ body {
   color: var(--ink-grey);
 }
 
-.badge-row {
+/* Rubber Stamps for home page state indicators */
+.stamp-row {
   display: flex;
-  gap: 8px;
-  margin-top: 8px;
+  gap: 20px;
+  margin-top: 15px;
+  justify-content: center;
+  flex-wrap: wrap;
 }
 
-.chain-badge {
-  background: var(--paper-accent);
-  border: 1px dashed var(--ink-grey);
-  color: var(--ink-black);
+.rubber-stamp {
   font-family: var(--font-mono);
-  font-size: 10px;
-  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 6px 12px;
   border-radius: 0;
   text-transform: uppercase;
+  user-select: none;
+  display: inline-block;
+  transition: transform 0.15s, box-shadow 0.15s, background-color 0.15s;
+}
+
+/* Red Stamp - Unsigned/Inactive */
+.stamp-red {
+  color: var(--ink-red);
+  border: 2px solid var(--ink-red);
+  background-color: rgba(143, 45, 27, 0.04);
+  transform: rotate(-1.5deg);
+}
+
+/* Green Stamp - Signed/Active */
+.stamp-green {
+  color: #2b7034;
+  border: 2px solid #2b7034;
+  background-color: rgba(43, 112, 52, 0.04);
+  transform: rotate(1.2deg);
+}
+
+/* Black/Default Stamp - Network etc */
+.stamp-black {
+  color: var(--ink-black);
+  border: 2px solid var(--ink-black);
+  background-color: rgba(26, 23, 19, 0.02);
+  transform: rotate(-0.8deg);
+}
+
+/* Interactive click feedback */
+.clickable-stamp {
+  cursor: pointer;
+}
+
+.clickable-stamp:hover {
+  box-shadow: 0 0 6px currentColor;
+}
+
+.stamp-red.clickable-stamp:hover {
+  background-color: rgba(143, 45, 27, 0.10);
+}
+
+.stamp-green.clickable-stamp:hover {
+  background-color: rgba(43, 112, 52, 0.10);
+}
+
+.clickable-stamp:active {
+  transform: scale(0.96);
 }
 
 .article-header {
