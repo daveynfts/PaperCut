@@ -548,7 +548,7 @@ function App() {
                                 {scrapeStep >= 3 && (
                                   <>
                                     <div className="term-line success">
-                                      Tx settled. Hash: 0x8fd...35e0.
+                                      Tx settled. Hash: <a href={getExplorerUrl(chainId || "5042002", "0x8fdc9dfa539f8fc0d13cf941f81e14d3d4aa182035e0")} target="_blank" rel="noopener noreferrer" style={{ color: '#5cd15c', textDecoration: 'underline' }}>0x8fd...35e0 ↗</a>.
                                     </div>
                                     <div className="term-line prompt">
                                       <span className="term-accent">&gt;</span> scrape --target content --stream-read
@@ -604,7 +604,7 @@ function App() {
                           {txHash && (
                             <div className="tx-hash-link">
                               <a href={getExplorerUrl(chainId, txHash)} target="_blank" rel="noopener noreferrer">
-                                Verify Ledger Record ↗
+                                View on Block Explorer ↗
                               </a>
                             </div>
                           )}
