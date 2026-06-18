@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
 import { PrivyProvider } from '@privy-io/react-auth'
+import { mainnet, sepolia, baseSepolia, arbitrumSepolia } from 'viem/chains'
 
 // Define Arc Testnet as a custom EVM chain in Privy
 const arcTestnet = {
@@ -39,7 +40,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       appId={PRIVY_APP_ID}
       config={{
         // 1. Lock Privy strictly to Arc Testnet
-        supportedChains: [arcTestnet],
+        supportedChains: [arcTestnet, mainnet, sepolia, baseSepolia, arbitrumSepolia],
         defaultChain: arcTestnet,
         loginMethods: ['email', 'wallet'],
         appearance: {
