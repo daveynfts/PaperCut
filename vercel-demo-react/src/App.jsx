@@ -565,7 +565,7 @@ function App() {
       setCircleWallet(prev => prev ? { ...prev, balance: data.balance } : null);
 
       // Save unlocked state
-      const updatedUnlocked = { ...unlockedArticles, [selectedArticle.id]: true };
+      const updatedUnlocked = { ...unlockedArticles, [selectedArticle.id]: data.txHash || true };
       setUnlockedArticles(updatedUnlocked);
       localStorage.setItem("papercut_unlocked_articles", JSON.stringify(updatedUnlocked));
       
@@ -864,7 +864,20 @@ function App() {
                     {selectedArticle.verified && <VerifiedBadge onApplyClick={handleOpenApplyForm} />}
                   </span>
                   <span className="divider">•</span>
-                  <span className="price-badge">TARIFF: <UsdcCoinIcon size={14} className="coin-inline" style={{ marginRight: '4px', marginTop: '-3px' }} /> {selectedArticle.price} USDC Coinage</span>
+                  <span className="price-badge">
+                    TARIFF: <UsdcCoinIcon size={14} className="coin-inline" style={{ marginRight: '4px', marginTop: '-3px' }} /> {selectedArticle.price} USDC Coinage
+                    {unlockedArticles[selectedArticle.id] && (
+                      <a 
+                        href={getExplorerUrl("5042002", typeof unlockedArticles[selectedArticle.id] === 'string' ? unlockedArticles[selectedArticle.id] : "0x8fdc9dfa539f8fc0d13cf941f81e14d3d4aa182035e0")} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        title="View transaction on-chain"
+                        style={{ marginLeft: '6px', textDecoration: 'none', display: 'inline-block', fontSize: '13px' }}
+                      >
+                        🔗
+                      </a>
+                    )}
+                  </span>
                 </div>
               </div>
 
