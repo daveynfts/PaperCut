@@ -22,30 +22,57 @@ const ARC_CHAIN_ID = 54321; // Mock Arc ChainID
 // Mock Article Database
 const articles = [
   {
-    id: "1",
-    title: "The Rebirth of the Lepton: Why Nanopayments are the Future of Web3",
-    author: "Alice Sterling",
-    snippet: "For decades, subscription models have forced users to pay for bundled content. But what if you could pay $0.02 to read a single article...",
-    content: "For decades, subscription models have forced users to pay for bundled content. But what if you could pay $0.02 to read a single article? Nanopayments remove the floor. Using Circle's Arc network and EIP-3009 off-chain signatures, we can settle value as small as $0.000001 instantly and gaslessly. This enables creators to sell individual articles, songs, or photos directly to users, opening up a new long-tail economy that subscriptions priced out.",
-    price: "0.02", // in USDC
-    payee: PUBLISHER_WALLET
-  },
-  {
-    id: "2",
-    title: "AI-Agent Economies: How Bots Earn and Spend on the Arc Blockchain",
-    author: "Bob Vances",
-    snippet: "AI agents are no longer just tools; they are economic actors. By equipping LLMs with programmable wallets, they can autonomously pay...",
-    content: "AI agents are no longer just tools; they are economic actors. By equipping LLMs with programmable wallets, they can autonomously pay for APIs, compute, and premium data feeds per request. On the Arc network, an agent can pay $0.001 to summarize a paragraph or $0.01 to generate an image. This eliminates subscription overhead, allowing agents to route request queries to the cheapest, fastest providers dynamically on a strict daily budget.",
+    id: "0",
+    title: "Exploring the Antigravity of Decentralized Liquidity",
+    author: "Hayden Adams",
+    snippet: "How automated market makers and concentrated liquidity protocols are redefining financial architecture without intermediaries...",
+    content: "How automated market makers and concentrated liquidity protocols are redefining financial architecture without intermediaries. Traditional financial plumbing relies on order books managed by centralized institutions. By utilizing constant product formulas and on-chain liquidity pools, Uniswap proved that trustless market-making is not only possible but highly efficient. Concentrated liquidity further refines this by allowing providers to allocate capital to specific price ranges, maximizing efficiency and cementing AMMs as the foundational substrate of decentralized finance.",
     price: "0.05",
     payee: PUBLISHER_WALLET
   },
   {
+    id: "1",
+    title: "The Promise and Challenges of Crypto-Pluralism",
+    author: "Vitalik Buterin",
+    snippet: "Pluralism in the digital age requires decentralized governance models that respect individual sovereignty while fostering coordination...",
+    content: "Pluralism in the digital age requires decentralized governance models that respect individual sovereignty while fostering coordination. Quadratic voting, retrofunding, and decentralized identity systems represent the first wave of tools enabling communities to steward public goods without relying on centralized bureaucracies. We must refine these mechanisms to ensure they are robust against collusion, Sybil attacks, and platform capture, cementing a truly democratic substrate for the internet.",
+    price: "0.08",
+    payee: PUBLISHER_WALLET
+  },
+  {
+    id: "2",
+    title: "The Rise of the Startup Society and Cloud First Cities",
+    author: "Balaji Srinivasan",
+    snippet: "Physical nations are slow, bureaucratic, and bound to geographical legacy. The startup society starts cloud-first, building digital...",
+    content: "Physical nations are slow, bureaucratic, and bound to geographical legacy. The startup society starts cloud-first, building digital consensus, crowdfunding land, and negotiating diplomatic recognition dynamically. By leveraging public block explorers, cryptographic citizenship, and smart-contract law, we can run experiments in governance at cloud speeds, offering alternative jurisdictions for people who value innovation and voluntary association.",
+    price: "0.10",
+    payee: PUBLISHER_WALLET
+  },
+  {
     id: "3",
-    title: "Decentralized GPU Markets: Renting Compute by the Millisecond",
-    author: "Charlie Hacker",
-    snippet: "Renting GPUs usually requires high deposit minimums. Continuous payment streams on Arc allow renting GPU compute by the second...",
-    content: "Renting GPUs usually requires high deposit minimums. Continuous payment streams on Arc allow renting GPU compute by the second. A user opens a payment channel that streams $0.0001 USDC per second to the provider. The moment the computation finishes, the connection terminates, the payment stops, and the user is only billed for the exact seconds of server runtime used. This maximizes utility for fine-tuning models and batch processing.",
-    price: "0.03",
+    title: "Ultra-Sound Money: Analysing the Deflationary Mechanics of EIP-1559",
+    author: "Bankless",
+    snippet: "Is Ethereum truly ultra-sound? Let's dissect the base fee burn mechanism and how network transaction fee demand impacts ether supply...",
+    content: "Is Ethereum truly ultra-sound? Let's dissect the base fee burn mechanism and how network transaction fee demand impacts ether supply. Under EIP-1559, a portion of every transaction fee is permanently removed from circulation. When network activity exceeds threshold limits, the burn rate surpasses issuance, resulting in net-deflationary supply dynamics. This fundamentally transforms ether from a pure utility token into a scarce, productive store of value.",
+    price: "0.04",
+    payee: PUBLISHER_WALLET
+  },
+  {
+    id: "4",
+    title: "Read, Write, Own: How Web3 Restores the Original Vision of the Internet",
+    author: "Chris Dixon",
+    snippet: "Web1 was read-only, dominated by open protocols. Web2 added write capabilities, but centralized the power in corporate platforms. Web3...",
+    content: "Web1 was read-only, dominated by open protocols. Web2 added write capabilities, but centralized the power in corporate platforms. Web3 introduces ownership. By giving users and builders direct ownership of the networks they use through tokens, we align incentives, reduce platform rent-seeking, and reignite the innovative explosion of the early internet. This isn't just about finance; it's about rebuilding digital democracy.",
+    price: "0.06",
+    payee: PUBLISHER_WALLET
+  },
+  {
+    id: "5",
+    title: "L1 vs L2: The Geopolitics of Blockchain Scaling Solutions",
+    author: "Haseeb Qureshi",
+    snippet: "Will Ethereum Layer 2s cannibalize the base chain? We examine the economic flywheels of rollups, blob space fees, and security...",
+    content: "Will Ethereum Layer 2s cannibalize the base chain? We examine the economic flywheels of rollups, blob space fees, and security. As Layer 2 execution becomes dirt cheap, value accrual moves to the settlement layer through L1 blob consumption. The geopolitics of blockchains suggest a future where L1s act as global supreme courts, and L2s act as high-speed commercial cities. This balance is critical to prevent fragmentation and secure long-term decentralization.",
+    price: "0.05",
     payee: PUBLISHER_WALLET
   }
 ];
