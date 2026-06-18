@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { ethers } from 'ethers';
 import './App.css';
+import logoImg from './assets/logo.png';
 
 const articles = [
   {
@@ -372,7 +373,8 @@ function App() {
     <div className="app-root">
       {/* NAV BAR */}
       <nav className="nav">
-        <div className="nav-brand">
+        <div className="nav-brand" style={{ display: 'flex', alignItems: 'center' }}>
+          <img src={logoImg} alt="Paper Cut Logo" className="logo-img" style={{ height: '36px', width: '36px', marginRight: '10px', borderRadius: '50%', border: '1.5px solid var(--ink-black)' }} />
           <span className="logo-text">Paper Cut</span>
         </div>
         <div className="nav-controls">
@@ -630,10 +632,13 @@ function App() {
             <div className="vintage-wallet-container">
               {/* LEFT COLUMN: IDs & INFO */}
               <div className="wallet-pane-left">
-                <div className="wallet-header">
+                <div className="wallet-header" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
                   <div className="wallet-seal">★ OFFICIAL IDENTITY CARD ★</div>
-                  <h3 className="wallet-title">PAPER CUT</h3>
-                  <div className="wallet-subtitle">TARIFF ACCOUNT & PORTFOLIO</div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginTop: '6px' }}>
+                    <img src={logoImg} alt="Paper Cut Seal Logo" style={{ height: '40px', width: '40px', borderRadius: '50%', border: '1.5px solid var(--ink-black)' }} />
+                    <h3 className="wallet-title" style={{ margin: 0 }}>PAPER CUT</h3>
+                  </div>
+                  <div className="wallet-subtitle" style={{ marginTop: '4px' }}>TARIFF ACCOUNT & PORTFOLIO</div>
                 </div>
                 
                 <div className="wallet-divider-double"></div>
