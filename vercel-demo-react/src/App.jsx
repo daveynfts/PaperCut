@@ -7,30 +7,53 @@ import logoImg from './assets/logo.png';
 const articles = [
   {
     id: "1",
-    title: "The Rebirth of the Lepton: Why Nanopayments are the Future of Web3",
-    author: "Alice Sterling",
-    snippet: "For decades, subscription models have forced users to pay for bundled content. But what if you could pay $0.02 to read a single article...",
-    content: "For decades, subscription models have forced users to pay for bundled content. But what if you could pay $0.02 to read a single article? Nanopayments remove the floor. Using Circle's Arc network and EIP-3009 off-chain signatures, we can settle value as small as $0.000001 instantly and gaslessly. This enables creators to sell individual articles, songs, or photos directly to users, opening up a new long-tail economy that subscriptions priced out.",
-    price: "0.02",
-    payee: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+    title: "The Promise and Challenges of Crypto-Pluralism",
+    author: "Vitalik Buterin",
+    snippet: "Pluralism in the digital age requires decentralized governance models that respect individual sovereignty while fostering coordination...",
+    content: "Pluralism in the digital age requires decentralized governance models that respect individual sovereignty while fostering coordination. Quadratic voting, retrofunding, and decentralized identity systems represent the first wave of tools enabling communities to steward public goods without relying on centralized bureaucracies. We must refine these mechanisms to ensure they are robust against collusion, Sybil attacks, and platform capture, cementing a truly democratic substrate for the internet.",
+    price: "0.08",
+    payee: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    verified: true
   },
   {
     id: "2",
-    title: "AI-Agent Economies: How Bots Earn and Spend on the Arc Blockchain",
-    author: "Bob Vances",
-    snippet: "AI agents are no longer just tools; they are economic actors. By equipping LLMs with programmable wallets, they can autonomously pay...",
-    content: "AI agents are no longer just tools; they are economic actors. By equipping LLMs with programmable wallets, they can autonomously pay for APIs, compute, and premium data feeds per request. On the Arc network, an agent can pay $0.001 to summarize a paragraph or $0.01 to generate an image. This eliminates subscription overhead, allowing agents to route request queries to the cheapest, fastest providers dynamically on a strict daily budget.",
-    price: "0.05",
-    payee: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+    title: "The Rise of the Startup Society and Cloud First Cities",
+    author: "Balaji Srinivasan",
+    snippet: "Physical nations are slow, bureaucratic, and bound to geographical legacy. The startup society starts cloud-first, building digital...",
+    content: "Physical nations are slow, bureaucratic, and bound to geographical legacy. The startup society starts cloud-first, building digital consensus, crowdfunding land, and negotiating diplomatic recognition dynamically. By leveraging public block explorers, cryptographic citizenship, and smart-contract law, we can run experiments in governance at cloud speeds, offering alternative jurisdictions for people who value innovation and voluntary association.",
+    price: "0.10",
+    payee: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    verified: true
   },
   {
     id: "3",
-    title: "Decentralized GPU Markets: Renting Compute by the Millisecond",
-    author: "Charlie Hacker",
-    snippet: "Renting GPUs usually requires high deposit minimums. Continuous payment streams on Arc allow renting GPU compute by the second...",
-    content: "Renting GPUs usually requires high deposit minimums. Continuous payment streams on Arc allow renting GPU compute by the second. A user opens a payment channel that streams $0.0001 USDC per second to the provider. The moment the computation finishes, the connection terminates, the payment stops, and the user is only billed for the exact seconds of server runtime used. This maximizes utility for fine-tuning models and batch processing.",
-    price: "0.03",
-    payee: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+    title: "Ultra-Sound Money: Analysing the Deflationary Mechanics of EIP-1559",
+    author: "Bankless",
+    snippet: "Is Ethereum truly ultra-sound? Let's dissect the base fee burn mechanism and how network transaction fee demand impacts ether supply...",
+    content: "Is Ethereum truly ultra-sound? Let's dissect the base fee burn mechanism and how network transaction fee demand impacts ether supply. Under EIP-1559, a portion of every transaction fee is permanently removed from circulation. When network activity exceeds threshold limits, the burn rate surpasses issuance, resulting in net-deflationary supply dynamics. This fundamentally transforms ether from a pure utility token into a scarce, productive store of value.",
+    price: "0.04",
+    payee: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    verified: true
+  },
+  {
+    id: "4",
+    title: "Read, Write, Own: How Web3 Restores the Original Vision of the Internet",
+    author: "Chris Dixon",
+    snippet: "Web1 was read-only, dominated by open protocols. Web2 added write capabilities, but centralized the power in corporate platforms. Web3...",
+    content: "Web1 was read-only, dominated by open protocols. Web2 added write capabilities, but centralized the power in corporate platforms. Web3 introduces ownership. By giving users and builders direct ownership of the networks they use through tokens, we align incentives, reduce platform rent-seeking, and reignite the innovative explosion of the early internet. This isn't just about finance; it's about rebuilding digital democracy.",
+    price: "0.06",
+    payee: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    verified: true
+  },
+  {
+    id: "5",
+    title: "L1 vs L2: The Geopolitics of Blockchain Scaling Solutions",
+    author: "Haseeb Qureshi",
+    snippet: "Will Ethereum Layer 2s cannibalize the base chain? We examine the economic flywheels of rollups, blob space fees, and security...",
+    content: "Will Ethereum Layer 2s cannibalize the base chain? We examine the economic flywheels of rollups, blob space fees, and security. As Layer 2 execution becomes dirt cheap, value accrual moves to the settlement layer through L1 blob consumption. The geopolitics of blockchains suggest a future where L1s act as global supreme courts, and L2s act as high-speed commercial cities. This balance is critical to prevent fragmentation and secure long-term decentralization.",
+    price: "0.05",
+    payee: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    verified: true
   }
 ];
 
@@ -53,6 +76,34 @@ const UsdcCoinIcon = ({ size = 24, className = "", style = {} }) => {
         </g>
       </g>
     </svg>
+  );
+};
+
+const VerifiedBadge = () => {
+  return (
+    <span 
+      style={{ 
+        display: 'inline-flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        width: '13px', 
+        height: '13px', 
+        borderRadius: '50%', 
+        backgroundColor: 'var(--ink-red)', 
+        color: 'var(--paper-bg)', 
+        fontSize: '9px', 
+        fontWeight: 'bold',
+        marginLeft: '5px',
+        verticalAlign: 'middle',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
+        lineHeight: '13px',
+        textAlign: 'center',
+        userSelect: 'none'
+      }} 
+      title="Accredited Web3 Publisher"
+    >
+      ✓
+    </span>
   );
 };
 
@@ -445,7 +496,10 @@ function App() {
               >
                 <div className="card-title">{art.title}</div>
                 <div className="card-meta">
-                  <span>By {art.author}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    By {art.author}
+                    {art.verified && <VerifiedBadge />}
+                  </span>
                   <span className="price-tag">
                     <UsdcCoinIcon size={12} className="coin-sidebar" style={{ marginRight: '3px', marginTop: '-2px' }} />
                     {art.price}
@@ -522,7 +576,10 @@ function App() {
               <div className="article-header">
                 <h1 className="serif-title">{selectedArticle.title}</h1>
                 <div className="article-meta">
-                  <span>By <strong style={{ color: 'var(--white)' }}>{selectedArticle.author}</strong></span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    By <strong style={{ color: 'var(--ink-black)', marginRight: '2px', marginLeft: '4px' }}>{selectedArticle.author}</strong>
+                    {selectedArticle.verified && <VerifiedBadge />}
+                  </span>
                   <span className="divider">•</span>
                   <span className="price-badge">TARIFF: <UsdcCoinIcon size={14} className="coin-inline" style={{ marginRight: '4px', marginTop: '-3px' }} /> {selectedArticle.price} USDC Coinage</span>
                 </div>
