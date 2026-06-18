@@ -174,7 +174,7 @@ async function getWalletUsdcBalance(walletId) {
     return usdcBalanceObj ? usdcBalanceObj.amount : "0.0";
   } catch (error) {
     console.error("getWalletUsdcBalance error:", error);
-    return "0.0";
+    throw error;
   }
 }
 
