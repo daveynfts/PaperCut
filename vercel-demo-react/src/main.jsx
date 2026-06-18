@@ -40,7 +40,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       appId={PRIVY_APP_ID}
       config={{
         // 1. Lock Privy strictly to Arc Testnet
-        supportedChains: [mainnet, sepolia, baseSepolia, arbitrumSepolia, arcTestnet],
+        supportedChains: [mainnet, sepolia, baseSepolia, arbitrumSepolia],
         defaultChain: mainnet,
         loginMethods: ['email', 'wallet'],
         appearance: {

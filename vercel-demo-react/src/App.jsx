@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { usePrivy, useWallets, useLogin } from '@privy-io/react-auth';
 import { ethers } from 'ethers';
 import './App.css';
 import logoImg from './assets/logo.png';
@@ -237,7 +237,21 @@ const VerifiedBadge = ({ onApplyClick }) => {
 };
 
 function App() {
-  const { login, logout, authenticated, user } = usePrivy();
+  const { logout, authenticated, user } = usePrivy();
+  const { login } = useLogin({
+    onComplete: (user, isNewUser, wasPreviouslyAuthenticated) => {
+      console.log("[PaperCut] Login complete:", user);
+      setError("");
+    },
+    onError: (err) => {
+      console.error("[PaperCut] Login failed:", err);
+      let errMsg = err?.message || String(err);
+      if (errMsg.toLowerCase().includes("origin") || errMsg.toLowerCase().includes("domain") || errMsg.toLowerCase().includes("authorized") || errMsg.toLowerCase().includes("whitelist")) {
+        errMsg = `Domain not authorized. Please log in to dashboard.privy.io, select App ID "cmqhlq3yb009i0ci5vvnjwqnf", and add "${window.location.origin}" to the Allowed Domains under settings.`;
+      }
+      setError(errMsg);
+    }
+  });
   const { wallets } = useWallets();
 
   const [selectedArticle, setSelectedArticle] = useState(null);
@@ -769,6 +783,36 @@ function App() {
               <div className="greek-key"></div>
               <h1 className="serif-title font-italic">Select a Dispatch to Peruse</h1>
               <p className="mono-text text-muted">Demonstrating a Modern Electronic Ledger & Gasless Micro-Tariff System.</p>
+              
+              {error && (
+                <div className="login-error-alert" style={{ 
+                  border: '2px dashed var(--ink-red)', 
+                  backgroundColor: 'rgba(186, 45, 45, 0.08)', 
+                  color: 'var(--ink-red)', 
+                  padding: '16px', 
+                  fontFamily: 'var(--font-mono)', 
+                  fontSize: '12px',
+                  lineHeight: '1.6',
+                  maxWidth: '550px',
+                  margin: '20px auto 10px auto',
+                  textAlign: 'left',
+                  borderRadius: '0px',
+                  boxShadow: '3px 3px 0 rgba(186, 45, 45, 0.15)'
+                }}>
+                  <div style={{ fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '6px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '16px' }}>⚠</span> AUTHENTICATION ERROR
+                  </div>
+                  <div>{error}</div>
+                  <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed rgba(186, 45, 45, 0.25)', fontSize: '11px', color: 'var(--ink-grey)' }}>
+                    <strong>Next Steps:</strong>
+                    <ol style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                      <li>Ensure <strong>{window.location.origin}</strong> is added to <strong>Allowed Domains</strong> in the Privy Developer Dashboard (dashboard.privy.io) under settings.</li>
+                      <li>Try clearing browser cookies/site data and reloading the page.</li>
+                      <li>Check if MetaMask extension has any pending connection approvals.</li>
+                    </ol>
+                  </div>
+                </div>
+              )}
               <div className="stamp-row">
                 {/* Stamp 1: Register Status */}
                 {!authenticated ? (
