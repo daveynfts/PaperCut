@@ -158,6 +158,7 @@ async function getWalletUsdcBalance(walletId) {
   }
 
   try {
+    console.log(`[Circle W3S] Fetching balance for wallet ${walletId} using API key (length: ${process.env.CIRCLE_API_KEY?.length || 0})`);
     const response = await fetch(`https://api.circle.com/v1/w3s/wallets/${walletId}/balances`, {
       headers: {
         "Authorization": `Bearer ${process.env.CIRCLE_API_KEY}`
