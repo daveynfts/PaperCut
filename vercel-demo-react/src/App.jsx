@@ -432,6 +432,18 @@ function App() {
         <section className="viewer">
           {!selectedArticle ? (
             <div id="viewer-default" className="viewer-state">
+              <img 
+                src={logoImg} 
+                alt="Paper Cut Seal" 
+                className="home-logo-large" 
+                style={{ 
+                  height: '140px', 
+                  width: '140px', 
+                  borderRadius: '50%', 
+                  border: '2px solid var(--ink-black)',
+                  boxShadow: '0 4px 10px rgba(0, 0, 0, 0.08)'
+                }} 
+              />
               <div className="greek-key"></div>
               <h1 className="serif-title font-italic">Select a Dispatch to Peruse</h1>
               <p className="mono-text text-muted">Demonstrating a Modern Electronic Ledger & Gasless Micro-Tariff System.</p>
