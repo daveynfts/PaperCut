@@ -7,10 +7,10 @@ import logoImg from './assets/logo.png';
 const articles = [
   {
     id: "0",
-    title: "Exploring the Antigravity of Decentralized Intelligence",
-    author: "Mr. nheo (◆,◆)",
-    snippet: "How autonomous agents and cryptographic primitives are creating a new regime of coordination without gravity...",
-    content: "How autonomous agents and cryptographic primitives are creating a new regime of coordination without gravity. By combining decentralized consensus, privacy-preserving zero-knowledge proofs, and agentic workflows, we build systems that cannot be captured by traditional jurisdictions. This opens up a design space for truly global, permissionless applications that operate autonomously on-chain, defying the regulatory and geographical gravity of the old world.",
+    title: "Exploring the Antigravity of Decentralized Liquidity",
+    author: "Hayden Adams",
+    snippet: "How automated market makers and concentrated liquidity protocols are redefining financial architecture without intermediaries...",
+    content: "How automated market makers and concentrated liquidity protocols are redefining financial architecture without intermediaries. Traditional financial plumbing relies on order books managed by centralized institutions. By utilizing constant product formulas and on-chain liquidity pools, Uniswap proved that trustless market-making is not only possible but highly efficient. Concentrated liquidity further refines this by allowing providers to allocate capital to specific price ranges, maximizing efficiency and cementing AMMs as the foundational substrate of decentralized finance.",
     price: "0.05",
     payee: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
     verified: true
@@ -103,6 +103,16 @@ const VerifiedBadge = ({ onApplyClick }) => {
     setShowPopover(!showPopover);
   };
 
+  const popoverWidth = 280;
+  const padding = 16;
+  let leftPos = coords.x - popoverWidth / 2;
+  if (leftPos < padding) {
+    leftPos = padding;
+  } else if (leftPos + popoverWidth > window.innerWidth - padding) {
+    leftPos = window.innerWidth - popoverWidth - padding;
+  }
+  const arrowLeft = coords.x - leftPos;
+
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center' }}>
       <svg 
@@ -147,36 +157,44 @@ const VerifiedBadge = ({ onApplyClick }) => {
             onClick={(e) => e.stopPropagation()}
             style={{
               position: 'fixed',
-              left: `${coords.x}px`,
+              left: `${leftPos}px`,
               top: `${coords.y}px`,
-              transform: 'translate(-50%, -100%)',
-              width: '320px',
-              backgroundColor: '#15181c',
-              color: '#f7f9f9',
-              border: '1px solid #2f3336',
+              transform: 'translateY(-100%)',
+              width: `${popoverWidth}px`,
+              backgroundColor: 'var(--paper-accent)',
+              color: 'var(--ink-black)',
+              border: '2px solid var(--ink-black)',
               padding: '16px',
-              borderRadius: '16px',
-              boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
+              borderRadius: '0px',
+              boxShadow: '4px 4px 0px var(--ink-black)',
               zIndex: 10000,
               textAlign: 'left',
-              fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-              fontSize: '14px',
-              lineHeight: '1.4',
+              fontFamily: 'var(--font-serif)',
+              fontSize: '13px',
+              lineHeight: '1.5',
               pointerEvents: 'auto'
             }}
           >
-            <div style={{ fontWeight: '800', fontSize: '18px', color: '#f7f9f9', marginBottom: '12px' }}>
-              Tài khoản đã xác nhận
+            <div style={{ 
+              fontFamily: 'var(--font-headline)', 
+              fontWeight: 'bold', 
+              fontSize: '15px', 
+              color: 'var(--ink-red)', 
+              borderBottom: '1px solid var(--ink-black)',
+              paddingBottom: '6px',
+              marginBottom: '12px' 
+            }}>
+              TÀI KHOẢN ĐÃ XÁC NHẬN
             </div>
             
-            <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start' }}>
               {/* Blue Verified Badge */}
-              <svg viewBox="0 0 24 24" style={{ width: '20px', height: '20px', fill: '#1d9bf0', marginRight: '12px', flexShrink: 0, marginTop: '2px' }}>
+              <svg viewBox="0 0 24 24" style={{ width: '18px', height: '18px', fill: '#1d9bf0', marginRight: '10px', flexShrink: 0, marginTop: '2px' }}>
                 <g>
                   <path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.17-2.9-.81-3.88-.98-.98-2.49-1.27-3.88-.81C14.67 2.66 13.43 1.75 12 1.75s-2.67.91-3.37 2.22C7.24 3.51 5.73 3.8 4.75 4.78c-.98.98-1.27 2.49-.81 3.88C2.63 9.33 1.75 10.57 1.75 12s.88 2.67 2.19 3.34c-.46 1.39-.17 2.9.81 3.88.98.98 2.49 1.27 3.88.81.7 1.31 1.94 2.22 3.37 2.22s2.67-.91 3.37-2.22c1.39.46 2.9.17 3.88-.81.98-.98 1.27-2.49.81-3.88 1.31-.7 2.22-1.94 2.22-3.37zM10.25 16.25L6 12l1.5-1.5 2.75 2.75 6.25-6.25 1.5 1.5-8 8z"></path>
                 </g>
               </svg>
-              <div style={{ color: '#e7e9ea', fontSize: '14px', fontWeight: '400' }}>
+              <div style={{ fontSize: '13px' }}>
                 Tài khoản này đã xác nhận.{' '}
                 <span 
                   onClick={(e) => {
@@ -184,39 +202,32 @@ const VerifiedBadge = ({ onApplyClick }) => {
                     setShowPopover(false);
                     onApplyClick();
                   }}
-                  style={{ color: '#1d9bf0', cursor: 'pointer', textDecoration: 'none', fontWeight: '600' }}
-                  onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
-                  onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
+                  style={{ 
+                    color: 'var(--ink-red)', 
+                    cursor: 'pointer', 
+                    textDecoration: 'underline', 
+                    fontWeight: 'bold',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '11px'
+                  }}
                 >
                   Tìm hiểu thêm
                 </span>
               </div>
             </div>
             
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              {/* Grey Calendar Icon */}
-              <svg viewBox="0 0 24 24" style={{ width: '20px', height: '20px', fill: '#71767b', marginRight: '12px', flexShrink: 0 }}>
-                <g>
-                  <path d="M7 4V3h2v1h6V3h2v1h1.5C19.88 4 21 5.12 21 6.5v12c0 1.38-1.12 2.5-2.5 2.5h-13C4.12 21 3 19.88 3 18.5v-12C3 5.12 4.12 4 5.5 4H7zm0 2H5.5c-.28 0-.5.22-.5.5v12c0 .28.22.5.5.5h13c.28 0 .5-.22.5-.5v-12c0-.28-.22-.5-.5-.5H17v1h-2V6H9v1H7V6zm0 6h2v-2H7v2zm0 4h2v-2H7v2zm4-4h2v-2h-2v2zm0 4h2v-2h-2v2zm4-4h2v-2h-2v2zm0 4h2v-2h-2v2z"></path>
-                </g>
-              </svg>
-              <span style={{ color: '#71767b', fontSize: '14px', fontWeight: '400' }}>
-                Đã xác nhận từ tháng 11 năm 2025.
-              </span>
-            </div>
-            
             {/* Popover Arrow */}
             <div style={{
               position: 'absolute',
-              bottom: '-8px',
-              left: '50%',
+              bottom: '-6px',
+              left: `${arrowLeft}px`,
               transform: 'translateX(-50%) rotate(45deg)',
-              width: '16px',
-              height: '16px',
-              backgroundColor: '#15181c',
-              borderRight: '1px solid #2f3336',
-              borderBottom: '1px solid #2f3336',
-              zIndex: -1
+              width: '10px',
+              height: '10px',
+              backgroundColor: 'var(--paper-accent)',
+              borderRight: '2px solid var(--ink-black)',
+              borderBottom: '2px solid var(--ink-black)',
+              zIndex: 9999
             }} />
           </div>
         </>
