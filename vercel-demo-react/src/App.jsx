@@ -406,13 +406,20 @@ function App() {
     }
   };
 
-  // Load unlocked states from storage on mount
+  // Load unlocked states from storage on mount / user change
   useEffect(() => {
-    const data = localStorage.getItem("papercut_unlocked_articles");
-    if (data) {
-      setUnlockedArticles(JSON.parse(data));
+    if (authenticated && user) {
+      const userEmail = user.email?.address || user.id || "anonymous-user";
+      const data = localStorage.getItem(`papercut_unlocked_articles_${userEmail}`);
+      if (data) {
+        setUnlockedArticles(JSON.parse(data));
+      } else {
+        setUnlockedArticles({});
+      }
+    } else {
+      setUnlockedArticles({});
     }
-  }, []);
+  }, [authenticated, user]);
 
   // Update active wallet chain ID when wallet changes
   useEffect(() => {
@@ -607,7 +614,7 @@ function App() {
         } 
       };
       setUnlockedArticles(updatedUnlocked);
-      localStorage.setItem("papercut_unlocked_articles", JSON.stringify(updatedUnlocked));
+      localStorage.setItem(`papercut_unlocked_articles_${userEmail}`, JSON.stringify(updatedUnlocked));
       
       setTimeout(() => {
         setTxStatus("");
