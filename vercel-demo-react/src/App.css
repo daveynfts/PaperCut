@@ -48,7 +48,8 @@ body {
 
 /* ============ NAV BAR (NEWSPAPER MASTHEAD) ============ */
 .nav {
-  height: var(--nav-height);
+  min-height: var(--nav-height);
+  height: auto;
   background: var(--paper-bg);
   border-bottom: 5px double var(--ink-black);
   border-top: 5px solid var(--ink-black);

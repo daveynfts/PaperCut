@@ -80,6 +80,22 @@ function App() {
   const [scrapeCost, setScrapeCost] = useState(0);
   const [scrapeResult, setScrapeResult] = useState("");
 
+  const [currentDate, setCurrentDate] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentDate(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const formatDateTime = (date) => {
+    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    const dateString = date.toLocaleDateString('en-US', options);
+    const timeString = date.toLocaleTimeString('en-US', { hour12: true });
+    return `${dateString} — ${timeString}`;
+  };
+
   const handleCopyAddress = (addr) => {
     if (!addr) return;
     navigator.clipboard.writeText(addr).then(() => {
@@ -373,9 +389,11 @@ function App() {
     <div className="app-root">
       {/* NAV BAR */}
       <nav className="nav">
-        <div className="nav-brand" style={{ display: 'flex', alignItems: 'center' }}>
-          <img src={logoImg} alt="Paper Cut Logo" className="logo-img" style={{ height: '36px', width: '36px', marginRight: '10px', borderRadius: '50%', border: '1.5px solid var(--ink-black)' }} />
+        <div className="nav-brand">
           <span className="logo-text">Paper Cut</span>
+        </div>
+        <div className="nav-datetime mono-text" style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--ink-grey)', marginTop: '-2px' }}>
+          {formatDateTime(currentDate)}
         </div>
         <div className="nav-controls">
           {!authenticated ? (
