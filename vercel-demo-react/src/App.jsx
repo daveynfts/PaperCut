@@ -373,8 +373,7 @@ function App() {
       {/* NAV BAR */}
       <nav className="nav">
         <div className="nav-brand">
-          <span className="logo-symbol">Λ</span>
-          <span className="logo-text">The PaperCut Ledger</span>
+          <span className="logo-text">Paper Cut</span>
         </div>
         <div className="nav-controls">
           {!authenticated ? (
@@ -633,7 +632,7 @@ function App() {
               <div className="wallet-pane-left">
                 <div className="wallet-header">
                   <div className="wallet-seal">★ OFFICIAL IDENTITY CARD ★</div>
-                  <h3 className="wallet-title">THE PAPERCUT LEDGER</h3>
+                  <h3 className="wallet-title">PAPER CUT</h3>
                   <div className="wallet-subtitle">TARIFF ACCOUNT & PORTFOLIO</div>
                 </div>
                 
