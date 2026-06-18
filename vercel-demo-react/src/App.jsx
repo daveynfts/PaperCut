@@ -6,6 +6,16 @@ import logoImg from './assets/logo.png';
 
 const articles = [
   {
+    id: "0",
+    title: "Exploring the Antigravity of Decentralized Intelligence",
+    author: "Mr. nheo (◆,◆)",
+    snippet: "How autonomous agents and cryptographic primitives are creating a new regime of coordination without gravity...",
+    content: "How autonomous agents and cryptographic primitives are creating a new regime of coordination without gravity. By combining decentralized consensus, privacy-preserving zero-knowledge proofs, and agentic workflows, we build systems that cannot be captured by traditional jurisdictions. This opens up a design space for truly global, permissionless applications that operate autonomously on-chain, defying the regulatory and geographical gravity of the old world.",
+    price: "0.05",
+    payee: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    verified: true
+  },
+  {
     id: "1",
     title: "The Promise and Challenges of Crypto-Pluralism",
     author: "Vitalik Buterin",
@@ -79,30 +89,138 @@ const UsdcCoinIcon = ({ size = 24, className = "", style = {} }) => {
   );
 };
 
-const VerifiedBadge = () => {
+const VerifiedBadge = ({ onApplyClick }) => {
+  const [showPopover, setShowPopover] = useState(false);
+  const [coords, setCoords] = useState({ x: 0, y: 0 });
+
+  const handleTriggerClick = (e) => {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    setCoords({
+      x: rect.left + rect.width / 2,
+      y: rect.top - 8
+    });
+    setShowPopover(!showPopover);
+  };
+
   return (
-    <span 
-      style={{ 
-        display: 'inline-flex', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        width: '13px', 
-        height: '13px', 
-        borderRadius: '50%', 
-        backgroundColor: 'var(--ink-red)', 
-        color: 'var(--paper-bg)', 
-        fontSize: '9px', 
-        fontWeight: 'bold',
-        marginLeft: '5px',
-        verticalAlign: 'middle',
-        boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
-        lineHeight: '13px',
-        textAlign: 'center',
-        userSelect: 'none'
-      }} 
-      title="Accredited Web3 Publisher"
-    >
-      ✓
+    <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+      <svg 
+        viewBox="0 0 24 24" 
+        onClick={handleTriggerClick}
+        style={{ 
+          width: '14px', 
+          height: '14px', 
+          fill: '#1d9bf0', 
+          display: 'inline-block', 
+          verticalAlign: 'middle', 
+          marginLeft: '4px', 
+          cursor: 'pointer', 
+          userSelect: 'none',
+          flexShrink: 0
+        }}
+        title="Accredited Web3 Publisher - Click to verify"
+      >
+        <g>
+          <path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.17-2.9-.81-3.88-.98-.98-2.49-1.27-3.88-.81C14.67 2.66 13.43 1.75 12 1.75s-2.67.91-3.37 2.22C7.24 3.51 5.73 3.8 4.75 4.78c-.98.98-1.27 2.49-.81 3.88C2.63 9.33 1.75 10.57 1.75 12s.88 2.67 2.19 3.34c-.46 1.39-.17 2.9.81 3.88.98.98 2.49 1.27 3.88.81.7 1.31 1.94 2.22 3.37 2.22s2.67-.91 3.37-2.22c1.39.46 2.9.17 3.88-.81.98-.98 1.27-2.49.81-3.88 1.31-.7 2.22-1.94 2.22-3.37zM10.25 16.25L6 12l1.5-1.5 2.75 2.75 6.25-6.25 1.5 1.5-8 8z"></path>
+        </g>
+      </svg>
+
+      {showPopover && (
+        <>
+          <div 
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowPopover(false);
+            }}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999
+            }}
+          />
+          
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'fixed',
+              left: `${coords.x}px`,
+              top: `${coords.y}px`,
+              transform: 'translate(-50%, -100%)',
+              width: '320px',
+              backgroundColor: '#15181c',
+              color: '#f7f9f9',
+              border: '1px solid #2f3336',
+              padding: '16px',
+              borderRadius: '16px',
+              boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
+              zIndex: 10000,
+              textAlign: 'left',
+              fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+              fontSize: '14px',
+              lineHeight: '1.4',
+              pointerEvents: 'auto'
+            }}
+          >
+            <div style={{ fontWeight: '800', fontSize: '18px', color: '#f7f9f9', marginBottom: '12px' }}>
+              Tài khoản đã xác nhận
+            </div>
+            
+            <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '12px' }}>
+              {/* Blue Verified Badge */}
+              <svg viewBox="0 0 24 24" style={{ width: '20px', height: '20px', fill: '#1d9bf0', marginRight: '12px', flexShrink: 0, marginTop: '2px' }}>
+                <g>
+                  <path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.17-2.9-.81-3.88-.98-.98-2.49-1.27-3.88-.81C14.67 2.66 13.43 1.75 12 1.75s-2.67.91-3.37 2.22C7.24 3.51 5.73 3.8 4.75 4.78c-.98.98-1.27 2.49-.81 3.88C2.63 9.33 1.75 10.57 1.75 12s.88 2.67 2.19 3.34c-.46 1.39-.17 2.9.81 3.88.98.98 2.49 1.27 3.88.81.7 1.31 1.94 2.22 3.37 2.22s2.67-.91 3.37-2.22c1.39.46 2.9.17 3.88-.81.98-.98 1.27-2.49.81-3.88 1.31-.7 2.22-1.94 2.22-3.37zM10.25 16.25L6 12l1.5-1.5 2.75 2.75 6.25-6.25 1.5 1.5-8 8z"></path>
+                </g>
+              </svg>
+              <div style={{ color: '#e7e9ea', fontSize: '14px', fontWeight: '400' }}>
+                Tài khoản này đã xác nhận.{' '}
+                <span 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowPopover(false);
+                    onApplyClick();
+                  }}
+                  style={{ color: '#1d9bf0', cursor: 'pointer', textDecoration: 'none', fontWeight: '600' }}
+                  onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
+                  onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
+                >
+                  Tìm hiểu thêm
+                </span>
+              </div>
+            </div>
+            
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              {/* Grey Calendar Icon */}
+              <svg viewBox="0 0 24 24" style={{ width: '20px', height: '20px', fill: '#71767b', marginRight: '12px', flexShrink: 0 }}>
+                <g>
+                  <path d="M7 4V3h2v1h6V3h2v1h1.5C19.88 4 21 5.12 21 6.5v12c0 1.38-1.12 2.5-2.5 2.5h-13C4.12 21 3 19.88 3 18.5v-12C3 5.12 4.12 4 5.5 4H7zm0 2H5.5c-.28 0-.5.22-.5.5v12c0 .28.22.5.5.5h13c.28 0 .5-.22.5-.5v-12c0-.28-.22-.5-.5-.5H17v1h-2V6H9v1H7V6zm0 6h2v-2H7v2zm0 4h2v-2H7v2zm4-4h2v-2h-2v2zm0 4h2v-2h-2v2zm4-4h2v-2h-2v2zm0 4h2v-2h-2v2z"></path>
+                </g>
+              </svg>
+              <span style={{ color: '#71767b', fontSize: '14px', fontWeight: '400' }}>
+                Đã xác nhận từ tháng 11 năm 2025.
+              </span>
+            </div>
+            
+            {/* Popover Arrow */}
+            <div style={{
+              position: 'absolute',
+              bottom: '-8px',
+              left: '50%',
+              transform: 'translateX(-50%) rotate(45deg)',
+              width: '16px',
+              height: '16px',
+              backgroundColor: '#15181c',
+              borderRight: '1px solid #2f3336',
+              borderBottom: '1px solid #2f3336',
+              zIndex: -1
+            }} />
+          </div>
+        </>
+      )}
     </span>
   );
 };
@@ -130,6 +248,19 @@ function App() {
   const [scrapeWords, setScrapeWords] = useState(0);
   const [scrapeCost, setScrapeCost] = useState(0);
   const [scrapeResult, setScrapeResult] = useState("");
+
+  const [showApplyForm, setShowApplyForm] = useState(false);
+  const [formSubmitted, setFormSubmitted] = useState(false);
+
+  const handleOpenApplyForm = () => {
+    setSelectedArticle(null);
+    setShowApplyForm(true);
+  };
+
+  const handleFormSubmit = (e) => {
+    e.preventDefault();
+    setFormSubmitted(true);
+  };
 
   const [currentDate, setCurrentDate] = useState(new Date());
 
@@ -306,6 +437,7 @@ function App() {
       return;
     }
     setSelectedArticle(art);
+    setShowApplyForm(false);
     setTxStatus("");
     setTxHash("");
     setError("");
@@ -453,7 +585,10 @@ function App() {
         <div className="nav-controls">
           <div 
             className="nav-front-page-btn" 
-            onClick={() => setSelectedArticle(null)}
+            onClick={() => {
+              setSelectedArticle(null);
+              setShowApplyForm(false);
+            }}
             title="Return to Front Page / Home"
           >
             FRONT PAGE
@@ -498,7 +633,7 @@ function App() {
                 <div className="card-meta">
                   <span style={{ display: 'inline-flex', alignItems: 'center' }}>
                     By {art.author}
-                    {art.verified && <VerifiedBadge />}
+                    {art.verified && <VerifiedBadge onApplyClick={handleOpenApplyForm} />}
                   </span>
                   <span className="price-tag">
                     <UsdcCoinIcon size={12} className="coin-sidebar" style={{ marginRight: '3px', marginTop: '-2px' }} />
@@ -513,7 +648,91 @@ function App() {
 
         {/* RIGHT CONTENT */}
         <section className="viewer">
-          {!selectedArticle ? (
+          {showApplyForm ? (
+            <div className="viewer-state apply-author-container" style={{ padding: '32px', display: 'flex', flexDirection: 'column' }}>
+              <div className="greek-key"></div>
+              <h1 className="serif-title font-italic" style={{ textAlign: 'center', marginBottom: '8px', fontSize: '32px' }}>Press Credentials Registry</h1>
+              <p className="mono-text text-muted" style={{ textAlign: 'center', marginBottom: '24px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                APPLICATION FOR AUTHOR INDUCTION & VERIFICATION SEAL
+              </p>
+              
+              <div className="vintage-form-card" style={{ border: '2px solid var(--ink-black)', padding: '24px', backgroundColor: 'var(--paper-accent)', boxShadow: '4px 4px 0 var(--ink-black)', maxWidth: '600px', width: '100%', margin: '0 auto' }}>
+                {formSubmitted ? (
+                  <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                    <div style={{ fontSize: '48px', marginBottom: '16px' }}>✉</div>
+                    <h2 className="serif-title" style={{ fontSize: '22px', color: 'var(--ink-red)', marginBottom: '12px' }}>APPLICATION RECEIVED</h2>
+                    <p className="mono-text" style={{ fontSize: '11px', lineHeight: '1.6', maxWidth: '420px', margin: '0 auto', color: 'var(--ink-grey)' }}>
+                      Your credentials and cryptographic signature have been cataloged in our archives. The Press Board will review your application on-chain. Verification status will update within 24 blocks.
+                    </p>
+                    <button 
+                      className="btn btn-sm" 
+                      style={{ marginTop: '24px', padding: '6px 16px' }}
+                      onClick={() => {
+                        setFormSubmitted(false);
+                        setShowApplyForm(false);
+                      }}
+                    >
+                      RETURN TO COVER
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>1. PUBLISHER PSEUDONYM / LEGAL NAME</label>
+                      <input 
+                        type="text" 
+                        required 
+                        placeholder="e.g. Satoshi Nakamoto" 
+                        style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px' }}
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>2. CRYPTOGRAPHIC ACCOUNT (CIRCLE WALLET)</label>
+                      <input 
+                        type="text" 
+                        disabled 
+                        value={circleWallet?.address || "NOT LOGGED IN (Vault Inactive)"} 
+                        style={{ padding: '8px', border: '1px solid var(--ink-light-grey)', background: 'var(--paper-bg-darker)', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-grey)' }}
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>3. EDITORIAL BEAT / CATEGORY</label>
+                      <select style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px' }}>
+                        <option>Web3 Infrastructures & Protocols</option>
+                        <option>AI-Agent Autonomous Economics</option>
+                        <option>Decentralized High-Performance Compute</option>
+                        <option>On-Chain Micropayments & L2 Scaling</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>4. BIOGRAPHY & PREVIOUS ACCREDITATIONS</label>
+                      <textarea 
+                        required 
+                        rows="4" 
+                        placeholder="Detail your experience in the web3 space or links to prior published works..."
+                        style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px', resize: 'vertical' }}
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: '6px' }}>
+                      <input type="checkbox" required id="sybil-check" style={{ marginTop: '3px' }} />
+                      <label htmlFor="sybil-check" style={{ fontFamily: 'var(--font-serif)', fontSize: '10.5px', color: 'var(--ink-grey)', lineHeight: '1.4', cursor: 'pointer' }}>
+                        I authorize a 0.01 USDC Sybil-resistance micro-signature check from my active Ledger Vault upon submission.
+                      </label>
+                    </div>
+
+                    <button type="submit" className="btn" style={{ padding: '10px 0', marginTop: '8px', letterSpacing: '0.06em', fontSize: '12px' }}>
+                      SUBMIT ACCREDITATION FORM
+                    </button>
+                  </form>
+                )}
+              </div>
+              <div className="greek-key" style={{ marginTop: '32px' }}></div>
+            </div>
+          ) : !selectedArticle ? (
             <div id="viewer-default" className="viewer-state">
               <img 
                 src={logoImg} 
@@ -578,7 +797,7 @@ function App() {
                 <div className="article-meta">
                   <span style={{ display: 'inline-flex', alignItems: 'center' }}>
                     By <strong style={{ color: 'var(--ink-black)', marginRight: '2px', marginLeft: '4px' }}>{selectedArticle.author}</strong>
-                    {selectedArticle.verified && <VerifiedBadge />}
+                    {selectedArticle.verified && <VerifiedBadge onApplyClick={handleOpenApplyForm} />}
                   </span>
                   <span className="divider">•</span>
                   <span className="price-badge">TARIFF: <UsdcCoinIcon size={14} className="coin-inline" style={{ marginRight: '4px', marginTop: '-3px' }} /> {selectedArticle.price} USDC Coinage</span>
