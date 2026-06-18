@@ -447,7 +447,7 @@ function App() {
                     {art.price}
                   </span>
                 </div>
-                <div className="card-snippet">{art.snippet}</div>
+                <div className={`card-snippet ${!authenticated ? 'blurred' : ''}`}>{art.snippet}</div>
               </div>
             ))}
           </div>
