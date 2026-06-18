@@ -48,19 +48,14 @@ body {
 
 /* ============ NAV BAR (NEWSPAPER MASTHEAD) ============ */
 .nav {
-  min-height: var(--nav-height);
-  height: auto;
   background: var(--paper-bg);
-  border-bottom: 5px double var(--ink-black);
   border-top: 5px solid var(--ink-black);
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 15px 32px 8px;
+  padding: 18px 32px 0px;
   position: relative;
   z-index: 10;
-  gap: 8px;
 }
 
 .nav-brand {
@@ -98,11 +93,11 @@ body {
   align-items: center;
   justify-content: space-between;
   border-top: 1px solid var(--ink-black);
-  border-bottom: 1px solid var(--ink-black);
-  padding: 4px 0;
+  border-bottom: 5px double var(--ink-black);
+  padding: 10px 0;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-grey);
+  color: var(--ink-black);
 }
 
 .nav-front-page-btn {

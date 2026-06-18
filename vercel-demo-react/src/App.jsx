@@ -590,9 +590,6 @@ function App() {
         <div className="nav-brand">
           <span className="logo-text">Paper Cut</span>
         </div>
-        <div className="nav-datetime mono-text" style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--ink-grey)', marginTop: '-2px' }}>
-          {formatDateTime(currentDate)}
-        </div>
         <div className="nav-controls">
           <div 
             className="nav-front-page-btn" 
@@ -601,27 +598,39 @@ function App() {
               setShowApplyForm(false);
             }}
             title="Return to Front Page / Home"
+            style={{ flex: 1, textAlign: 'left' }}
           >
             FRONT PAGE
           </div>
-          {!authenticated ? (
-            <button className="btn btn-sm" onClick={login}>Sign Register</button>
-          ) : (
-            <div className="wallet-info-group">
-              <button 
-                className="btn-wallet-icon" 
-                onClick={() => setShowWalletModal(true)} 
-                title={`Open Ledger Vault Wallet (${smartWalletAddress || activeWallet?.address || user?.wallet?.address})`}
+          <div className="nav-datetime mono-text" style={{ flex: 1, textAlign: 'center', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--ink-grey)' }}>
+            {formatDateTime(currentDate)}
+          </div>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+            {!authenticated ? (
+              <span 
+                className="nav-front-page-btn" 
+                onClick={login}
+                title="Sign the Register"
               >
-                <svg width="18" height="16" viewBox="0 0 20 18" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
-                  <path d="M17 4H3C1.89543 4 1 4.89543 1 6V15C1 16.1046 1.89543 17 3 17H17C18.1046 17 19 16.1046 19 15V6C19 4.89543 18.1046 4 17 4Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M19 8H14.5C13.6716 8 13 8.67157 13 9.5C13 10.3284 13.6716 11 14.5 11H19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M1 8.5C1 4.5 4.5 1 9.5 1H17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-              <button className="btn btn-sm btn-secondary" onClick={logout} style={{ marginLeft: '12px' }}>Sign Out</button>
-            </div>
-          )}
+                SIGN REGISTER
+              </span>
+            ) : (
+              <div className="wallet-info-group">
+                <button 
+                  className="btn-wallet-icon" 
+                  onClick={() => setShowWalletModal(true)} 
+                  title={`Open Ledger Vault Wallet (${smartWalletAddress || activeWallet?.address || user?.wallet?.address})`}
+                >
+                  <svg width="18" height="16" viewBox="0 0 20 18" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
+                    <path d="M17 4H3C1.89543 4 1 4.89543 1 6V15C1 16.1046 1.89543 17 3 17H17C18.1046 17 19 16.1046 19 15V6C19 4.89543 18.1046 4 17 4Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M19 8H14.5C13.6716 8 13 8.67157 13 9.5C13 10.3284 13.6716 11 14.5 11H19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M1 8.5C1 4.5 4.5 1 9.5 1H17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                <button className="btn btn-sm btn-secondary" onClick={logout} style={{ marginLeft: '12px' }}>Sign Out</button>
+              </div>
+            )}
+          </div>
         </div>
       </nav>
 
