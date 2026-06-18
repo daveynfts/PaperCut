@@ -184,7 +184,7 @@ const VerifiedBadge = ({ onApplyClick }) => {
               paddingBottom: '6px',
               marginBottom: '12px' 
             }}>
-              TÀI KHOẢN ĐÃ XÁC NHẬN
+              VERIFIED ACCOUNT
             </div>
             
             <div style={{ display: 'flex', alignItems: 'flex-start' }}>
@@ -195,7 +195,7 @@ const VerifiedBadge = ({ onApplyClick }) => {
                 </g>
               </svg>
               <div style={{ fontSize: '13px' }}>
-                Tài khoản này đã xác nhận.{' '}
+                This account is verified.{' '}
                 <span 
                   onClick={(e) => {
                     e.stopPropagation();
@@ -211,7 +211,7 @@ const VerifiedBadge = ({ onApplyClick }) => {
                     fontSize: '11px'
                   }}
                 >
-                  Tìm hiểu thêm
+                  Learn more
                 </span>
               </div>
             </div>
