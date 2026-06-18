@@ -113,6 +113,7 @@ initPublisherWallet();
 // Helper: RSA Encryption using Node's native crypto module
 async function fetchCirclePublicKey() {
   try {
+    console.log(`[Circle W3S] Fetching public key using API key (length: ${process.env.CIRCLE_API_KEY?.length || 0})`);
     const response = await fetch("https://api.circle.com/v1/w3s/config/entity/publicKey", {
       headers: {
         "Authorization": `Bearer ${process.env.CIRCLE_API_KEY}`
@@ -120,7 +121,8 @@ async function fetchCirclePublicKey() {
     });
     const json = await response.json();
     if (!json.data?.publicKey) {
-      throw new Error("Failed to fetch Circle public key");
+      console.error("[Circle W3S] Public key fetch returned error:", JSON.stringify(json));
+      throw new Error(`Failed to fetch Circle public key: ${json.message || JSON.stringify(json)}`);
     }
     return json.data.publicKey;
   } catch (error) {
