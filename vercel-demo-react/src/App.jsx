@@ -396,6 +396,13 @@ function App() {
           {formatDateTime(currentDate)}
         </div>
         <div className="nav-controls">
+          <div 
+            className="nav-front-page-btn" 
+            onClick={() => setSelectedArticle(null)}
+            title="Return to Front Page / Home"
+          >
+            ← FRONT PAGE
+          </div>
           {!authenticated ? (
             <button className="btn btn-sm" onClick={login}>Sign Register</button>
           ) : (

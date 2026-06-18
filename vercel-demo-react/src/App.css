@@ -105,9 +105,22 @@ body {
   color: var(--ink-grey);
 }
 
-.nav-controls::before {
-  content: 'DAILY EDITION';
+.nav-front-page-btn {
+  cursor: pointer;
   font-weight: bold;
+  transition: color 0.15s, transform 0.1s;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  user-select: none;
+}
+
+.nav-front-page-btn:hover {
+  color: var(--ink-red);
+}
+
+.nav-front-page-btn:active {
+  transform: translateX(-2px);
 }
 
 .wallet-info-group {
