@@ -164,7 +164,11 @@ async function getWalletUsdcBalance(walletId) {
       }
     });
     const json = await response.json();
-    const tokenBalances = json.data?.tokenBalances || [];
+    if (json.errors || !json.data) {
+      console.error("[Circle W3S] Balance fetch failed details:", JSON.stringify(json));
+      throw new Error(`Circle API balance fetch failed: ${json.message || JSON.stringify(json)}`);
+    }
+    const tokenBalances = json.data.tokenBalances || [];
     const usdcBalanceObj = tokenBalances.find(tb => tb.token.symbol === "USDC");
     return usdcBalanceObj ? usdcBalanceObj.amount : "0.0";
   } catch (error) {
