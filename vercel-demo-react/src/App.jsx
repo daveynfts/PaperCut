@@ -250,6 +250,10 @@ function App() {
   };
 
   const handleSelectArticle = (art) => {
+    if (!authenticated) {
+      login();
+      return;
+    }
     setSelectedArticle(art);
     setTxStatus("");
     setTxHash("");
