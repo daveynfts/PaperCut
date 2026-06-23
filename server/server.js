@@ -412,7 +412,27 @@ app.post("/api/publishers", (req, res) => {
   }
 });
 
-// PUT toggle/update verify publisher
+// PUT toggle/update verify publisher (body/query supported to avoid path params with dots/at-symbols on Vercel)
+app.put("/api/publishers/verify", (req, res) => {
+  const email = req.body.email || req.query.email;
+  const { verified } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: "Email is required" });
+  }
+  try {
+    const db = readPublishersDb();
+    if (!db[email]) {
+      return res.status(404).json({ error: "Publisher not found" });
+    }
+    db[email].verified = typeof verified === 'boolean' ? verified : !db[email].verified;
+    writePublishersDb(db);
+    res.json({ success: true, publisher: db[email] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT toggle/update verify publisher (legacy parameter fallback)
 app.put("/api/publishers/:email/verify", (req, res) => {
   const email = req.params.email;
   const { verified } = req.body;
@@ -429,7 +449,26 @@ app.put("/api/publishers/:email/verify", (req, res) => {
   }
 });
 
-// DELETE publisher
+// DELETE publisher (query/body supported to avoid path params with dots/at-symbols on Vercel)
+app.delete("/api/publishers", (req, res) => {
+  const email = req.query.email || req.body.email;
+  if (!email) {
+    return res.status(400).json({ error: "Email is required" });
+  }
+  try {
+    const db = readPublishersDb();
+    if (!db[email]) {
+      return res.status(404).json({ error: "Publisher not found" });
+    }
+    delete db[email];
+    writePublishersDb(db);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE publisher (legacy parameter fallback)
 app.delete("/api/publishers/:email", (req, res) => {
   const email = req.params.email;
   try {
@@ -444,6 +483,7 @@ app.delete("/api/publishers/:email", (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // Get premium article with x402 Paywall logic (Keep for extension backwards compatibility)
 app.get("/api/articles/:id", (req, res) => {

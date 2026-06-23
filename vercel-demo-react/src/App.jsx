@@ -487,35 +487,49 @@ function App() {
   }, []);
 
   const handleToggleVerify = async (email, currentStatus) => {
+    setAdminStatusMsg(`Updating verification for ${email}...`);
     try {
-      const response = await fetch(`${BACKEND_URL}/api/publishers/${email}/verify`, {
+      const response = await fetch(`${BACKEND_URL}/api/publishers/verify`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ verified: !currentStatus })
+        body: JSON.stringify({ email, verified: !currentStatus })
       });
       if (response.ok) {
+        setAdminStatusMsg(`Successfully ${!currentStatus ? 'granted seal to' : 'revoked seal from'} ${email}!`);
         fetchPublishers();
         fetchArticles();
+        setTimeout(() => setAdminStatusMsg(""), 3500);
+      } else {
+        const data = await response.json().catch(() => ({}));
+        setAdminStatusMsg(data.error || "Failed to update verification status.");
       }
     } catch (err) {
       console.error("Failed to toggle verify publisher:", err);
+      setAdminStatusMsg(`Error: ${err.message}`);
     }
   };
 
   const handleDeletePublisher = async (email) => {
     if (!confirm(`Are you sure you want to delete publisher ${email}?`)) return;
+    setAdminStatusMsg(`Deleting publisher ${email}...`);
     try {
-      const response = await fetch(`${BACKEND_URL}/api/publishers/${email}`, {
+      const response = await fetch(`${BACKEND_URL}/api/publishers?email=${encodeURIComponent(email)}`, {
         method: "DELETE"
       });
       if (response.ok) {
+        setAdminStatusMsg(`Successfully deleted publisher ${email}!`);
         fetchPublishers();
         fetchArticles();
+        setTimeout(() => setAdminStatusMsg(""), 3500);
+      } else {
+        const data = await response.json().catch(() => ({}));
+        setAdminStatusMsg(data.error || "Failed to delete publisher.");
       }
     } catch (err) {
       console.error("Failed to delete publisher:", err);
+      setAdminStatusMsg(`Error: ${err.message}`);
     }
   };
 
