@@ -271,6 +271,9 @@ function App() {
   const [adminWallet, setAdminWallet] = useState("");
   const [adminCategory, setAdminCategory] = useState("Web3 Infrastructures & Protocols");
   const [adminStatusMsg, setAdminStatusMsg] = useState("");
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const [adminPasswordInput, setAdminPasswordInput] = useState("");
+  const [adminPasswordError, setAdminPasswordError] = useState("");
 
   const fetchArticles = async () => {
     try {
@@ -334,6 +337,11 @@ function App() {
 
   const handleToggleAdminView = (showAdmin) => {
     setIsAdminView(showAdmin);
+    if (!showAdmin) {
+      setIsAdminAuthenticated(false);
+      setAdminPasswordInput("");
+      setAdminPasswordError("");
+    }
     if (showAdmin) {
       // Set hash - this is bulletproof and works on Vercel without 404 rewrite rules!
       window.location.hash = '/admin';
@@ -831,18 +839,20 @@ function App() {
             {formatDateTime(currentDate)}
           </div>
           <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
-            <span 
-              className={`nav-front-page-btn`}
-              onClick={() => {
-                setSelectedArticle(null);
-                setShowApplyForm(false);
-                handleToggleAdminView(!isAdminView);
-              }}
-              style={{ marginRight: '16px', color: 'var(--ink-red)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 'bold', letterSpacing: '0.05em' }}
-              title="Open Publisher Admin Portal"
-            >
-              {isAdminView ? "[CLOSE ADMIN]" : "[ADMIN PORTAL]"}
-            </span>
+            {isAdminView && (
+              <span 
+                className={`nav-front-page-btn`}
+                onClick={() => {
+                  setSelectedArticle(null);
+                  setShowApplyForm(false);
+                  handleToggleAdminView(false);
+                }}
+                style={{ marginRight: '16px', color: 'var(--ink-red)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 'bold', letterSpacing: '0.05em' }}
+                title="Close Admin Portal"
+              >
+                [CLOSE ADMIN]
+              </span>
+            )}
             {!authenticated ? (
               <span 
                 className="nav-front-page-btn" 
@@ -872,7 +882,56 @@ function App() {
       </nav>
             {/* MAIN CONTAINER */}
       {isAdminView ? (
-        <main className="admin-container" style={{ padding: '32px', maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', minHeight: 'calc(100vh - 120px)' }}>
+        !isAdminAuthenticated ? (
+          <main className="admin-login-container" style={{ padding: '32px', maxWidth: '420px', margin: '80px auto', border: '2px solid var(--ink-black)', backgroundColor: 'var(--paper-accent)', boxShadow: '6px 6px 0 var(--ink-black)', textAlign: 'center' }}>
+            <div className="greek-key"></div>
+            <h2 className="serif-title font-italic" style={{ color: 'var(--ink-red)', fontSize: '24px', marginBottom: '8px' }}>ADMIN ACCESS CONTROL</h2>
+            <p className="mono-text text-muted" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '24px' }}>
+              Cryptographic Signature Key Required
+            </p>
+            
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (adminPasswordInput === "123456A@a") {
+                setIsAdminAuthenticated(true);
+                setAdminPasswordError("");
+              } else {
+                setAdminPasswordError("INVALID ACCESS PASSKEY");
+              }
+            }} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', textAlign: 'left' }}>
+                <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>ENTER ACCREDITATION PASSWORD</label>
+                <input 
+                  type="password"
+                  required
+                  value={adminPasswordInput}
+                  onChange={(e) => setAdminPasswordInput(e.target.value)}
+                  placeholder="••••••••••••"
+                  style={{ padding: '10px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-mono)', fontSize: '14px', textAlign: 'center', letterSpacing: '0.2em' }}
+                />
+              </div>
+              <button type="submit" className="btn" style={{ padding: '10px 0', letterSpacing: '0.06em', fontSize: '12px' }}>
+                VERIFY CREDENTIALS
+              </button>
+            </form>
+
+            {adminPasswordError && (
+              <div className="mono-text" style={{ marginTop: '16px', fontSize: '11px', color: 'var(--ink-red)', border: '1px dashed var(--ink-red)', padding: '6px', background: 'rgba(186,45,45,0.05)' }}>
+                {adminPasswordError}
+              </div>
+            )}
+            <div style={{ marginTop: '24px', borderTop: '1px dashed var(--ink-light-grey)', paddingTop: '16px' }}>
+              <button 
+                className="btn btn-sm btn-secondary" 
+                onClick={() => handleToggleAdminView(false)}
+                style={{ padding: '4px 12px', fontSize: '10px' }}
+              >
+                RETURN TO READER
+              </button>
+            </div>
+          </main>
+        ) : (
+          <main className="admin-container" style={{ padding: '32px', maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', minHeight: 'calc(100vh - 120px)' }}>
           <div className="greek-key"></div>
           <h1 className="serif-title font-italic" style={{ textAlign: 'center', marginBottom: '8px', fontSize: '36px' }}>Publisher Administration Portal</h1>
           <p className="mono-text text-muted" style={{ textAlign: 'center', marginBottom: '24px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -1042,7 +1101,7 @@ function App() {
           </div>
           <div className="greek-key" style={{ marginTop: '32px' }}></div>
         </main>
-      ) : (
+      )) : (
         <main className="main-container">
           {/* LEFT SIDEBAR */}
           <section className="sidebar">
