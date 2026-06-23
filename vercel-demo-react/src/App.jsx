@@ -254,6 +254,10 @@ function App() {
   });
   const { wallets } = useWallets();
 
+  const [circleWallet, setCircleWallet] = useState(null);
+  const activeWallet = wallets ? wallets[0] : null;
+  const smartWalletAddress = circleWallet?.address;
+
   const [selectedArticle, setSelectedArticle] = useState(null);
   const [unlockedArticles, setUnlockedArticles] = useState({});
   const [txStatus, setTxStatus] = useState("");
@@ -551,7 +555,7 @@ function App() {
     }
   };
 
-  const [circleWallet, setCircleWallet] = useState(null);
+
   const [isLoadingWallet, setIsLoadingWallet] = useState(false);
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [copyStatus, setCopyStatus] = useState("Click address to copy");
@@ -777,8 +781,7 @@ function App() {
     fetchUserCircleWallet();
   }, [authenticated, user]);
 
-  const activeWallet = wallets ? wallets[0] : null;
-  const smartWalletAddress = circleWallet?.address;
+
 
   const shortenAddress = (addr) => {
     if (!addr) return "";
