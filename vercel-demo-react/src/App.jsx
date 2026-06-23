@@ -1095,11 +1095,9 @@ function App() {
                 <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>4. RECIPIENT WALLET ADDRESS (EVM)</label>
                 <input 
                   type="text" 
-                  required 
-                  value={pubFormWallet}
-                  onChange={(e) => setPubFormWallet(e.target.value)}
-                  placeholder="e.g. 0xf39Fd..." 
-                  style={{ padding: '10px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-mono)', fontSize: '12px' }}
+                  disabled
+                  value={pubFormWallet || "Awaiting wallet synchronization..."}
+                  style={{ padding: '10px', border: '1px solid var(--ink-light-grey)', background: 'var(--paper-bg-darker)', fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--ink-grey)' }}
                 />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
