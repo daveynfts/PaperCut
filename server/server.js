@@ -107,6 +107,36 @@ function writeUsersDb(db) {
   }
 }
 
+// Local JSON Database for publishers (email -> details)
+const PUBLISHERS_DB_PATH = process.env.VERCEL
+  ? "/tmp/publishers.json"
+  : path.join(__dirname, "publishers.json");
+
+function readPublishersDb() {
+  if (!fs.existsSync(PUBLISHERS_DB_PATH)) {
+    const seedPath = path.join(__dirname, "publishers.json");
+    if (fs.existsSync(seedPath)) {
+      try {
+        const seedData = fs.readFileSync(seedPath, "utf8");
+        fs.writeFileSync(PUBLISHERS_DB_PATH, seedData);
+      } catch (err) {
+        fs.writeFileSync(PUBLISHERS_DB_PATH, JSON.stringify({}));
+      }
+    } else {
+      fs.writeFileSync(PUBLISHERS_DB_PATH, JSON.stringify({}));
+    }
+  }
+  return JSON.parse(fs.readFileSync(PUBLISHERS_DB_PATH, "utf8"));
+}
+
+function writePublishersDb(db) {
+  try {
+    fs.writeFileSync(PUBLISHERS_DB_PATH, JSON.stringify(db, null, 2));
+  } catch (err) {
+    console.error("Failed to write publishers DB:", err);
+  }
+}
+
 // Circle W3S Configuration
 const isMockMode = !process.env.CIRCLE_API_KEY || !process.env.CIRCLE_ENTITY_SECRET;
 
@@ -329,15 +359,90 @@ function verifyEip3009(authData) {
 
 // Get all articles (Metadatas and Snippets only)
 app.get("/api/articles", (req, res) => {
-  const metaArticles = articles.map(({ id, title, author, snippet, price, payee }) => ({
-    id,
-    title,
-    author,
-    snippet,
-    price,
-    payee
-  }));
+  const pubDb = readPublishersDb();
+  const metaArticles = articles.map(({ id, title, author, snippet, price, payee }) => {
+    // Find if author exists in publishers database by name (case-insensitive)
+    const publisherKey = Object.keys(pubDb).find(
+      key => pubDb[key].name.toLowerCase() === author.toLowerCase()
+    );
+    const verified = publisherKey ? pubDb[publisherKey].verified : false;
+    
+    return {
+      id,
+      title,
+      author,
+      snippet,
+      price,
+      payee,
+      verified
+    };
+  });
   res.json(metaArticles);
+});
+
+// GET all publishers
+app.get("/api/publishers", (req, res) => {
+  try {
+    const db = readPublishersDb();
+    res.json(db);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST create a publisher
+app.post("/api/publishers", (req, res) => {
+  const { email, name, domain, walletAddress, category } = req.body;
+  if (!email || !name || !domain || !walletAddress) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+  try {
+    const db = readPublishersDb();
+    db[email] = {
+      name,
+      domain,
+      walletAddress,
+      verified: false,
+      category: category || "General"
+    };
+    writePublishersDb(db);
+    res.json({ success: true, publisher: db[email] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT toggle/update verify publisher
+app.put("/api/publishers/:email/verify", (req, res) => {
+  const email = req.params.email;
+  const { verified } = req.body;
+  try {
+    const db = readPublishersDb();
+    if (!db[email]) {
+      return res.status(404).json({ error: "Publisher not found" });
+    }
+    db[email].verified = typeof verified === 'boolean' ? verified : !db[email].verified;
+    writePublishersDb(db);
+    res.json({ success: true, publisher: db[email] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE publisher
+app.delete("/api/publishers/:email", (req, res) => {
+  const email = req.params.email;
+  try {
+    const db = readPublishersDb();
+    if (!db[email]) {
+      return res.status(404).json({ error: "Publisher not found" });
+    }
+    delete db[email];
+    writePublishersDb(db);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get premium article with x402 Paywall logic (Keep for extension backwards compatibility)

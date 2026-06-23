@@ -4,7 +4,7 @@ import { ethers } from 'ethers';
 import './App.css';
 import logoImg from './assets/logo.png';
 
-const articles = [
+const INITIAL_ARTICLES = [
   {
     id: "0",
     title: "Exploring the Antigravity of Decentralized Liquidity",
@@ -260,6 +260,169 @@ function App() {
   const [txHash, setTxHash] = useState("");
   const [error, setError] = useState("");
   const [chainId, setChainId] = useState(null);
+
+  // Publisher Admin Portal States
+  const [articles, setArticles] = useState(INITIAL_ARTICLES);
+  const [publishers, setPublishers] = useState({});
+  const [isAdminView, setIsAdminView] = useState(false);
+  const [adminName, setAdminName] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminDomain, setAdminDomain] = useState("");
+  const [adminWallet, setAdminWallet] = useState("");
+  const [adminCategory, setAdminCategory] = useState("Web3 Infrastructures & Protocols");
+  const [adminStatusMsg, setAdminStatusMsg] = useState("");
+
+  const fetchArticles = async () => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/articles`);
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data)) {
+          const merged = data.map(item => {
+            const local = INITIAL_ARTICLES.find(la => la.id === item.id);
+            return {
+              ...local,
+              ...item
+            };
+          });
+          setArticles(merged);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch articles:", err);
+    }
+  };
+
+  const fetchPublishers = async () => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/publishers`);
+      if (response.ok) {
+        const data = await response.json();
+        setPublishers(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch publishers:", err);
+    }
+  };
+
+  // Handle URL subpath routing for /admin, /papercut/admin, or hash #/admin
+  useEffect(() => {
+    const checkPath = () => {
+      const path = window.location.pathname;
+      const hash = window.location.hash;
+      if (
+        path.endsWith('/admin') || 
+        path.endsWith('/admin/') || 
+        hash === '#/admin' || 
+        hash === '#/admin/' || 
+        hash.endsWith('/admin')
+      ) {
+        setIsAdminView(true);
+      } else {
+        setIsAdminView(false);
+      }
+    };
+    checkPath();
+
+    window.addEventListener('popstate', checkPath);
+    window.addEventListener('hashchange', checkPath);
+    return () => {
+      window.removeEventListener('popstate', checkPath);
+      window.removeEventListener('hashchange', checkPath);
+    };
+  }, []);
+
+  const handleToggleAdminView = (showAdmin) => {
+    setIsAdminView(showAdmin);
+    if (showAdmin) {
+      // Set hash - this is bulletproof and works on Vercel without 404 rewrite rules!
+      window.location.hash = '/admin';
+    } else {
+      // Clear hash and return to path
+      if (window.location.hash) {
+        window.history.pushState("", document.title, window.location.pathname + window.location.search);
+      }
+      const currentPath = window.location.pathname;
+      if (currentPath.endsWith('/admin') || currentPath.endsWith('/admin/')) {
+        const basePath = currentPath.replace(/\/admin\/?$/, '');
+        window.history.pushState({ admin: false }, '', basePath || '/');
+      }
+    }
+  };
+
+  useEffect(() => {
+    fetchArticles();
+    fetchPublishers();
+  }, []);
+
+  const handleToggleVerify = async (email, currentStatus) => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/publishers/${email}/verify`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ verified: !currentStatus })
+      });
+      if (response.ok) {
+        fetchPublishers();
+        fetchArticles();
+      }
+    } catch (err) {
+      console.error("Failed to toggle verify publisher:", err);
+    }
+  };
+
+  const handleDeletePublisher = async (email) => {
+    if (!confirm(`Are you sure you want to delete publisher ${email}?`)) return;
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/publishers/${email}`, {
+        method: "DELETE"
+      });
+      if (response.ok) {
+        fetchPublishers();
+        fetchArticles();
+      }
+    } catch (err) {
+      console.error("Failed to delete publisher:", err);
+    }
+  };
+
+  const handleCreatePublisher = async (e) => {
+    e.preventDefault();
+    setAdminStatusMsg("Creating publisher...");
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/publishers`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          email: adminEmail,
+          name: adminName,
+          domain: adminDomain,
+          walletAddress: adminWallet,
+          category: adminCategory
+        })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setAdminStatusMsg("Publisher created successfully!");
+        setAdminEmail("");
+        setAdminName("");
+        setAdminDomain("");
+        setAdminWallet("");
+        fetchPublishers();
+        fetchArticles(); // Refresh verification check marks
+        setTimeout(() => setAdminStatusMsg(""), 3000);
+      } else {
+        setAdminStatusMsg(data.error || "Failed to create publisher.");
+      }
+    } catch (err) {
+      console.error(err);
+      setAdminStatusMsg("Server error.");
+    }
+  };
 
   const [circleWallet, setCircleWallet] = useState(null);
   const [isLoadingWallet, setIsLoadingWallet] = useState(false);
@@ -657,16 +820,29 @@ function App() {
             onClick={() => {
               setSelectedArticle(null);
               setShowApplyForm(false);
+              handleToggleAdminView(false);
             }}
             title="Return to Front Page / Home"
             style={{ flex: 1, textAlign: 'left' }}
           >
-            FRONT PAGE
+            {isAdminView ? "← READER VIEW" : "FRONT PAGE"}
           </div>
           <div className="nav-datetime mono-text" style={{ flex: 1, textAlign: 'center', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--ink-grey)' }}>
             {formatDateTime(currentDate)}
           </div>
           <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+            <span 
+              className={`nav-front-page-btn`}
+              onClick={() => {
+                setSelectedArticle(null);
+                setShowApplyForm(false);
+                handleToggleAdminView(!isAdminView);
+              }}
+              style={{ marginRight: '16px', color: 'var(--ink-red)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 'bold', letterSpacing: '0.05em' }}
+              title="Open Publisher Admin Portal"
+            >
+              {isAdminView ? "[CLOSE ADMIN]" : "[ADMIN PORTAL]"}
+            </span>
             {!authenticated ? (
               <span 
                 className="nav-front-page-btn" 
@@ -693,409 +869,581 @@ function App() {
             )}
           </div>
         </div>
-      </nav>
+            {/* MAIN CONTAINER */}
+      {isAdminView ? (
+        <main className="admin-container" style={{ padding: '32px', maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', minHeight: 'calc(100vh - 120px)' }}>
+          <div className="greek-key"></div>
+          <h1 className="serif-title font-italic" style={{ textAlign: 'center', marginBottom: '8px', fontSize: '36px' }}>Publisher Administration Portal</h1>
+          <p className="mono-text text-muted" style={{ textAlign: 'center', marginBottom: '24px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            REGISTRY & CRYPTOGRAPHIC VERIFICATION CONSOLE
+          </p>
 
-      {/* MAIN CONTAINER */}
-      <main className="main-container">
-        {/* LEFT SIDEBAR */}
-        <section className="sidebar">
-          <div className="section-title">
-            <h2>LATEST DISPATCHES</h2>
-            <span className="item-count">{articles.length} columns published</span>
-          </div>
-          <div className="article-list">
-            {articles.map((art) => (
-              <div
-                key={art.id}
-                className={`article-card ${selectedArticle?.id === art.id ? 'active' : ''}`}
-                onClick={() => handleSelectArticle(art)}
-              >
-                <div className="card-title">{art.title}</div>
-                <div className="card-meta">
-                  <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-                    By {art.author}
-                    {art.verified && <VerifiedBadge onApplyClick={handleOpenApplyForm} />}
-                  </span>
-                  <span className="price-tag">
-                    <UsdcCoinIcon size={12} className="coin-sidebar" style={{ marginRight: '3px', marginTop: '-2px' }} />
-                    {art.price}
-                  </span>
+          <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'center' }}>
+            {/* Left pane: Add Publisher Form */}
+            <div className="vintage-form-card" style={{ flex: '1 1 350px', border: '2px solid var(--ink-black)', padding: '24px', backgroundColor: 'var(--paper-accent)', boxShadow: '4px 4px 0 var(--ink-black)', maxWidth: '420px' }}>
+              <div style={{ fontFamily: 'var(--font-headline)', fontWeight: 'bold', fontSize: '15px', color: 'var(--ink-red)', borderBottom: '1px solid var(--ink-black)', paddingBottom: '6px', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Register New Publisher
+              </div>
+              <form onSubmit={handleCreatePublisher} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>1. PUBLISHER PSEUDONYM / NAME</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={adminName}
+                    onChange={(e) => setAdminName(e.target.value)}
+                    placeholder="e.g. Satoshi Nakamoto" 
+                    style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px' }}
+                  />
                 </div>
-                <div className={`card-snippet ${!authenticated ? 'blurred' : ''}`}>{art.snippet}</div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* RIGHT CONTENT */}
-        <section className="viewer">
-          {showApplyForm ? (
-            <div className="viewer-state apply-author-container" style={{ padding: '32px', display: 'flex', flexDirection: 'column' }}>
-              <div className="greek-key"></div>
-              <h1 className="serif-title font-italic" style={{ textAlign: 'center', marginBottom: '8px', fontSize: '32px' }}>Press Credentials Registry</h1>
-              <p className="mono-text text-muted" style={{ textAlign: 'center', marginBottom: '24px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                APPLICATION FOR AUTHOR INDUCTION & VERIFICATION SEAL
-              </p>
-              
-              <div className="vintage-form-card" style={{ border: '2px solid var(--ink-black)', padding: '24px', backgroundColor: 'var(--paper-accent)', boxShadow: '4px 4px 0 var(--ink-black)', maxWidth: '600px', width: '100%', margin: '0 auto' }}>
-                {formSubmitted ? (
-                  <div style={{ textAlign: 'center', padding: '20px 0' }}>
-                    <div style={{ fontSize: '48px', marginBottom: '16px' }}>✉</div>
-                    <h2 className="serif-title" style={{ fontSize: '22px', color: 'var(--ink-red)', marginBottom: '12px' }}>APPLICATION RECEIVED</h2>
-                    <p className="mono-text" style={{ fontSize: '11px', lineHeight: '1.6', maxWidth: '420px', margin: '0 auto', color: 'var(--ink-grey)' }}>
-                      Your credentials and cryptographic signature have been cataloged in our archives. The Press Board will review your application on-chain. Verification status will update within 24 blocks.
-                    </p>
-                    <button 
-                      className="btn btn-sm" 
-                      style={{ marginTop: '24px', padding: '6px 16px' }}
-                      onClick={() => {
-                        setFormSubmitted(false);
-                        setShowApplyForm(false);
-                      }}
-                    >
-                      RETURN TO COVER
-                    </button>
-                  </div>
-                ) : (
-                  <form onSubmit={handleFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>1. PUBLISHER PSEUDONYM / LEGAL NAME</label>
-                      <input 
-                        type="text" 
-                        required 
-                        placeholder="e.g. Satoshi Nakamoto" 
-                        style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px' }}
-                      />
-                    </div>
-
-                    <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>2. CRYPTOGRAPHIC ACCOUNT (CIRCLE WALLET)</label>
-                      <input 
-                        type="text" 
-                        disabled 
-                        value={circleWallet?.address || "NOT LOGGED IN (Vault Inactive)"} 
-                        style={{ padding: '8px', border: '1px solid var(--ink-light-grey)', background: 'var(--paper-bg-darker)', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-grey)' }}
-                      />
-                    </div>
-
-                    <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>3. EDITORIAL BEAT / CATEGORY</label>
-                      <select style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px' }}>
-                        <option>Web3 Infrastructures & Protocols</option>
-                        <option>AI-Agent Autonomous Economics</option>
-                        <option>Decentralized High-Performance Compute</option>
-                        <option>On-Chain Micropayments & L2 Scaling</option>
-                      </select>
-                    </div>
-
-                    <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>4. BIOGRAPHY & PREVIOUS ACCREDITATIONS</label>
-                      <textarea 
-                        required 
-                        rows="4" 
-                        placeholder="Detail your experience in the web3 space or links to prior published works..."
-                        style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px', resize: 'vertical' }}
-                      />
-                    </div>
-
-                    <div className="form-group" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: '6px' }}>
-                      <input type="checkbox" required id="sybil-check" style={{ marginTop: '3px' }} />
-                      <label htmlFor="sybil-check" style={{ fontFamily: 'var(--font-serif)', fontSize: '10.5px', color: 'var(--ink-grey)', lineHeight: '1.4', cursor: 'pointer' }}>
-                        I authorize a 0.01 USDC Sybil-resistance micro-signature check from my active Ledger Vault upon submission.
-                      </label>
-                    </div>
-
-                    <button type="submit" className="btn" style={{ padding: '10px 0', marginTop: '8px', letterSpacing: '0.06em', fontSize: '12px' }}>
-                      SUBMIT ACCREDITATION FORM
-                    </button>
-                  </form>
-                )}
-              </div>
-              <div className="greek-key" style={{ marginTop: '32px' }}></div>
-            </div>
-          ) : !selectedArticle ? (
-            <div id="viewer-default" className="viewer-state">
-              <img 
-                src={logoImg} 
-                alt="Paper Cut Seal" 
-                className="home-logo-large" 
-                style={{ 
-                  height: '140px', 
-                  width: '140px', 
-                  borderRadius: '50%', 
-                  border: '2px solid var(--ink-black)',
-                  boxShadow: '0 4px 10px rgba(0, 0, 0, 0.08)'
-                }} 
-              />
-              <div className="greek-key"></div>
-              <h1 className="serif-title font-italic">Select a Dispatch to Peruse</h1>
-              <p className="mono-text text-muted">Demonstrating a Modern Electronic Ledger & Gasless Micro-Tariff System.</p>
-              
-              {error && (
-                <div className="login-error-alert" style={{ 
-                  border: '2px dashed var(--ink-red)', 
-                  backgroundColor: 'rgba(186, 45, 45, 0.08)', 
-                  color: 'var(--ink-red)', 
-                  padding: '16px', 
-                  fontFamily: 'var(--font-mono)', 
-                  fontSize: '12px',
-                  lineHeight: '1.6',
-                  maxWidth: '550px',
-                  margin: '20px auto 10px auto',
-                  textAlign: 'left',
-                  borderRadius: '0px',
-                  boxShadow: '3px 3px 0 rgba(186, 45, 45, 0.15)'
-                }}>
-                  <div style={{ fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '6px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '16px' }}>⚠</span> AUTHENTICATION ERROR
-                  </div>
-                  <div>{error}</div>
-                  <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed rgba(186, 45, 45, 0.25)', fontSize: '11px', color: 'var(--ink-grey)' }}>
-                    <strong>Next Steps:</strong>
-                    <ol style={{ margin: '4px 0 0 16px', padding: 0 }}>
-                      <li>Ensure <strong>{window.location.origin}</strong> is added to <strong>Allowed Domains</strong> in the Privy Developer Dashboard (dashboard.privy.io) under settings.</li>
-                      <li>Try clearing browser cookies/site data and reloading the page.</li>
-                      <li>Check if MetaMask extension has any pending connection approvals.</li>
-                    </ol>
-                  </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>2. REGISTRATION EMAIL</label>
+                  <input 
+                    type="email" 
+                    required 
+                    value={adminEmail}
+                    onChange={(e) => setAdminEmail(e.target.value)}
+                    placeholder="e.g. satoshi@bitcoin.org" 
+                    style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>3. VERIFIED DOMAIN</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={adminDomain}
+                    onChange={(e) => setAdminDomain(e.target.value)}
+                    placeholder="e.g. bitcoin.org" 
+                    style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>4. RECIPIENT WALLET ADDRESS (EVM)</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={adminWallet}
+                    onChange={(e) => setAdminWallet(e.target.value)}
+                    placeholder="e.g. 0xf39Fd..." 
+                    style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-mono)', fontSize: '11px' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>5. EDITORIAL CATEGORY</label>
+                  <select 
+                    value={adminCategory}
+                    onChange={(e) => setAdminCategory(e.target.value)}
+                    style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px' }}
+                  >
+                    <option>Web3 Infrastructures & Protocols</option>
+                    <option>AI-Agent Autonomous Economics</option>
+                    <option>Decentralized High-Performance Compute</option>
+                    <option>On-Chain Micropayments & L2 Scaling</option>
+                  </select>
+                </div>
+                <button type="submit" className="btn btn-sm" style={{ padding: '10px 0', marginTop: '8px', letterSpacing: '0.06em', fontSize: '12px' }}>
+                  INDUCT PUBLISHER
+                </button>
+              </form>
+              {adminStatusMsg && (
+                <div className="mono-text" style={{ marginTop: '12px', fontSize: '11px', color: 'var(--ink-red)', textAlign: 'center', border: '1px dashed var(--ink-red)', padding: '6px', background: 'rgba(186,45,45,0.05)' }}>
+                  {adminStatusMsg}
                 </div>
               )}
-              <div className="stamp-row">
-                {/* Stamp 1: Register Status */}
-                {!authenticated ? (
-                  <div 
-                    className="rubber-stamp stamp-red clickable-stamp" 
-                    onClick={login}
-                    title="Click to Sign the Register"
-                  >
-                    ★ REGISTER: UNSIGNED ★
-                  </div>
-                ) : (
-                  <div className="rubber-stamp stamp-green">
-                    ✔ REGISTER: SIGNED
-                  </div>
-                )}
+            </div>
 
-                {/* Stamp 2: Vault Status */}
-                {(!authenticated || !circleWallet) ? (
-                  <div 
-                    className="rubber-stamp stamp-red clickable-stamp"
-                    onClick={login}
-                    title="Click to Sign Register and activate Vault"
-                  >
-                    ★ VAULT: EMPTY ★
-                  </div>
-                ) : (
-                  <div 
-                    className="rubber-stamp stamp-green clickable-stamp"
-                    onClick={() => setShowWalletModal(true)}
-                    title="Click to open your Secure Ledger Vault"
-                  >
-                    ✔ VAULT: ACTIVE
-                  </div>
-                )}
+            {/* Right pane: Publishers List */}
+            <div style={{ flex: '2 1 600px', border: '2px solid var(--ink-black)', padding: '24px', backgroundColor: 'var(--paper-bg)', boxShadow: '4px 4px 0 var(--ink-black)', minWidth: '320px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--ink-black)', paddingBottom: '6px', marginBottom: '16px' }}>
+                <span style={{ fontFamily: 'var(--font-headline)', fontWeight: 'bold', fontSize: '15px', color: 'var(--ink-black)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Publisher Directory Ledger
+                </span>
+                <span className="mono-text" style={{ fontSize: '10px', background: 'var(--ink-black)', color: 'var(--paper-bg)', padding: '2px 6px', display: 'inline-block' }}>
+                  {Object.keys(publishers).length} records
+                </span>
+              </div>
 
-                {/* Stamp 3: Network Status */}
-                <div className="rubber-stamp stamp-black">
-                  ✦ ARC TESTNET ✦
-                </div>
+              <div className="admin-table-wrapper" style={{ overflowX: 'auto' }}>
+                <table className="admin-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', fontFamily: 'var(--font-serif)', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid var(--ink-black)', fontFamily: 'var(--font-mono)', fontSize: '9px', textTransform: 'uppercase', color: 'var(--ink-grey)' }}>
+                      <th style={{ padding: '8px 4px' }}>Publisher Info</th>
+                      <th style={{ padding: '8px 4px' }}>Domain Beat</th>
+                      <th style={{ padding: '8px 4px' }}>Wallet Identity</th>
+                      <th style={{ padding: '8px 4px', textAlign: 'center' }}>Accredited</th>
+                      <th style={{ padding: '8px 4px', textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.keys(publishers).length === 0 ? (
+                      <tr>
+                        <td colSpan="5" style={{ padding: '16px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-grey)' }}>
+                          No publisher records found. Add one above!
+                        </td>
+                      </tr>
+                    ) : (
+                      Object.keys(publishers).map((email) => {
+                        const pub = publishers[email];
+                        return (
+                          <tr key={email} style={{ borderBottom: '1px solid var(--ink-light-grey)' }}>
+                            <td style={{ padding: '12px 4px' }}>
+                              <strong style={{ color: 'var(--ink-black)' }}>{pub.name}</strong><br/>
+                              <span style={{ fontSize: '10.5px', color: 'var(--ink-grey)', fontFamily: 'var(--font-mono)' }}>{email}</span>
+                            </td>
+                            <td style={{ padding: '12px 4px' }}>
+                              <span className="mono-text" style={{ fontSize: '11.5px', fontWeight: 'bold' }}>{pub.domain}</span><br/>
+                              <span style={{ fontSize: '9px', color: 'var(--ink-grey)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' }}>{pub.category}</span>
+                            </td>
+                            <td style={{ padding: '12px 4px' }}>
+                              <span className="mono-text" style={{ fontSize: '11px' }} title={pub.walletAddress}>
+                                {shortenAddress(pub.walletAddress)}
+                              </span>
+                            </td>
+                            <td style={{ padding: '12px 4px', textAlign: 'center' }}>
+                              {pub.verified ? (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', color: '#1d9bf0', fontWeight: 'bold', gap: '3px', fontSize: '11px', fontFamily: 'var(--font-mono)' }}>
+                                  <svg viewBox="0 0 24 24" style={{ width: '14px', height: '14px', fill: '#1d9bf0', flexShrink: 0 }}>
+                                    <path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.17-2.9-.81-3.88-.98-.98-2.49-1.27-3.88-.81C14.67 2.66 13.43 1.75 12 1.75s-2.67.91-3.37 2.22C7.24 3.51 5.73 3.8 4.75 4.78c-.98.98-1.27 2.49-.81 3.88C2.63 9.33 1.75 10.57 1.75 12s.88 2.67 2.19 3.34c-.46 1.39-.17 2.9.81 3.88.98.98 2.49 1.27 3.88.81.7 1.31 1.94 2.22 3.37 2.22s2.67-.91 3.37-2.22c1.39.46 2.9.17 3.88-.81.98-.98 1.27-2.49.81-3.88 1.31-.7 2.22-1.94 2.22-3.37zM10.25 16.25L6 12l1.5-1.5 2.75 2.75 6.25-6.25 1.5 1.5-8 8z"></path>
+                                  </svg>
+                                  VERIFIED
+                                </span>
+                              ) : (
+                                <span style={{ color: 'var(--ink-grey)', fontSize: '11px', fontFamily: 'var(--font-mono)' }}>UNVERIFIED</span>
+                              )}
+                            </td>
+                            <td style={{ padding: '12px 4px', textAlign: 'right' }}>
+                              <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                                <button 
+                                  className={`btn btn-sm ${pub.verified ? 'btn-secondary' : ''}`} 
+                                  onClick={() => handleToggleVerify(email, pub.verified)}
+                                  style={{ padding: '3px 8px', fontSize: '9px', whiteSpace: 'nowrap' }}
+                                >
+                                  {pub.verified ? "Revoke Seal" : "Grant Seal"}
+                                </button>
+                                <button 
+                                  className="btn btn-sm btn-secondary" 
+                                  onClick={() => handleDeletePublisher(email)}
+                                  style={{ padding: '3px 8px', fontSize: '9px', color: 'var(--ink-red)', border: '1px solid var(--ink-red)', whiteSpace: 'nowrap' }}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
-          ) : (
-            <div id="viewer-active" className="viewer-state">
-              <div className="article-header">
-                <h1 className="serif-title">{selectedArticle.title}</h1>
-                <div className="article-meta">
-                  <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-                    By <strong style={{ color: 'var(--ink-black)', marginRight: '2px', marginLeft: '4px' }}>{selectedArticle.author}</strong>
-                    {selectedArticle.verified && <VerifiedBadge onApplyClick={handleOpenApplyForm} />}
-                  </span>
-                  <span className="divider">•</span>
-                  <span className="price-badge">
-                    TARIFF: <UsdcCoinIcon size={14} className="coin-inline" style={{ marginRight: '4px', marginTop: '-3px' }} /> {selectedArticle.price} USDC Coinage
-                    {getUnlockedDetails(selectedArticle.id) && (
-                      <a 
-                        href={getExplorerUrl("5042002", getUnlockedDetails(selectedArticle.id).txHash)} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        onClick={(e) => handleViewTx(e, selectedArticle.id)}
-                        title={getUnlockedDetails(selectedArticle.id).isMock ? "Simulated Transaction - Click for info" : "View transaction on-chain"}
-                        style={{ marginLeft: '6px', textDecoration: 'none', display: 'inline-block', fontSize: '13px', cursor: 'pointer' }}
-                      >
-                        🔗
-                      </a>
-                    )}
-                  </span>
-                </div>
-              </div>
-
-              <div className="greek-key tight"></div>
-
-              <div className="article-body">
-                {unlockedArticles[selectedArticle.id] ? (
-                  <div className="content-text premium-unlocked">
-                    {selectedArticle.content}
+          </div>
+          <div className="greek-key" style={{ marginTop: '32px' }}></div>
+        </main>
+      ) : (
+        <main className="main-container">
+          {/* LEFT SIDEBAR */}
+          <section className="sidebar">
+            <div className="section-title">
+              <h2>LATEST DISPATCHES</h2>
+              <span className="item-count">{articles.length} columns published</span>
+            </div>
+            <div className="article-list">
+              {articles.map((art) => (
+                <div
+                  key={art.id}
+                  className={`article-card ${selectedArticle?.id === art.id ? 'active' : ''}`}
+                  onClick={() => handleSelectArticle(art)}
+                >
+                  <div className="card-title">{art.title}</div>
+                  <div className="card-meta">
+                    <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                      By {art.author}
+                      {art.verified && <VerifiedBadge onApplyClick={handleOpenApplyForm} />}
+                    </span>
+                    <span className="price-tag">
+                      <UsdcCoinIcon size={12} className="coin-sidebar" style={{ marginRight: '3px', marginTop: '-2px' }} />
+                      {art.price}
+                    </span>
                   </div>
-                ) : (
-                  <>
-                    <div className="content-text">
-                      {selectedArticle.snippet}
+                  <div className={`card-snippet ${!authenticated ? 'blurred' : ''}`}>{art.snippet}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* RIGHT CONTENT */}
+          <section className="viewer">
+            {showApplyForm ? (
+              <div className="viewer-state apply-author-container" style={{ padding: '32px', display: 'flex', flexDirection: 'column' }}>
+                <div className="greek-key"></div>
+                <h1 className="serif-title font-italic" style={{ textAlign: 'center', marginBottom: '8px', fontSize: '32px' }}>Press Credentials Registry</h1>
+                <p className="mono-text text-muted" style={{ textAlign: 'center', marginBottom: '24px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  APPLICATION FOR AUTHOR INDUCTION & VERIFICATION SEAL
+                </p>
+                
+                <div className="vintage-form-card" style={{ border: '2px solid var(--ink-black)', padding: '24px', backgroundColor: 'var(--paper-accent)', boxShadow: '4px 4px 0 var(--ink-black)', maxWidth: '600px', width: '100%', margin: '0 auto' }}>
+                  {formSubmitted ? (
+                    <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                      <div style={{ fontSize: '48px', marginBottom: '16px' }}>✉</div>
+                      <h2 className="serif-title" style={{ fontSize: '22px', color: 'var(--ink-red)', marginBottom: '12px' }}>APPLICATION RECEIVED</h2>
+                      <p className="mono-text" style={{ fontSize: '11px', lineHeight: '1.6', maxWidth: '420px', margin: '0 auto', color: 'var(--ink-grey)' }}>
+                        Your credentials and cryptographic signature have been cataloged in our archives. The Press Board will review your application on-chain. Verification status will update within 24 blocks.
+                      </p>
+                      <button 
+                        className="btn btn-sm" 
+                        style={{ marginTop: '24px', padding: '6px 16px' }}
+                        onClick={() => {
+                          setFormSubmitted(false);
+                          setShowApplyForm(false);
+                        }}
+                      >
+                        RETURN TO COVER
+                      </button>
                     </div>
-
-                    {/* PAYWALL */}
-                    <div className="paywall-card">
-                      <div className="paywall-title">TOLL BARRIER: TARIFF DUE</div>
-                      
-                      <div className="paywall-options-container">
-                        {/* Option 1: Human Reader */}
-                        <div className="paywall-option-box">
-                          <div className="option-icon">🖋️</div>
-                          <div className="option-title">HUMAN READER</div>
-                          <p className="paywall-desc">
-                            {!authenticated 
-                              ? "Sign the register to create a Ledger Vault." 
-                              : `Vault: ${shortenAddress(circleWallet?.address)} | Bal: ${parseFloat(circleWallet?.balance || '0.00').toFixed(4)} USDC`
-                            }
-                          </p>
-                          {!txStatus && (
-                            <button className="btn btn-sm btn-paywall" onClick={handleUnlockOnChain}>
-                              {!authenticated ? "SIGN REGISTER" : (
-                                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                                  PAY {selectedArticle.price} <UsdcCoinIcon size={14} className="coin-inline" /> USDC
-                                </span>
-                              )}
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Divider Line */}
-                        <div className="paywall-option-divider"></div>
-
-                        {/* Option 2: AI Agent */}
-                        <div className="paywall-option-box">
-                          <div className="option-icon">🤖</div>
-                          <div className="option-title">AI SCRAPER AGENT</div>
-                          
-                          {!isScraping ? (
-                            <>
-                              <p className="paywall-desc">
-                                Trigger simulated robot scraping sequence & micro-payments.
-                              </p>
-                              <button 
-                                className="btn btn-sm btn-paywall btn-secondary"
-                                onClick={triggerScrapeSimulation}
-                              >
-                                LAUNCH AGENT
-                              </button>
-                            </>
-                          ) : (
-                            /* Live Terminal Mockup Simulator Screen */
-                            <div className="scraper-terminal">
-                              <div className="terminal-header">
-                                <span className="term-dot red"></span>
-                                <span className="term-dot yellow"></span>
-                                <span className="term-dot green"></span>
-                                <span className="term-title">AI-Agent Terminal @ ScraperPort</span>
-                              </div>
-                              <div className="terminal-body mono-text">
-                                {scrapeStep >= 1 && (
-                                  <div className="term-line prompt">
-                                    <span className="term-accent">&gt;</span> query --prompt "{selectedArticle.title}"
-                                  </div>
-                                )}
-                                {scrapeStep === 1 && (
-                                  <div className="term-line loading">
-                                    Scanning database for target dispatches...
-                                  </div>
-                                )}
-                                {scrapeStep >= 2 && (
-                                  <>
-                                    <div className="term-line success">
-                                      Dispatch found. ID: {selectedArticle.id}. Size: 84 words.
-                                    </div>
-                                    <div className="term-line prompt">
-                                      <span className="term-accent">&gt;</span> settle-tariff --amount {selectedArticle.price} --network arc-testnet
-                                    </div>
-                                  </>
-                                )}
-                                {scrapeStep === 2 && (
-                                  <div className="term-line loading">
-                                    Executing Circle MPC wallet gasless transfer...
-                                  </div>
-                                )}
-                                {scrapeStep >= 3 && (
-                                  <>
-                                    <div className="term-line success">
-                                      Tx settled. Hash: <a href={getExplorerUrl(chainId || "5042002", "0x8fdc9dfa539f8fc0d13cf941f81e14d3d4aa182035e0")} target="_blank" rel="noopener noreferrer" style={{ color: '#5cd15c', textDecoration: 'underline' }}>0x8fd...35e0 ↗</a>.
-                                    </div>
-                                    <div className="term-line prompt">
-                                      <span className="term-accent">&gt;</span> scrape --target content --stream-read
-                                    </div>
-                                    <div className="term-line info highlight-box">
-                                      <span>[STREAMING DATA]</span><br/>
-                                      <span>Words Read: <strong>{scrapeWords} / 84</strong></span><br/>
-                                      <span>Current Cost: <strong>{scrapeCost.toFixed(6)}</strong> <UsdcCoinIcon size={12} className="coin-inline" style={{ margin: '0 2px 0 4px', marginTop: '-2px' }} /> USDC</span>
-                                    </div>
-                                  </>
-                                )}
-                                {scrapeStep === 3 && (
-                                  <div className="term-line loading">
-                                    Cawing premium column paragraphs...
-                                  </div>
-                                )}
-                                {scrapeStep >= 4 && (
-                                  <>
-                                    <div className="term-line success" style={{ color: '#5cd15c', fontWeight: 'bold' }}>
-                                      Scraping complete. Settle total: {scrapeCost.toFixed(4)} <UsdcCoinIcon size={12} className="coin-inline" style={{ margin: '0 2px 0 4px', marginTop: '-2px' }} /> USDC.
-                                    </div>
-                                    <div className="term-line prompt">
-                                      <span className="term-accent">&gt;</span> summarize-report --llm-refine
-                                    </div>
-                                    <div className="term-report-box">
-                                      {scrapeResult}
-                                    </div>
-                                    <button 
-                                      className="btn btn-sm" 
-                                      style={{ marginTop: '8px', fontSize: '9px', padding: '2px 8px', float: 'right' }}
-                                      onClick={() => {
-                                        setIsScraping(false);
-                                        setScrapeStep(0);
-                                        setScrapeWords(0);
-                                        setScrapeCost(0);
-                                        setScrapeResult("");
-                                      }}
-                                    >
-                                      RESET BOT
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
+                  ) : (
+                    <form onSubmit={handleFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>1. PUBLISHER PSEUDONYM / LEGAL NAME</label>
+                        <input 
+                          type="text" 
+                          required 
+                          placeholder="e.g. Satoshi Nakamoto" 
+                          style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px' }}
+                        />
                       </div>
 
-                      {txStatus && (
-                        <div className="tx-status-box" style={{ marginTop: '20px', width: '100%' }}>
-                          <span className="spinner"></span>
-                          <span>{txStatus}</span>
-                          {txHash && (
-                            <div className="tx-hash-link">
-                              <a href={getExplorerUrl(chainId, txHash)} target="_blank" rel="noopener noreferrer">
-                                View on Block Explorer ↗
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                      <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>2. CRYPTOGRAPHIC ACCOUNT (CIRCLE WALLET)</label>
+                        <input 
+                          type="text" 
+                          disabled 
+                          value={circleWallet?.address || "NOT LOGGED IN (Vault Inactive)"} 
+                          style={{ padding: '8px', border: '1px solid var(--ink-light-grey)', background: 'var(--paper-bg-darker)', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-grey)' }}
+                        />
+                      </div>
 
-                      {error && <div className="paywall-error" style={{ marginTop: '15px', width: '100%' }}>{error}</div>}
-                    </div>
-                  </>
-                )}
+                      <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>3. EDITORIAL BEAT / CATEGORY</label>
+                        <select style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px' }}>
+                          <option>Web3 Infrastructures & Protocols</option>
+                          <option>AI-Agent Autonomous Economics</option>
+                          <option>Decentralized High-Performance Compute</option>
+                          <option>On-Chain Micropayments & L2 Scaling</option>
+                        </select>
+                      </div>
+
+                      <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>4. BIOGRAPHY & PREVIOUS ACCREDITATIONS</label>
+                        <textarea 
+                          required 
+                          rows="4" 
+                          placeholder="Detail your experience in the web3 space or links to prior published works..."
+                          style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px', resize: 'vertical' }}
+                        />
+                      </div>
+
+                      <div className="form-group" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: '6px' }}>
+                        <input type="checkbox" required id="sybil-check" style={{ marginTop: '3px' }} />
+                        <label htmlFor="sybil-check" style={{ fontFamily: 'var(--font-serif)', fontSize: '10.5px', color: 'var(--ink-grey)', lineHeight: '1.4', cursor: 'pointer' }}>
+                          I authorize a 0.01 USDC Sybil-resistance micro-signature check from my active Ledger Vault upon submission.
+                        </label>
+                      </div>
+
+                      <button type="submit" className="btn" style={{ padding: '10px 0', marginTop: '8px', letterSpacing: '0.06em', fontSize: '12px' }}>
+                        SUBMIT ACCREDITATION FORM
+                      </button>
+                    </form>
+                  )}
+                </div>
+                <div className="greek-key" style={{ marginTop: '32px' }}></div>
               </div>
-            </div>
-          )}
+            ) : !selectedArticle ? (
+              <div id="viewer-default" className="viewer-state">
+                <img 
+                  src={logoImg} 
+                  alt="Paper Cut Seal" 
+                  className="home-logo-large" 
+                  style={{ 
+                    height: '140px', 
+                    width: '140px', 
+                    borderRadius: '50%', 
+                    border: '2px solid var(--ink-black)',
+                    boxShadow: '0 4px 10px rgba(0, 0, 0, 0.08)'
+                  }} 
+                />
+                <div className="greek-key"></div>
+                <h1 className="serif-title font-italic">Select a Dispatch to Peruse</h1>
+                <p className="mono-text text-muted">Demonstrating a Modern Electronic Ledger & Gasless Micro-Tariff System.</p>
+                
+                {error && (
+                  <div className="login-error-alert" style={{ 
+                    border: '2px dashed var(--ink-red)', 
+                    backgroundColor: 'rgba(186, 45, 45, 0.08)', 
+                    color: 'var(--ink-red)', 
+                    padding: '16px', 
+                    fontFamily: 'var(--font-mono)', 
+                    fontSize: '12px',
+                    lineHeight: '1.6',
+                    maxWidth: '550px',
+                    margin: '20px auto 10px auto',
+                    textAlign: 'left',
+                    borderRadius: '0px',
+                    boxShadow: '3px 3px 0 rgba(186, 45, 45, 0.15)'
+                  }}>
+                    <div style={{ fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '6px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '16px' }}>⚠</span> AUTHENTICATION ERROR
+                    </div>
+                    <div>{error}</div>
+                    <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed rgba(186, 45, 45, 0.25)', fontSize: '11px', color: 'var(--ink-grey)' }}>
+                      <strong>Next Steps:</strong>
+                      <ol style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                        <li>Ensure <strong>{window.location.origin}</strong> is added to <strong>Allowed Domains</strong> in the Privy Developer Dashboard (dashboard.privy.io) under settings.</li>
+                        <li>Try clearing browser cookies/site data and reloading the page.</li>
+                        <li>Check if MetaMask extension has any pending connection approvals.</li>
+                      </ol>
+                    </div>
+                  </div>
+                )}
+                <div className="stamp-row">
+                  {/* Stamp 1: Register Status */}
+                  {!authenticated ? (
+                    <div 
+                      className="rubber-stamp stamp-red clickable-stamp" 
+                      onClick={login}
+                      title="Click to Sign the Register"
+                    >
+                      ★ REGISTER: UNSIGNED ★
+                    </div>
+                  ) : (
+                    <div className="rubber-stamp stamp-green">
+                      ✔ REGISTER: SIGNED
+                    </div>
+                  )}
+
+                  {/* Stamp 2: Vault Status */}
+                  {(!authenticated || !circleWallet) ? (
+                    <div 
+                      className="rubber-stamp stamp-red clickable-stamp"
+                      onClick={login}
+                      title="Click to Sign Register and activate Vault"
+                    >
+                      ★ VAULT: EMPTY ★
+                    </div>
+                  ) : (
+                    <div className="rubber-stamp stamp-green clickable-stamp"
+                      onClick={() => setShowWalletModal(true)}
+                      title="Click to open your Secure Ledger Vault"
+                    >
+                      ✔ VAULT: ACTIVE
+                    </div>
+                  )}
+
+                  {/* Stamp 3: Network Status */}
+                  <div className="rubber-stamp stamp-black">
+                    ✦ ARC TESTNET ✦
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div id="viewer-active" className="viewer-state">
+                <div className="article-header">
+                  <h1 className="serif-title">{selectedArticle.title}</h1>
+                  <div className="article-meta">
+                    <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                      By <strong style={{ color: 'var(--ink-black)', marginRight: '2px', marginLeft: '4px' }}>{selectedArticle.author}</strong>
+                      {selectedArticle.verified && <VerifiedBadge onApplyClick={handleOpenApplyForm} />}
+                    </span>
+                    <span className="divider">•</span>
+                    <span className="price-badge">
+                      TARIFF: <UsdcCoinIcon size={14} className="coin-inline" style={{ marginRight: '4px', marginTop: '-3px' }} /> {selectedArticle.price} USDC Coinage
+                      {getUnlockedDetails(selectedArticle.id) && (
+                        <a 
+                          href={getExplorerUrl("5042002", getUnlockedDetails(selectedArticle.id).txHash)} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          onClick={(e) => handleViewTx(e, selectedArticle.id)}
+                          title={getUnlockedDetails(selectedArticle.id).isMock ? "Simulated Transaction - Click for info" : "View transaction on-chain"}
+                          style={{ marginLeft: '6px', textDecoration: 'none', display: 'inline-block', fontSize: '13px', cursor: 'pointer' }}
+                        >
+                          🔗
+                        </a>
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="greek-key tight"></div>
+
+                <div className="article-body">
+                  {unlockedArticles[selectedArticle.id] ? (
+                    <div className="content-text premium-unlocked">
+                      {selectedArticle.content}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="content-text">
+                        {selectedArticle.snippet}
+                      </div>
+
+                      {/* PAYWALL */}
+                      <div className="paywall-card">
+                        <div className="paywall-title">TOLL BARRIER: TARIFF DUE</div>
+                        
+                        <div className="paywall-options-container">
+                          {/* Option 1: Human Reader */}
+                          <div className="paywall-option-box">
+                            <div className="option-icon">🖋️</div>
+                            <div className="option-title">HUMAN READER</div>
+                            <p className="paywall-desc">
+                              {!authenticated 
+                                ? "Sign the register to create a Ledger Vault." 
+                                : `Vault: ${shortenAddress(circleWallet?.address)} | Bal: ${parseFloat(circleWallet?.balance || '0.00').toFixed(4)} USDC`
+                              }
+                            </p>
+                            {!txStatus && (
+                              <button className="btn btn-sm btn-paywall" onClick={handleUnlockOnChain}>
+                                {!authenticated ? "SIGN REGISTER" : (
+                                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                                    PAY {selectedArticle.price} <UsdcCoinIcon size={14} className="coin-inline" /> USDC
+                                  </span>
+                                )}
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Divider Line */}
+                          <div className="paywall-option-divider"></div>
+
+                          {/* Option 2: AI Agent */}
+                          <div className="paywall-option-box">
+                            <div className="option-icon">🤖</div>
+                            <div className="option-title">AI SCRAPER AGENT</div>
+                            
+                            {!isScraping ? (
+                              <>
+                                <p className="paywall-desc">
+                                  Trigger simulated robot scraping sequence & micro-payments.
+                                </p>
+                                <button 
+                                  className="btn btn-sm btn-paywall btn-secondary"
+                                  onClick={triggerScrapeSimulation}
+                                >
+                                  LAUNCH AGENT
+                                </button>
+                              </>
+                            ) : (
+                              /* Live Terminal Mockup Simulator Screen */
+                              <div className="scraper-terminal">
+                                <div className="terminal-header">
+                                  <span className="term-dot red"></span>
+                                  <span className="term-dot yellow"></span>
+                                  <span className="term-dot green"></span>
+                                  <span className="term-title">AI-Agent Terminal @ ScraperPort</span>
+                                </div>
+                                <div className="terminal-body mono-text">
+                                  {scrapeStep >= 1 && (
+                                    <div className="term-line prompt">
+                                      <span className="term-accent">&gt;</span> query --prompt "{selectedArticle.title}"
+                                    </div>
+                                  )}
+                                  {scrapeStep === 1 && (
+                                    <div className="term-line loading">
+                                      Scanning database for target dispatches...
+                                    </div>
+                                  )}
+                                  {scrapeStep >= 2 && (
+                                    <>
+                                      <div className="term-line success">
+                                        Dispatch found. ID: {selectedArticle.id}. Size: 84 words.
+                                      </div>
+                                      <div className="term-line prompt">
+                                        <span className="term-accent">&gt;</span> settle-tariff --amount {selectedArticle.price} --network arc-testnet
+                                      </div>
+                                    </>
+                                  )}
+                                  {scrapeStep === 2 && (
+                                    <div className="term-line loading">
+                                      Executing Circle MPC wallet gasless transfer...
+                                    </div>
+                                  )}
+                                  {scrapeStep >= 3 && (
+                                    <>
+                                      <div className="term-line success">
+                                        Tx settled. Hash: <a href={getExplorerUrl(chainId || "5042002", "0x8fdc9dfa539f8fc0d13cf941f81e14d3d4aa182035e0")} target="_blank" rel="noopener noreferrer" style={{ color: '#5cd15c', textDecoration: 'underline' }}>0x8fd...35e0 ↗</a>.
+                                      </div>
+                                      <div className="term-line prompt">
+                                        <span className="term-accent">&gt;</span> scrape --target content --stream-read
+                                      </div>
+                                      <div className="term-line info highlight-box">
+                                        <span>[STREAMING DATA]</span><br/>
+                                        <span>Words Read: <strong>{scrapeWords} / 84</strong></span><br/>
+                                        <span>Current Cost: <strong>{scrapeCost.toFixed(6)}</strong> <UsdcCoinIcon size={12} className="coin-inline" style={{ margin: '0 2px 0 4px', marginTop: '-2px' }} /> USDC</span>
+                                      </div>
+                                    </>
+                                  )}
+                                  {scrapeStep === 3 && (
+                                    <div className="term-line loading">
+                                      Cawing premium column paragraphs...
+                                    </div>
+                                  )}
+                                  {scrapeStep >= 4 && (
+                                    <>
+                                      <div className="term-line success" style={{ color: '#5cd15c', fontWeight: 'bold' }}>
+                                        Scraping complete. Settle total: {scrapeCost.toFixed(4)} <UsdcCoinIcon size={12} className="coin-inline" style={{ margin: '0 2px 0 4px', marginTop: '-2px' }} /> USDC.
+                                      </div>
+                                      <div className="term-line prompt">
+                                        <span className="term-accent">&gt;</span> summarize-report --llm-refine
+                                      </div>
+                                      <div className="term-report-box">
+                                        {scrapeResult}
+                                      </div>
+                                      <button 
+                                        className="btn btn-sm" 
+                                        style={{ marginTop: '8px', fontSize: '9px', padding: '2px 8px', float: 'right' }}
+                                        onClick={() => {
+                                          setIsScraping(false);
+                                          setScrapeStep(0);
+                                          setScrapeWords(0);
+                                          setScrapeCost(0);
+                                          setScrapeResult("");
+                                        }}
+                                      >
+                                        RESET BOT
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {txStatus && (
+                          <div className="tx-status-box" style={{ marginTop: '20px', width: '100%' }}>
+                            <span className="spinner"></span>
+                            <span>{txStatus}</span>
+                            {txHash && (
+                              <div className="tx-hash-link">
+                                <a href={getExplorerUrl(chainId, txHash)} target="_blank" rel="noopener noreferrer">
+                                  View on Block Explorer ↗
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {error && <div className="paywall-error" style={{ marginTop: '15px', width: '100%' }}>{error}</div>}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </section>
+        </main>
+      )}          )}
         </section>
       </main>
 

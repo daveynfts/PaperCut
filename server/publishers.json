@@ -1,0 +1,44 @@
+{
+  "hayden@uniswap.org": {
+    "name": "Hayden Adams",
+    "domain": "uniswap.org",
+    "walletAddress": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    "verified": true,
+    "category": "Web3 Infrastructures & Protocols"
+  },
+  "vitalik@ethereum.org": {
+    "name": "Vitalik Buterin",
+    "domain": "vitalik.ca",
+    "walletAddress": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    "verified": true,
+    "category": "Web3 Infrastructures & Protocols"
+  },
+  "balaji@startup.society": {
+    "name": "Balaji Srinivasan",
+    "domain": "balajis.com",
+    "walletAddress": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    "verified": true,
+    "category": "AI-Agent Autonomous Economics"
+  },
+  "bankless@bankless.com": {
+    "name": "Bankless",
+    "domain": "bankless.com",
+    "walletAddress": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    "verified": true,
+    "category": "On-Chain Micropayments & L2 Scaling"
+  },
+  "chris@a16z.com": {
+    "name": "Chris Dixon",
+    "domain": "a16zcrypto.com",
+    "walletAddress": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    "verified": true,
+    "category": "Web3 Infrastructures & Protocols"
+  },
+  "haseeb@dragonfly.xyz": {
+    "name": "Haseeb Qureshi",
+    "domain": "dragonfly.xyz",
+    "walletAddress": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    "verified": true,
+    "category": "On-Chain Micropayments & L2 Scaling"
+  }
+}

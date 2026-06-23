@@ -1294,3 +1294,57 @@ body {
   /* clean static 2D coin icon */
 }
 
+/* ============ PUBLISHER ADMIN PORTAL STYLES ============ */
+.admin-container {
+  animation: fadeIn 0.4s ease-out;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+}
+
+.admin-table th {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-grey);
+  border-bottom: 2px solid var(--ink-black);
+  padding: 10px 8px;
+  font-weight: bold;
+  letter-spacing: 0.05em;
+}
+
+.admin-table td {
+  padding: 12px 8px;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--ink-light-grey);
+  line-height: 1.4;
+}
+
+.admin-table tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.admin-table tbody tr:hover {
+  background-color: rgba(186, 45, 45, 0.03); /* Subtle paper highlight red */
+}
+
+.admin-table-wrapper::-webkit-scrollbar {
+  height: 6px;
+}
+
+.admin-table-wrapper::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.admin-table-wrapper::-webkit-scrollbar-thumb {
+  background: var(--ink-light-grey);
+  border-radius: 3px;
+}
+
+.admin-table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-grey);
+}
+
+
