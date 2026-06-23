@@ -12,30 +12,42 @@ interface IERC20 {
 
 /**
  * @title PaperCutRevenueVault
- * @notice Smart contract managing and distributing publisher revenue on PaperCut.
- * Supports off-chain tracking with secure on-chain sync and reentrancy-safe claims.
+ * @notice Smart contract for direct on-chain article purchases and publisher revenue distribution.
+ * Readers pay USDC directly to this contract when buying an article. The contract allocates the funds,
+ * handles platform fee splits, and lets publishers claim their earnings securely.
  */
 contract PaperCutRevenueVault {
     
-    // USDC Token Address used for nanoshare coinage
+    // USDC Token Address used for coinage
     IERC20 public immutable usdcToken;
     
-    // Admin / Owner of the contract
+    // Contract owner (admin/platform registry)
     address public owner;
     
-    // Relayer/Oracle authorized to update publisher balances
-    address public oracle;
+    // Platform fee basis points (e.g., 500 = 5% fee)
+    uint256 public platformFeeBps;
+    
+    // Accumulated fee revenue for the platform
+    uint256 public accumulatedPlatformFees;
 
-    // Mapping: Publisher Address => Total accumulated earned revenue (historical total)
+    // Mapping: Publisher Address => Total historical revenue earned (after fees)
     mapping(address => uint256) public totalEarned;
     
     // Mapping: Publisher Address => Total claimed revenue
     mapping(address => uint256) public totalClaimed;
 
     // Events
-    event RevenueUpdated(address indexed publisher, uint256 totalEarnedAmount);
+    event ArticlePurchased(
+        address indexed reader, 
+        string articleId, 
+        address indexed publisher, 
+        uint256 amount,
+        uint256 publisherShare,
+        uint256 platformFee
+    );
     event RevenueClaimed(address indexed publisher, address indexed receiver, uint256 amount);
-    event OracleUpdated(address indexed oldOracle, address indexed newOracle);
+    event PlatformFeeUpdated(uint256 oldFeeBps, uint256 newFeeBps);
+    event PlatformFeesWithdrawn(address indexed owner, uint256 amount);
     event OwnerUpdated(address indexed oldOwner, address indexed newOwner);
 
     modifier onlyOwner() {
@@ -43,30 +55,25 @@ contract PaperCutRevenueVault {
         _;
     }
 
-    modifier onlyAuthorized() {
-        require(msg.sender == owner || msg.sender == oracle, "Not authorized");
-        _;
-    }
-
-    constructor(address _usdcToken, address _oracle) {
+    constructor(address _usdcToken, uint256 _platformFeeBps) {
         require(_usdcToken != address(0), "Invalid token address");
-        require(_oracle != address(0), "Invalid oracle address");
+        require(_platformFeeBps <= 3000, "Fee cannot exceed 30%"); // Max fee capped at 30%
         usdcToken = IERC20(_usdcToken);
         owner = msg.sender;
-        oracle = _oracle;
+        platformFeeBps = _platformFeeBps;
     }
 
     /**
-     * @notice Updates the authorized oracle address.
+     * @notice Set platform fee in basis points (1 bps = 0.01%, 10000 bps = 100%)
      */
-    function setOracle(address _newOracle) external onlyOwner {
-        require(_newOracle != address(0), "Invalid oracle address");
-        emit OracleUpdated(oracle, _newOracle);
-        oracle = _newOracle;
+    function setPlatformFeeBps(uint256 _newFeeBps) external onlyOwner {
+        require(_newFeeBps <= 3000, "Fee cannot exceed 30%");
+        emit PlatformFeeUpdated(platformFeeBps, _newFeeBps);
+        platformFeeBps = _newFeeBps;
     }
 
     /**
-     * @notice Transfers ownership of the contract.
+     * @notice Transfer contract ownership
      */
     function transferOwnership(address _newOwner) external onlyOwner {
         require(_newOwner != address(0), "Invalid owner address");
@@ -75,27 +82,35 @@ contract PaperCutRevenueVault {
     }
 
     /**
-     * @notice Updates the total earned historical revenue of multiple publishers.
-     * @dev Must be called by the owner or authorized oracle.
-     * @param publishers Array of publisher addresses.
-     * @param totalEarnedAmounts Array of accumulated revenue amounts (in USDC decimals).
+     * @notice Purchases an article by transferring USDC from the reader's wallet,
+     * deducting the platform fee, and allocating the remainder to the publisher.
+     * @param articleId The identifier of the article.
+     * @param publisher The target publisher address who wrote the article.
+     * @param amount The purchase price in USDC (decimals included).
      */
-    function updateBalances(
-        address[] calldata publishers, 
-        uint256[] calldata totalEarnedAmounts
-    ) external onlyAuthorized {
-        require(publishers.length == totalEarnedAmounts.length, "Array lengths mismatch");
+    function purchaseArticle(
+        string calldata articleId,
+        address publisher,
+        uint256 amount
+    ) external {
+        require(publisher != address(0), "Invalid publisher address");
+        require(amount > 0, "Amount must be greater than zero");
 
-        for (uint256 i = 0; i < publishers.length; i++) {
-            address pub = publishers[i];
-            uint256 newEarned = totalEarnedAmounts[i];
-            
-            // Safety check: Total earned must be monotonically increasing.
-            require(newEarned >= totalEarned[pub], "New revenue cannot be lower than existing");
-            
-            totalEarned[pub] = newEarned;
-            emit RevenueUpdated(pub, newEarned);
-        }
+        // Transfer USDC from reader to this contract
+        require(
+            usdcToken.transferFrom(msg.sender, address(this), amount), 
+            "USDC transfer failed"
+        );
+
+        // Calculate platform fee and publisher share
+        uint256 fee = (amount * platformFeeBps) / 10000;
+        uint256 pubShare = amount - fee;
+
+        // Allocate balances
+        accumulatedPlatformFees += fee;
+        totalEarned[publisher] += pubShare;
+
+        emit ArticlePurchased(msg.sender, articleId, publisher, amount, pubShare, fee);
     }
 
     /**
@@ -117,21 +132,27 @@ contract PaperCutRevenueVault {
 
         // Verify contract has enough reserve
         uint256 contractUsdcBalance = usdcToken.balanceOf(address(this));
-        require(contractUsdcBalance >= claimable, "Contract balance insufficient, contact admin");
+        require(contractUsdcBalance >= claimable, "Contract balance insufficient");
 
         // Checks-Effects-Interactions pattern to prevent reentrancy
         totalClaimed[msg.sender] += claimable;
 
-        require(usdcToken.transfer(msg.sender, claimable), "USDC transfer failed");
+        require(usdcToken.transfer(msg.sender, claimable), "USDC claim transfer failed");
 
         emit RevenueClaimed(msg.sender, msg.sender, claimable);
     }
-    
+
     /**
-     * @notice Admin deposit reserve function.
+     * @notice Owner withdraws accumulated platform fees.
      */
-    function depositFunds(uint256 amount) external {
-        require(usdcToken.transferFrom(msg.sender, address(this), amount), "Deposit failed");
+    function withdrawPlatformFees() external onlyOwner {
+        uint256 amount = accumulatedPlatformFees;
+        require(amount > 0, "No platform fees to withdraw");
+
+        accumulatedPlatformFees = 0;
+        require(usdcToken.transfer(owner, amount), "USDC fee withdrawal failed");
+
+        emit PlatformFeesWithdrawn(owner, amount);
     }
 
     /**
