@@ -265,6 +265,7 @@ function App() {
   const [articles, setArticles] = useState(INITIAL_ARTICLES);
   const [publishers, setPublishers] = useState({});
   const [isAdminView, setIsAdminView] = useState(false);
+  const [isPublisherView, setIsPublisherView] = useState(false);
   const [adminName, setAdminName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [adminDomain, setAdminDomain] = useState("");
@@ -274,6 +275,17 @@ function App() {
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [adminPasswordInput, setAdminPasswordInput] = useState("");
   const [adminPasswordError, setAdminPasswordError] = useState("");
+
+  // Publisher Portal states
+  const [pubFormName, setPubFormName] = useState("");
+  const [pubFormDomain, setPubFormDomain] = useState("");
+  const [pubFormWallet, setPubFormWallet] = useState("");
+  const [pubFormCategory, setPubFormCategory] = useState("Web3 Infrastructures & Protocols");
+  const [pubFormStatusMsg, setPubFormStatusMsg] = useState("");
+  const [pubEarnings, setPubEarnings] = useState(0);
+  const [pubClaimed, setPubClaimed] = useState(0);
+  const [pubClaiming, setPubClaiming] = useState(false);
+  const [pubClaimSuccess, setPubClaimSuccess] = useState("");
 
   const fetchArticles = async () => {
     try {
@@ -308,7 +320,7 @@ function App() {
     }
   };
 
-  // Handle URL subpath routing for /admin, /papercut/admin, or hash #/admin
+  // Handle URL subpath routing for /admin, /papercut/admin, or hash #/admin / #/publisher
   useEffect(() => {
     const checkPath = () => {
       const path = window.location.pathname;
@@ -321,8 +333,19 @@ function App() {
         hash.endsWith('/admin')
       ) {
         setIsAdminView(true);
+        setIsPublisherView(false);
+      } else if (
+        path.endsWith('/publisher') || 
+        path.endsWith('/publisher/') || 
+        hash === '#/publisher' || 
+        hash === '#/publisher/' || 
+        hash.endsWith('/publisher')
+      ) {
+        setIsAdminView(false);
+        setIsPublisherView(true);
       } else {
         setIsAdminView(false);
+        setIsPublisherView(false);
       }
     };
     checkPath();
@@ -334,6 +357,102 @@ function App() {
       window.removeEventListener('hashchange', checkPath);
     };
   }, []);
+
+  // Prefill wallet address in the publisher registration form
+  useEffect(() => {
+    if (smartWalletAddress || activeWallet?.address || user?.wallet?.address) {
+      setPubFormWallet(smartWalletAddress || activeWallet?.address || user?.wallet?.address || "");
+    }
+  }, [smartWalletAddress, activeWallet, user]);
+
+  const userEmail = user?.email?.address || user?.id || "";
+
+  // Dynamic earnings calculation for verified publishers
+  useEffect(() => {
+    if (isPublisherView && userEmail && publishers && publishers[userEmail] && publishers[userEmail].verified) {
+      const storedEarned = localStorage.getItem(`papercut_pub_earned_${userEmail}`);
+      const storedClaimed = localStorage.getItem(`papercut_pub_claimed_${userEmail}`);
+      
+      // Calculate dynamic earnings based on how many dispatches by this author are unlocked by readers
+      const pubRecord = publishers[userEmail];
+      const authorArticles = articles.filter(a => a.author.toLowerCase() === pubRecord.name.toLowerCase());
+      let calculatedEarned = 0.0;
+      
+      authorArticles.forEach(art => {
+        // Calculate unlocked articles revenue
+        if (unlockedArticles[art.id]) {
+          calculatedEarned += parseFloat(art.price);
+        }
+      });
+      
+      // Seed value of 0.35 USDC to make demo satisfying if no articles are unlocked yet
+      if (calculatedEarned === 0) {
+        calculatedEarned = 0.35;
+      }
+
+      const finalEarned = storedEarned ? parseFloat(storedEarned) : calculatedEarned;
+      const finalClaimed = storedClaimed ? parseFloat(storedClaimed) : 0.0;
+      
+      setPubEarnings(finalEarned);
+      setPubClaimed(finalClaimed);
+      localStorage.setItem(`papercut_pub_earned_${userEmail}`, finalEarned.toString());
+      localStorage.setItem(`papercut_pub_claimed_${userEmail}`, finalClaimed.toString());
+    }
+  }, [isPublisherView, userEmail, publishers, articles, unlockedArticles]);
+
+  const handleApplyPublisherSubmit = async (e) => {
+    e.preventDefault();
+    setPubFormStatusMsg("Submitting application...");
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/publishers`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          email: userEmail,
+          name: pubFormName,
+          domain: pubFormDomain,
+          walletAddress: pubFormWallet,
+          category: pubFormCategory
+        })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setPubFormStatusMsg("Application submitted! Linked directly to Admin Board for approval.");
+        setPubFormName("");
+        setPubFormDomain("");
+        fetchPublishers();
+      } else {
+        setPubFormStatusMsg(data.error || "Failed to submit application.");
+      }
+    } catch (err) {
+      console.error(err);
+      setPubFormStatusMsg("Connection to server failed.");
+    }
+  };
+
+  const handlePublisherClaim = async () => {
+    const claimable = pubEarnings - pubClaimed;
+    if (claimable <= 0) return;
+    setPubClaiming(true);
+    setPubClaimSuccess("");
+    
+    try {
+      // Simulate claim txn wait time (1.5 seconds)
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      const newClaimed = pubClaimed + claimable;
+      setPubClaimed(newClaimed);
+      localStorage.setItem(`papercut_pub_claimed_${userEmail}`, newClaimed.toString());
+      setPubClaimSuccess(`Accrued revenue of ${claimable.toFixed(4)} USDC claimed successfully! Funds withdrawn to EVM address: ${shortenAddress(pubFormWallet || smartWalletAddress)}`);
+    } catch (err) {
+      console.error(err);
+      setPubClaimSuccess("Claim execution failed.");
+    } finally {
+      setPubClaiming(false);
+    }
+  };
 
   const handleToggleAdminView = (showAdmin) => {
     setIsAdminView(showAdmin);
@@ -829,11 +948,12 @@ function App() {
               setSelectedArticle(null);
               setShowApplyForm(false);
               handleToggleAdminView(false);
+              setIsPublisherView(false);
             }}
             title="Return to Front Page / Home"
             style={{ flex: 1, textAlign: 'left' }}
           >
-            {isAdminView ? "← READER VIEW" : "FRONT PAGE"}
+            {isAdminView || isPublisherView ? "← READER VIEW" : "FRONT PAGE"}
           </div>
           <div className="nav-datetime mono-text" style={{ flex: 1, textAlign: 'center', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--ink-grey)' }}>
             {formatDateTime(currentDate)}
@@ -851,6 +971,36 @@ function App() {
                 title="Close Admin Portal"
               >
                 [CLOSE ADMIN]
+              </span>
+            )}
+            {!isAdminView && !isPublisherView && (
+              <span 
+                className={`nav-front-page-btn`}
+                onClick={() => {
+                  setSelectedArticle(null);
+                  setShowApplyForm(false);
+                  setIsPublisherView(true);
+                  window.location.hash = '/publisher';
+                }}
+                style={{ marginRight: '16px', color: 'var(--ink-red)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 'bold', letterSpacing: '0.05em' }}
+                title="Open Publisher Portal"
+              >
+                [PUBLISHER PORTAL]
+              </span>
+            )}
+            {isPublisherView && (
+              <span 
+                className={`nav-front-page-btn`}
+                onClick={() => {
+                  setIsPublisherView(false);
+                  if (window.location.hash) {
+                    window.history.pushState("", document.title, window.location.pathname + window.location.search);
+                  }
+                }}
+                style={{ marginRight: '16px', color: 'var(--ink-red)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 'bold', letterSpacing: '0.05em' }}
+                title="Close Publisher Portal"
+              >
+                [CLOSE PORTAL]
               </span>
             )}
             {!authenticated ? (
@@ -881,7 +1031,191 @@ function App() {
         </div>
       </nav>
             {/* MAIN CONTAINER */}
-      {isAdminView ? (
+      {isPublisherView ? (
+        !authenticated ? (
+          <main className="publisher-container" style={{ padding: '32px', maxWidth: '480px', margin: '80px auto', border: '2px solid var(--ink-black)', backgroundColor: 'var(--paper-accent)', boxShadow: '6px 6px 0 var(--ink-black)', textAlign: 'center' }}>
+            <div className="greek-key"></div>
+            <h2 className="serif-title font-italic" style={{ color: 'var(--ink-red)', fontSize: '24px', marginBottom: '8px' }}>PUBLISHER IDENTITY CHECK</h2>
+            <p className="mono-text text-muted" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '24px' }}>
+              Reader Signature Verification Required
+            </p>
+            <p className="serif-body" style={{ fontSize: '14px', lineHeight: '1.6', marginBottom: '24px', color: 'var(--ink-grey)' }}>
+              Please sign the guest register with your cryptographic wallet. Once logged in, we will verify if your account is accredited with writing credentials.
+            </p>
+            <button className="btn" onClick={login} style={{ padding: '10px 24px', fontSize: '12px', width: '100%' }}>
+              SIGN GUEST REGISTER
+            </button>
+          </main>
+        ) : !publishers[user?.email?.address || ""] ? (
+          <main className="publisher-container" style={{ padding: '32px', maxWidth: '600px', margin: '40px auto', border: '2px solid var(--ink-black)', backgroundColor: 'var(--paper-accent)', boxShadow: '6px 6px 0 var(--ink-black)' }}>
+            <div className="greek-key"></div>
+            <h2 className="serif-title font-italic" style={{ color: 'var(--ink-red)', fontSize: '28px', marginBottom: '8px', textAlign: 'center' }}>Accreditation Application</h2>
+            <p className="mono-text text-muted" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '24px', textAlign: 'center' }}>
+              Apply for Author Induction & Verification Seal
+            </p>
+            <p className="serif-body" style={{ fontSize: '13px', lineHeight: '1.5', marginBottom: '20px', color: 'var(--ink-grey)' }}>
+              Your account <strong>{user?.email?.address || user?.id}</strong> is not registered as an accredited publisher. Please complete the application below. This will link your credentials directly to the Admin Board for approval.
+            </p>
+            <form onSubmit={handleApplyPublisherSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>1. PUBLISHER PSEUDONYM / LEGAL NAME</label>
+                <input 
+                  type="text" 
+                  required 
+                  value={pubFormName}
+                  onChange={(e) => setPubFormName(e.target.value)}
+                  placeholder="e.g. Satoshi Nakamoto" 
+                  style={{ padding: '10px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px' }}
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>2. REGISTRATION EMAIL</label>
+                <input 
+                  type="email" 
+                  disabled
+                  value={user?.email?.address || ""} 
+                  style={{ padding: '10px', border: '1px solid var(--ink-light-grey)', background: 'var(--paper-bg-darker)', fontFamily: 'var(--font-serif)', fontSize: '13px', color: 'var(--ink-grey)' }}
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>3. VERIFIED DOMAIN</label>
+                <input 
+                  type="text" 
+                  required 
+                  value={pubFormDomain}
+                  onChange={(e) => setPubFormDomain(e.target.value)}
+                  placeholder="e.g. bitcoin.org" 
+                  style={{ padding: '10px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px' }}
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>4. RECIPIENT WALLET ADDRESS (EVM)</label>
+                <input 
+                  type="text" 
+                  required 
+                  value={pubFormWallet}
+                  onChange={(e) => setPubFormWallet(e.target.value)}
+                  placeholder="e.g. 0xf39Fd..." 
+                  style={{ padding: '10px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-mono)', fontSize: '12px' }}
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>5. EDITORIAL CATEGORY</label>
+                <select 
+                  value={pubFormCategory}
+                  onChange={(e) => setPubFormCategory(e.target.value)}
+                  style={{ padding: '10px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px' }}
+                >
+                  <option>Web3 Infrastructures & Protocols</option>
+                  <option>AI-Agent Autonomous Economics</option>
+                  <option>Decentralized High-Performance Compute</option>
+                  <option>On-Chain Micropayments & L2 Scaling</option>
+                </select>
+              </div>
+              <button type="submit" className="btn" style={{ padding: '12px 0', marginTop: '8px', letterSpacing: '0.06em', fontSize: '12px' }}>
+                SUBMIT ACCREDITATION APPLICATION
+              </button>
+            </form>
+            {pubFormStatusMsg && (
+              <div className="mono-text" style={{ marginTop: '16px', fontSize: '11px', color: 'var(--ink-red)', textAlign: 'center', border: '1px dashed var(--ink-red)', padding: '8px', background: 'rgba(186,45,45,0.03)' }}>
+                {pubFormStatusMsg}
+              </div>
+            )}
+          </main>
+        ) : !publishers[user?.email?.address || ""].verified ? (
+          <main className="publisher-container" style={{ padding: '40px 32px', maxWidth: '500px', margin: '80px auto', border: '2px solid var(--ink-black)', backgroundColor: 'var(--paper-accent)', boxShadow: '6px 6px 0 var(--ink-black)', textAlign: 'center' }}>
+            <div className="greek-key"></div>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>✉</div>
+            <h2 className="serif-title font-italic" style={{ color: 'var(--ink-red)', fontSize: '24px', marginBottom: '12px' }}>APPLICATION PENDING</h2>
+            <p className="serif-body" style={{ fontSize: '14px', lineHeight: '1.6', marginBottom: '24px' }}>
+              Dear <strong>{publishers[user?.email?.address || ""].name}</strong>,<br/>
+              Your application with domain <code>{publishers[user?.email?.address || ""].domain}</code> has been linked directly to the Admin Board. 
+            </p>
+            <div className="mono-text" style={{ fontSize: '11px', border: '1px dashed var(--ink-red)', padding: '12px', background: 'rgba(186,45,45,0.03)', color: 'var(--ink-red)', marginBottom: '24px' }}>
+              STATUS: AWAITING ADMIN ACCREDITATION APPROVAL
+            </div>
+            <p className="mono-text text-muted" style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--ink-grey)' }}>
+              Once the admin grants the seal, this page will unlock your ledger dashboard.
+            </p>
+          </main>
+        ) : (
+          <main className="publisher-container" style={{ padding: '32px', maxWidth: '800px', margin: '40px auto', border: '2px solid var(--ink-black)', backgroundColor: 'var(--paper-bg)', boxShadow: '6px 6px 0 var(--ink-black)' }}>
+            <div className="greek-key"></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--ink-black)', paddingBottom: '12px', marginBottom: '24px' }}>
+              <div>
+                <h2 className="serif-title font-italic" style={{ color: 'var(--ink-black)', fontSize: '32px', margin: 0 }}>Publisher Ledger</h2>
+                <p className="mono-text text-muted" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '4px 0 0 0' }}>
+                  Accredited Author Account
+                </p>
+              </div>
+              <span className="rubber-stamp stamp-green" style={{ transform: 'rotate(2deg)' }}>✔ ACCREDITED</span>
+            </div>
+
+            <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', marginBottom: '24px' }}>
+              <div style={{ flex: '1 1 300px', border: '1px solid var(--ink-black)', padding: '16px', background: 'var(--paper-accent)' }}>
+                <div className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-grey)', marginBottom: '12px' }}>AUTHOR PROFILE</div>
+                <div style={{ fontFamily: 'var(--font-serif)', fontSize: '16px', fontWeight: 'bold', color: 'var(--ink-black)' }}>{publishers[user?.email?.address || ""].name}</div>
+                <div className="mono-text" style={{ fontSize: '11px', color: 'var(--ink-grey)', margin: '4px 0' }}>Beat: {publishers[user?.email?.address || ""].category}</div>
+                <div className="mono-text" style={{ fontSize: '11px', color: 'var(--ink-red)' }}>Domain: {publishers[user?.email?.address || ""].domain}</div>
+              </div>
+
+              <div style={{ flex: '1 1 300px', border: '1px solid var(--ink-black)', padding: '16px', background: 'var(--paper-bg)' }}>
+                <div className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-grey)', marginBottom: '8px' }}>REVENUE BALANCE</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span className="mono-text" style={{ fontSize: '11px', color: 'var(--ink-grey)' }}>Total Earned:</span>
+                  <span className="mono-text" style={{ fontSize: '12px', fontWeight: 'bold' }}>{pubEarnings.toFixed(4)} USDC</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span className="mono-text" style={{ fontSize: '11px', color: 'var(--ink-grey)' }}>Total Claimed:</span>
+                  <span className="mono-text" style={{ fontSize: '12px', color: 'var(--ink-grey)' }}>{pubClaimed.toFixed(4)} USDC</span>
+                </div>
+                <div style={{ borderTop: '1px dashed var(--ink-light-grey)', margin: '8px 0', paddingTop: '8px', display: 'flex', justifyContent: 'space-between' }}>
+                  <span className="mono-text" style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--ink-black)' }}>Available to Claim:</span>
+                  <span className="mono-text" style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--ink-red)' }}>{(pubEarnings - pubClaimed).toFixed(4)} USDC</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+              <button 
+                className="btn" 
+                disabled={pubEarnings - pubClaimed <= 0 || pubClaiming} 
+                onClick={handlePublisherClaim} 
+                style={{ padding: '12px 32px', fontSize: '13px', width: '100%', letterSpacing: '0.05em' }}
+              >
+                {pubClaiming ? "EXECUTING SECURE CLAIM..." : pubEarnings - pubClaimed <= 0 ? "NO REVENUE AVAILABLE TO CLAIM" : "CLAIM REVENUE ON-CHAIN"}
+              </button>
+              {pubClaimSuccess && (
+                <div className="mono-text" style={{ marginTop: '16px', fontSize: '11px', color: 'green', border: '1px dashed green', padding: '10px', background: 'rgba(0,128,0,0.03)', textAlign: 'left', lineHeight: '1.4' }}>
+                  {pubClaimSuccess}
+                </div>
+              )}
+            </div>
+
+            <div style={{ borderTop: '1px solid var(--ink-black)', paddingTop: '16px' }}>
+              <div className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-grey)', marginBottom: '12px', textTransform: 'uppercase' }}>Induction & Payout Registry Information</div>
+              <table style={{ width: '100%', fontSize: '12px', fontFamily: 'var(--font-serif)', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <tbody>
+                  <tr style={{ borderBottom: '1px solid var(--ink-light-grey)' }}>
+                    <td style={{ padding: '6px 0', color: 'var(--ink-grey)' }}>Induction Wallet Address</td>
+                    <td style={{ padding: '6px 0', textAlign: 'right', fontFamily: 'var(--font-mono)' }} title={publishers[user?.email?.address || ""].walletAddress}>
+                      {publishers[user?.email?.address || ""].walletAddress}
+                    </td>
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid var(--ink-light-grey)' }}>
+                    <td style={{ padding: '6px 0', color: 'var(--ink-grey)' }}>EIP-3009 Gas-Free Claiming</td>
+                    <td style={{ padding: '6px 0', textAlign: 'right', color: 'var(--ink-red)', fontFamily: 'var(--font-mono)' }}>SUPPORTED</td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '6px 0', color: 'var(--ink-grey)' }}>Settlement Blockchain</td>
+                    <td style={{ padding: '6px 0', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>ARC TESTNET</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </main>
+        )
+      ) : isAdminView ? (
         !isAdminAuthenticated ? (
           <main className="admin-login-container" style={{ padding: '32px', maxWidth: '420px', margin: '80px auto', border: '2px solid var(--ink-black)', backgroundColor: 'var(--paper-accent)', boxShadow: '6px 6px 0 var(--ink-black)', textAlign: 'center' }}>
             <div className="greek-key"></div>
