@@ -869,6 +869,7 @@ function App() {
             )}
           </div>
         </div>
+      </nav>
             {/* MAIN CONTAINER */}
       {isAdminView ? (
         <main className="admin-container" style={{ padding: '32px', maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', minHeight: 'calc(100vh - 120px)' }}>
@@ -1443,9 +1444,7 @@ function App() {
             )}
           </section>
         </main>
-      )}          )}
-        </section>
-      </main>
+      )}
 
       {/* WALLET DEPOSIT & QR MODAL */}
       {showWalletModal && (
