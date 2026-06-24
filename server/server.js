@@ -289,27 +289,31 @@ function encryptEntitySecret(entitySecretHex, publicKeyPem) {
   return encrypted.toString("base64");
 }
 
-let cachedCiphertext = null;
-let cachedCiphertextTime = 0;
+let cachedPublicKey = null;
+let cachedPublicKeyTime = 0;
 const CACHE_TTL = 30 * 60 * 1000; // 30 mins
 
 async function getEntitySecretCiphertext() {
   const now = Date.now();
-  if (cachedCiphertext && (now - cachedCiphertextTime < CACHE_TTL)) {
-    return cachedCiphertext;
-  }
-  try {
-    const pubKey = await fetchCirclePublicKey();
-    cachedCiphertext = encryptEntitySecret(process.env.CIRCLE_ENTITY_SECRET, pubKey);
-    cachedCiphertextTime = now;
-    return cachedCiphertext;
-  } catch (error) {
-    if (cachedCiphertext) {
-      console.warn("[Circle W3S] fetchCirclePublicKey failed, falling back to expired cached ciphertext.");
-      return cachedCiphertext;
+  let pubKeyToUse = cachedPublicKey;
+  
+  if (!pubKeyToUse || (now - cachedPublicKeyTime >= CACHE_TTL)) {
+    try {
+      pubKeyToUse = await fetchCirclePublicKey();
+      cachedPublicKey = pubKeyToUse;
+      cachedPublicKeyTime = now;
+    } catch (error) {
+      if (cachedPublicKey) {
+        console.warn("[Circle W3S] fetchCirclePublicKey failed, falling back to expired cached public key.");
+        pubKeyToUse = cachedPublicKey;
+      } else {
+        throw error;
+      }
     }
-    throw error;
   }
+  
+  // Must re-encrypt every time to prevent "Reusing an entity secret ciphertext is not allowed" error
+  return encryptEntitySecret(process.env.CIRCLE_ENTITY_SECRET, pubKeyToUse);
 }
 
 // Check balance helper

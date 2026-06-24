@@ -1333,11 +1333,13 @@ function App() {
     let activeWallet = circleWallet;
     if (!activeWallet) {
       setCopyStatus("Initializing wallet...");
-      activeWallet = await fetchUserCircleWallet();
+      const result = await fetchUserCircleWallet();
+      activeWallet = result?.wallet;
       if (!activeWallet) {
         setFaucetLoading(false);
-        setFaucetError("Failed to initialize wallet. Cannot request faucet.");
-        setError("Failed to initialize wallet. Cannot request faucet.");
+        const actualError = result?.error || "Unknown initialization error";
+        setFaucetError(`Init Failed: ${actualError}`);
+        setError(`Init Failed: ${actualError}`);
         setCopyStatus("Wallet error.");
         return;
       }
@@ -1470,15 +1472,17 @@ function App() {
         };
         setCircleWallet(walletData);
         localStorage.setItem(`circle_wallet_${userEmail}`, JSON.stringify(walletData));
-        return walletData;
+        return { wallet: walletData, error: null };
       } else {
-        setError(data.error || "Failed to load Circle MPC wallet.");
-        return null;
+        const errorMsg = data.error || "Failed to load Circle MPC wallet.";
+        setError(errorMsg);
+        return { wallet: null, error: errorMsg };
       }
     } catch (err) {
       console.error("Error fetching Circle wallet:", err);
-      setError(`Error: ${err.message || String(err)} (Backend URL: ${BACKEND_URL || "Relative /api"})`);
-      return null;
+      const errorMsg = `Network/Proxy Error: ${err.message || String(err)}`;
+      setError(errorMsg);
+      return { wallet: null, error: errorMsg };
     } finally {
       setIsLoadingWallet(false);
     }
