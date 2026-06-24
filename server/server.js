@@ -417,27 +417,35 @@ async function transferCircleUsdc(sourceWalletId, destAddress, amount) {
 
 // Poller
 async function pollTransactionStatus(transactionId) {
-  // Check exactly 1 time to prevent Vercel 10s hobby tier timeout completely
-  const response = await fetchWithRetry(`https://api.circle.com/v1/w3s/transactions/${transactionId}`, {
-    headers: {
-      "Authorization": `Bearer ${process.env.CIRCLE_API_KEY}`
+  // Poll up to 4 times (4 seconds max) to get the real on-chain txHash without hitting Vercel 10s timeout
+  for (let i = 0; i < 4; i++) {
+    try {
+      const response = await fetchWithRetry(`https://api.circle.com/v1/w3s/transactions/${transactionId}`, {
+        headers: { "Authorization": `Bearer ${process.env.CIRCLE_API_KEY}` }
+      });
+      const json = await response.json();
+      const status = json.data?.transaction?.state;
+      const txHash = json.data?.transaction?.txHash;
+      
+      console.log(`[Circle Poller] Tx ${transactionId} attempt ${i+1}: status ${status}`);
+      
+      if (txHash) {
+        return { status, txHash };
+      }
+      
+      if (status === "FAILED" || status === "DENIED") {
+        return { status, txHash: transactionId };
+      }
+      
+      // Wait 1 second before next poll
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    } catch (err) {
+      console.error(`[Circle Poller] Error on attempt ${i+1}:`, err.message);
     }
-  });
-  const json = await response.json();
-  const status = json.data?.transaction?.state;
-  const txHash = json.data?.transaction?.txHash;
-  console.log(`[Circle Poller] Tx ${transactionId} status: ${status}`);
-  
-  if (status === "COMPLETE") {
-    return { success: true, txHash };
-  }
-  if (status === "FAILED" || status === "CANCELLED" || status === "DENIED") {
-    throw new Error(`Transaction ended in state: ${status}`);
   }
   
-  // Return PENDING instead of throwing or polling to prevent frontend crashing
-  console.log(`[Circle Poller] Tx ${transactionId} is still pending. Proceeding immediately to prevent Vercel timeout.`);
-  return { success: true, status: "PENDING", txHash: txHash || null };
+  // Fallback to UUID if it's still pending after 4 seconds
+  return { status: "PENDING", txHash: transactionId };
 }
 
 // Helper to verify EIP-3009 TransferWithAuthorization signature (Keep for extension backwards compatibility)
