@@ -723,27 +723,13 @@ function App() {
   useEffect(() => {
     const pubRecord = getPublisherRecord(userEmail);
     if (isPublisherView && userEmail && pubRecord && pubRecord.verified) {
-      const storedClaimed = localStorage.getItem(`papercut_pub_claimed_${userEmail}`);
+      const globalEarned = parseFloat(pubRecord.totalEarned || "0");
+      const globalClaimed = parseFloat(pubRecord.totalClaimed || "0");
       
-      // Calculate dynamic earnings based on how many dispatches by this author are unlocked by readers
-      const authorArticles = articles.filter(a => a.author.toLowerCase() === pubRecord.name.toLowerCase());
-      let calculatedEarned = 0.0;
-      
-      authorArticles.forEach(art => {
-        // Calculate unlocked articles revenue
-        if (unlockedArticles[art.id]) {
-          calculatedEarned += parseFloat(art.price);
-        }
-      });
-      
-      const finalClaimed = storedClaimed ? parseFloat(storedClaimed) : 0.0;
-      
-      setPubEarnings(calculatedEarned);
-      setPubClaimed(finalClaimed);
-      localStorage.setItem(`papercut_pub_earned_${userEmail}`, calculatedEarned.toString());
-      localStorage.setItem(`papercut_pub_claimed_${userEmail}`, finalClaimed.toString());
+      setPubEarnings(globalEarned);
+      setPubClaimed(globalClaimed);
     }
-  }, [isPublisherView, userEmail, publishers, articles, unlockedArticles]);
+  }, [isPublisherView, userEmail, publishers]);
 
   const handlePublishArticleSubmit = async (e) => {
     e.preventDefault();
@@ -1080,22 +1066,27 @@ function App() {
   };
 
   const handlePublisherClaim = async () => {
-    const claimable = pubEarnings - pubClaimed;
-    if (claimable <= 0) return;
+    if (pubEarnings - pubClaimed <= 0) return;
     setPubClaiming(true);
     setPubClaimSuccess("");
-    
     try {
-      // Simulate claim txn wait time (1.5 seconds)
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const response = await fetch(`${BACKEND_URL}/api/publishers/claim`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: userEmail })
+      });
+      const data = await response.json();
       
-      const newClaimed = pubClaimed + claimable;
-      setPubClaimed(newClaimed);
-      localStorage.setItem(`papercut_pub_claimed_${userEmail}`, newClaimed.toString());
-      setPubClaimSuccess(`Accrued revenue of ${claimable.toFixed(4)} USDC claimed successfully! Funds withdrawn to EVM address: ${shortenAddress(pubFormWallet || smartWalletAddress)}`);
+      if (response.ok && data.success) {
+        const newClaimed = parseFloat(data.totalClaimed || pubEarnings);
+        setPubClaimed(newClaimed);
+        setPubClaimSuccess(`Revenue successfully claimed on Arc Testnet! TxHash: ${data.txHash}`);
+        fetchPublishers(); // Refresh global data
+      } else {
+        setError(`Claim Failed: ${data.error || "Unknown error"}`);
+      }
     } catch (err) {
-      console.error(err);
-      setPubClaimSuccess("Claim execution failed.");
+      setError(`Failed to claim revenue: ${err.message}`);
     } finally {
       setPubClaiming(false);
     }

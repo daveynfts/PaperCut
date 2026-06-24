@@ -1108,6 +1108,21 @@ app.post("/api/articles/unlock", async (req, res) => {
     db[normalizedEmail].balance = finalBalance;
     writeUsersDb(db);
 
+    // Update publisher total earned
+    try {
+      const pubDb = readPublishersDb();
+      const publisherKey = Object.keys(pubDb).find(
+        key => pubDb[key].name.toLowerCase() === article.author.toLowerCase()
+      );
+      if (publisherKey) {
+        pubDb[publisherKey].totalEarned = ((parseFloat(pubDb[publisherKey].totalEarned || "0")) + cost).toFixed(4);
+        writePublishersDb(pubDb);
+        console.log(`[Publisher Earnings] Credited ${cost} USDC to ${pubDb[publisherKey].name}. Total Earned: ${pubDb[publisherKey].totalEarned}`);
+      }
+    } catch (pubErr) {
+      console.error("Failed to update publisher earnings:", pubErr);
+    }
+
     res.json({
       success: true,
       txHash,
@@ -1118,6 +1133,59 @@ app.post("/api/articles/unlock", async (req, res) => {
   } catch (error) {
     console.error("Unlock article error:", error);
     res.status(500).json({ error: error.message || "Failed to process transaction on Arc Testnet" });
+  }
+});
+
+// Endpoint to claim publisher revenue
+app.post("/api/publishers/claim", async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: "Email is required" });
+  }
+  const normalizedEmail = email.toLowerCase();
+
+  try {
+    const pubDb = readPublishersDb();
+    if (!pubDb[normalizedEmail]) {
+      return res.status(404).json({ error: "Publisher not found" });
+    }
+    
+    const publisher = pubDb[normalizedEmail];
+    const totalEarned = parseFloat(publisher.totalEarned || "0");
+    const totalClaimed = parseFloat(publisher.totalClaimed || "0");
+    const claimable = totalEarned - totalClaimed;
+
+    if (claimable <= 0) {
+      return res.status(400).json({ error: "No revenue available to claim" });
+    }
+
+    console.log(`[Circle W3S] Publisher ${publisher.name} claiming ${claimable} USDC to ${publisher.walletAddress}`);
+
+    let txHash;
+    if (isMockMode) {
+      txHash = "0x" + crypto.randomBytes(32).toString("hex");
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      console.log(`[Mock Mode] Publisher claim successful. TxHash: ${txHash}`);
+    } else {
+      const txId = await transferCircleUsdc(process.env.PUBLISHER_WALLET_ID, publisher.walletAddress, claimable);
+      // Wait for completion 1 time using our updated 1-check poller
+      const result = await pollTransactionStatus(txId);
+      txHash = result.txHash;
+    }
+
+    publisher.totalClaimed = (totalClaimed + claimable).toFixed(4);
+    writePublishersDb(pubDb);
+
+    res.json({
+      success: true,
+      txHash,
+      totalClaimed: publisher.totalClaimed,
+      isMock: isMockMode
+    });
+
+  } catch (error) {
+    console.error("Claim revenue error:", error);
+    res.status(500).json({ error: error.message || "Failed to execute claim transfer" });
   }
 });
 
