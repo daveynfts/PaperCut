@@ -225,6 +225,22 @@ app.use("/api", async (req, res, next) => {
 });
 
 
+// --- Helper: Fetch with Retry ---
+// Node 18+ undici has a known issue with SocketError: other side closed on keep-alive connections.
+// This wrapper catches those errors and retries the request with a new socket.
+async function fetchWithRetry(url, options, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await fetch(url, options);
+      return response;
+    } catch (err) {
+      if (i === retries - 1) throw err;
+      console.warn(`[Fetch Retry] Attempt ${i + 1} failed for ${url}: ${err.message}. Retrying...`);
+      await new Promise(res => setTimeout(res, 500)); // wait 500ms before retry
+    }
+  }
+}
+
 // Circle W3S Configuration - HARDCODED TO FALSE FOR PRODUCTION ONLY
 const isMockMode = false;
 
@@ -237,7 +253,7 @@ if (isMockMode) {
 async function initPublisherWallet() {
   if (isMockMode) return;
   try {
-    const response = await fetch(`https://api.circle.com/v1/w3s/wallets/${process.env.PUBLISHER_WALLET_ID}`, {
+    const response = await fetchWithRetry(`https://api.circle.com/v1/w3s/wallets/${process.env.PUBLISHER_WALLET_ID}`, {
       headers: {
         "Authorization": `Bearer ${process.env.CIRCLE_API_KEY}`
       }
@@ -259,7 +275,7 @@ initPublisherWallet();
 async function fetchCirclePublicKey() {
   try {
     console.log(`[Circle W3S] Fetching public key using API key (length: ${process.env.CIRCLE_API_KEY?.length || 0})`);
-    const response = await fetch("https://api.circle.com/v1/w3s/config/entity/publicKey", {
+    const response = await fetchWithRetry("https://api.circle.com/v1/w3s/config/entity/publicKey", {
       headers: {
         "Authorization": `Bearer ${process.env.CIRCLE_API_KEY}`
       }
@@ -326,7 +342,7 @@ async function getWalletUsdcBalance(walletId) {
 
   try {
     console.log(`[Circle W3S] Fetching balance for wallet ${walletId} using API key (length: ${process.env.CIRCLE_API_KEY?.length || 0})`);
-    const response = await fetch(`https://api.circle.com/v1/w3s/wallets/${walletId}/balances`, {
+    const response = await fetchWithRetry(`https://api.circle.com/v1/w3s/wallets/${walletId}/balances`, {
       headers: {
         "Authorization": `Bearer ${process.env.CIRCLE_API_KEY}`
       }
@@ -349,7 +365,7 @@ async function getWalletUsdcBalance(walletId) {
 async function createCircleWallet() {
   const ciphertext = await getEntitySecretCiphertext();
   const idempotencyKey = crypto.randomUUID();
-  const response = await fetch("https://api.circle.com/v1/w3s/developer/wallets", {
+  const response = await fetchWithRetry("https://api.circle.com/v1/w3s/developer/wallets", {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${process.env.CIRCLE_API_KEY}`,
@@ -375,7 +391,7 @@ async function createCircleWallet() {
 async function transferCircleUsdc(sourceWalletId, destAddress, amount) {
   const ciphertext = await getEntitySecretCiphertext();
   const idempotencyKey = crypto.randomUUID();
-  const response = await fetch("https://api.circle.com/v1/w3s/developer/transactions/transfer", {
+  const response = await fetchWithRetry("https://api.circle.com/v1/w3s/developer/transactions/transfer", {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${process.env.CIRCLE_API_KEY}`,
@@ -402,7 +418,7 @@ async function transferCircleUsdc(sourceWalletId, destAddress, amount) {
 // Poller
 async function pollTransactionStatus(transactionId) {
   // Check exactly 1 time to prevent Vercel 10s hobby tier timeout completely
-  const response = await fetch(`https://api.circle.com/v1/w3s/transactions/${transactionId}`, {
+  const response = await fetchWithRetry(`https://api.circle.com/v1/w3s/transactions/${transactionId}`, {
     headers: {
       "Authorization": `Bearer ${process.env.CIRCLE_API_KEY}`
     }
