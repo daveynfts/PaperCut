@@ -1604,4 +1604,37 @@ body {
   margin: 16px 0;
 }
 
+/* ============ PRIVY DIALOG VINTAGE OVERRIDES ============ */
+:root, body, .privy-dialog, #privy-dialog, [data-testid="privy-dialog"] {
+  --privy-font-family: 'Libre Baskerville', Georgia, serif !important;
+  --privy-color-background: #f5eed3 !important; /* var(--paper-bg) */
+  --privy-color-background-2: #eae1c5 !important; /* var(--paper-bg-darker) */
+  --privy-color-background-3: #ebdcb9 !important; /* var(--paper-accent) */
+  --privy-color-foreground: #1a1713 !important; /* var(--ink-black) */
+  --privy-color-foreground-2: #565046 !important; /* var(--ink-grey) */
+  --privy-color-foreground-3: #a69b88 !important; /* var(--ink-light-grey) */
+  --privy-color-foreground-4: #a69b88 !important;
+  --privy-color-accent: #8f2d1b !important; /* var(--ink-red) */
+  --privy-color-accent-light: rgba(143, 45, 27, 0.08) !important; /* var(--ink-red-dim) */
+  --privy-color-accent-dark: #6e2012 !important;
+  --privy-color-error: #8f2d1b !important;
+  --privy-color-error-light: rgba(143, 45, 27, 0.08) !important;
+  --privy-color-success: #2b7034 !important;
+  --privy-color-success-light: rgba(43, 112, 52, 0.08) !important;
+  --privy-border-radius: 0px !important;
+  --privy-border-radius-sm: 0px !important;
+  --privy-border-radius-md: 0px !important;
+  --privy-border-radius-lg: 0px !important;
+  --privy-border-radius-full: 0px !important;
+}
 
+/* Specific Shadow Host overrides to add vintage double border & box-shadow to Privy dialog */
+div[data-testid="privy-dialog"] > div,
+div[id="privy-dialog"] > div,
+.privy-dialog > div {
+  border: 4px solid var(--ink-black) !important;
+  outline: 1px dashed var(--ink-light-grey) !important;
+  outline-offset: -6px !important;
+  box-shadow: 8px 8px 0px var(--ink-black) !important;
+  border-radius: 0px !important;
+}

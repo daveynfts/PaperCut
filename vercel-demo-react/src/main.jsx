@@ -31,6 +31,8 @@ const arcTestnet = {
   },
 };
 
+import logoImg from './assets/logo.png'
+
 // User's custom Privy App ID
 const PRIVY_APP_ID = "cmqhlq3yb009i0ci5vvnjwqnf"; 
 
@@ -44,9 +46,12 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         defaultChain: mainnet,
         loginMethods: ['email', 'wallet'],
         appearance: {
-          theme: 'dark',
-          accentColor: '#e6b84c',
+          theme: 'light',
+          accentColor: '#8f2d1b',
+          logo: logoImg,
           showWalletLoginFirst: false,
+          landingHeader: 'Sign the Guest Register',
+          loginMessage: 'Log in with your cryptographic wallet or electronic mail to unlock dispatch files.',
         },
         embeddedWallets: {
           createOnLogin: 'users-without-wallets',
