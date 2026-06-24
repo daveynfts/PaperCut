@@ -74,7 +74,7 @@ const getInferredBackendUrl = () => {
   
   if (typeof window !== "undefined" && !isLocalHost(window.location.hostname)) {
     // Force relative path to use Vercel's rewrite rule for same-origin routing
-    return "";
+    return "https://paper-cut-apce.vercel.app";
   }
   
   // For local frontend development, default to the live backend URL
