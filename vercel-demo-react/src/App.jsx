@@ -979,7 +979,7 @@ function App() {
     const rawId = articleToDelete.id.replace("local-", "");
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/articles/${rawId}`, {
+      const response = await fetch(`${BACKEND_URL}/api/articles/${rawId}?author=${encodeURIComponent(authorName)}`, {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json"

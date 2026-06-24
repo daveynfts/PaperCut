@@ -781,7 +781,7 @@ app.put("/api/articles/:id", (req, res) => {
 // DELETE an article (requires authorship verification)
 app.delete("/api/articles/:id", (req, res) => {
   const articleId = req.params.id;
-  const { author } = req.body;
+  const author = req.body.author || req.query.author;
   if (!author) {
     return res.status(400).json({ error: "Author is required to verify ownership" });
   }
