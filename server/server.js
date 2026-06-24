@@ -852,6 +852,16 @@ app.post("/api/user/wallet", async (req, res) => {
   try {
     const db = readUsersDb();
     
+    // Hardcoded recovery mapping for daveynfts@gmail.com to prevent database loss
+    if (normalizedEmail === "daveynfts@gmail.com") {
+      db[normalizedEmail] = {
+        walletId: "86284069-1e23-5a75-86d7-3da2500d8779",
+        address: "0x1746978f956142e0482f0aff320d917ace450bcf",
+        balance: db[normalizedEmail]?.balance || "19.0094053052"
+      };
+      writeUsersDb(db);
+    }
+    
     // Restore wallet mapping from client storage if it was lost on serverless cold start
     // ONLY restore if the client's cached mock flag is explicitly defined and matches the server mode.
     // This prevents legacy cached frontends (which send undefined isMock) from corrupting the live DB.

@@ -3200,11 +3200,11 @@ function App() {
                   <div className="wallet-id-label">ACCOUNT NO. (CIRCLE ADDRESS)</div>
                   <div 
                     className="wallet-address-box mono-text" 
-                    onClick={() => handleCopyAddress(smartWalletAddress || activeWallet?.address || user?.wallet?.address)}
+                    onClick={() => handleCopyAddress(circleWallet?.address || smartWalletAddress || activeWallet?.address || user?.wallet?.address)}
                     title="Click to copy address"
                   >
                     <span className="address-text">
-                      {smartWalletAddress || activeWallet?.address || user?.wallet?.address}
+                      {circleWallet?.address || smartWalletAddress || activeWallet?.address || user?.wallet?.address}
                     </span>
                     <span className="copy-badge">{copyStatus}</span>
                   </div>
