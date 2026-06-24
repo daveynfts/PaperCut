@@ -1328,7 +1328,8 @@ function App() {
       </nav>
             {/* MAIN CONTAINER */}
       {isPublisherView ? (
-        !authenticated ? (
+        <div className="portal-scroll-container" style={{ flex: '1', overflowY: 'auto', width: '100%', display: 'flex', flexDirection: 'column' }}>
+          {!authenticated ? (
           <main className="publisher-container" style={{ padding: '32px', maxWidth: '480px', margin: '80px auto', border: '2px solid var(--ink-black)', backgroundColor: 'var(--paper-accent)', boxShadow: '6px 6px 0 var(--ink-black)', textAlign: 'center' }}>
             <div className="greek-key"></div>
             <h2 className="serif-title font-italic" style={{ color: 'var(--ink-red)', fontSize: '24px', marginBottom: '8px' }}>PUBLISHER IDENTITY CHECK</h2>
@@ -1775,9 +1776,11 @@ function App() {
               </div>
             )}
           </main>
-        )
+          )}
+        </div>
       ) : isAdminView ? (
-        !isAdminAuthenticated ? (
+        <div className="portal-scroll-container" style={{ flex: '1', overflowY: 'auto', width: '100%', display: 'flex', flexDirection: 'column' }}>
+          {!isAdminAuthenticated ? (
           <main className="admin-login-container" style={{ padding: '32px', maxWidth: '420px', margin: '80px auto', border: '2px solid var(--ink-black)', backgroundColor: 'var(--paper-accent)', boxShadow: '6px 6px 0 var(--ink-black)', textAlign: 'center' }}>
             <div className="greek-key"></div>
             <h2 className="serif-title font-italic" style={{ color: 'var(--ink-red)', fontSize: '24px', marginBottom: '8px' }}>ADMIN ACCESS CONTROL</h2>
@@ -2015,7 +2018,9 @@ function App() {
           </div>
           <div className="greek-key" style={{ marginTop: '32px' }}></div>
         </main>
-      )) : (
+        )}
+        </div>
+      ) : (
         <main className="main-container">
           {/* LEFT SIDEBAR */}
           <section className="sidebar">
