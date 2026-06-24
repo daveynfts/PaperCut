@@ -1443,13 +1443,12 @@ function App() {
 
   useEffect(() => {
     if (showWalletModal) {
-      const personalAddress = activeWallet?.address || user?.wallet?.address || "";
-      setWithdrawAddress(personalAddress);
+      setWithdrawAddress("");
       setWithdrawAmount("");
       setWithdrawError("");
       setWithdrawSuccess("");
     }
-  }, [showWalletModal, activeWallet, user]);
+  }, [showWalletModal]);
 
   const handleWithdrawSubmit = async (e) => {
     e.preventDefault();
