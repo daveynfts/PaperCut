@@ -4,7 +4,7 @@ const { ethers } = require("ethers");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-require("dotenv").config();
+require("dotenv").config({ path: path.join(__dirname, ".env") });
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -843,7 +843,7 @@ app.delete("/api/articles/:id", (req, res) => {
 
 // Endpoint to get/create user wallet
 app.post("/api/user/wallet", async (req, res) => {
-  const { email, walletId, address } = req.body;
+  const { email, walletId, address, balance: clientBalance } = req.body;
   if (!email) {
     return res.status(400).json({ error: "Email is required" });
   }
@@ -858,7 +858,7 @@ app.post("/api/user/wallet", async (req, res) => {
       db[normalizedEmail] = {
         walletId,
         address,
-        balance: "0.0"
+        balance: clientBalance || "0.0100"
       };
       writeUsersDb(db);
     }

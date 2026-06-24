@@ -67,7 +67,20 @@ const INITIAL_ARTICLES = [
   }
 ];
 
-const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+// Auto-infer backend URL on Vercel deployment if VITE_API_URL is not baked in
+const getInferredBackendUrl = () => {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  if (typeof window !== "undefined" && window.location.hostname.includes("vercel.app")) {
+    if (window.location.hostname.includes("papercut")) {
+      return `https://${window.location.hostname.replace("papercut", "paper-cut-apce")}`;
+    }
+    return "https://paper-cut-apce.vercel.app";
+  }
+  return "http://localhost:4000";
+};
+const BACKEND_URL = getInferredBackendUrl();
 
 const UsdcCoinIcon = ({ size = 24, className = "", style = {} }) => {
   return (
@@ -1415,7 +1428,8 @@ function App() {
           body: JSON.stringify({ 
             email: userEmail,
             walletId: localBackup?.walletId,
-            address: localBackup?.address
+            address: localBackup?.address,
+            balance: localBackup?.balance
           })
         });
         const data = await response.json();
