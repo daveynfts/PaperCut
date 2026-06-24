@@ -1316,8 +1316,8 @@ function App() {
       }
     } catch (err) {
       console.error(err);
-      setCopyStatus("Sync failed.");
-      setTimeout(() => setCopyStatus("Click address to copy"), 1500);
+      setCopyStatus(`Sync error: ${err.message || String(err)}`);
+      setTimeout(() => setCopyStatus("Click address to copy"), 3000);
     }
   };
 
@@ -1358,8 +1358,8 @@ function App() {
       }
     } catch (err) {
       console.error(err);
-      setFaucetError("Faucet is currently offline or unreachable.");
-      setCopyStatus("Faucet offline.");
+      setFaucetError(`Faucet error: ${err.message || String(err)}`);
+      setCopyStatus("Faucet failed.");
       setTimeout(() => setCopyStatus("Click address to copy"), 3000);
     } finally {
       setFaucetLoading(false);
@@ -1468,7 +1468,7 @@ function App() {
       }
     } catch (err) {
       console.error("Error fetching Circle wallet:", err);
-      setError("Backend server connection failed. Please check your network or Vercel deployment.");
+      setError(`Error: ${err.message || String(err)} (Backend URL: ${BACKEND_URL || "Relative /api"})`);
     } finally {
       setIsLoadingWallet(false);
     }
