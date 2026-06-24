@@ -72,11 +72,6 @@ const getInferredBackendUrl = () => {
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
-  if (typeof window !== "undefined" && window.location.hostname.includes("vercel.app")) {
-    if (window.location.hostname.includes("papercut")) {
-      return `https://${window.location.hostname.replace("papercut", "paper-cut-apce")}`;
-    }
-  }
   return "https://paper-cut-apce.vercel.app";
 };
 const BACKEND_URL = getInferredBackendUrl();
