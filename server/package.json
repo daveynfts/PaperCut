@@ -1,0 +1,12 @@
+{
+  "name": "papercut-backend",
+  "version": "1.0.0",
+  "main": "server.js",
+  "dependencies": {
+    "@upstash/redis": "^1.38.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.1",
+    "express": "^4.19.2"
+  }
+}
