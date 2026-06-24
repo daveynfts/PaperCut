@@ -1022,6 +1022,10 @@ body {
 
 /* Responsive Wallet layout */
 @media (max-width: 680px) {
+  .vintage-wallet-modal {
+    max-height: 90vh;
+    overflow-y: auto;
+  }
   .vintage-wallet-container {
     flex-direction: column;
     min-height: auto;
