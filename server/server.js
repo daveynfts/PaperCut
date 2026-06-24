@@ -19,63 +19,7 @@ let PUBLISHER_WALLET = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"; // Hardhat 
 const ARC_USDC_ADDRESS = "0x0000000000000000000000000000000000001010"; // Mock USDC
 const ARC_CHAIN_ID = 54321; // Mock Arc ChainID
 
-// Mock Article Database
-const articles = [
-  {
-    id: "0",
-    title: "Exploring the Antigravity of Decentralized Liquidity",
-    author: "Hayden Adams",
-    snippet: "How automated market makers and concentrated liquidity protocols are redefining financial architecture without intermediaries...",
-    content: "How automated market makers and concentrated liquidity protocols are redefining financial architecture without intermediaries. Traditional financial plumbing relies on order books managed by centralized institutions. By utilizing constant product formulas and on-chain liquidity pools, Uniswap proved that trustless market-making is not only possible but highly efficient. Concentrated liquidity further refines this by allowing providers to allocate capital to specific price ranges, maximizing efficiency and cementing AMMs as the foundational substrate of decentralized finance.",
-    price: "0.05",
-    payee: PUBLISHER_WALLET
-  },
-  {
-    id: "1",
-    title: "The Promise and Challenges of Crypto-Pluralism",
-    author: "Vitalik Buterin",
-    snippet: "Pluralism in the digital age requires decentralized governance models that respect individual sovereignty while fostering coordination...",
-    content: "Pluralism in the digital age requires decentralized governance models that respect individual sovereignty while fostering coordination. Quadratic voting, retrofunding, and decentralized identity systems represent the first wave of tools enabling communities to steward public goods without relying on centralized bureaucracies. We must refine these mechanisms to ensure they are robust against collusion, Sybil attacks, and platform capture, cementing a truly democratic substrate for the internet.",
-    price: "0.08",
-    payee: PUBLISHER_WALLET
-  },
-  {
-    id: "2",
-    title: "The Rise of the Startup Society and Cloud First Cities",
-    author: "Balaji Srinivasan",
-    snippet: "Physical nations are slow, bureaucratic, and bound to geographical legacy. The startup society starts cloud-first, building digital...",
-    content: "Physical nations are slow, bureaucratic, and bound to geographical legacy. The startup society starts cloud-first, building digital consensus, crowdfunding land, and negotiating diplomatic recognition dynamically. By leveraging public block explorers, cryptographic citizenship, and smart-contract law, we can run experiments in governance at cloud speeds, offering alternative jurisdictions for people who value innovation and voluntary association.",
-    price: "0.10",
-    payee: PUBLISHER_WALLET
-  },
-  {
-    id: "3",
-    title: "Ultra-Sound Money: Analysing the Deflationary Mechanics of EIP-1559",
-    author: "Bankless",
-    snippet: "Is Ethereum truly ultra-sound? Let's dissect the base fee burn mechanism and how network transaction fee demand impacts ether supply...",
-    content: "Is Ethereum truly ultra-sound? Let's dissect the base fee burn mechanism and how network transaction fee demand impacts ether supply. Under EIP-1559, a portion of every transaction fee is permanently removed from circulation. When network activity exceeds threshold limits, the burn rate surpasses issuance, resulting in net-deflationary supply dynamics. This fundamentally transforms ether from a pure utility token into a scarce, productive store of value.",
-    price: "0.04",
-    payee: PUBLISHER_WALLET
-  },
-  {
-    id: "4",
-    title: "Read, Write, Own: How Web3 Restores the Original Vision of the Internet",
-    author: "Chris Dixon",
-    snippet: "Web1 was read-only, dominated by open protocols. Web2 added write capabilities, but centralized the power in corporate platforms. Web3...",
-    content: "Web1 was read-only, dominated by open protocols. Web2 added write capabilities, but centralized the power in corporate platforms. Web3 introduces ownership. By giving users and builders direct ownership of the networks they use through tokens, we align incentives, reduce platform rent-seeking, and reignite the innovative explosion of the early internet. This isn't just about finance; it's about rebuilding digital democracy.",
-    price: "0.06",
-    payee: PUBLISHER_WALLET
-  },
-  {
-    id: "5",
-    title: "L1 vs L2: The Geopolitics of Blockchain Scaling Solutions",
-    author: "Haseeb Qureshi",
-    snippet: "Will Ethereum Layer 2s cannibalize the base chain? We examine the economic flywheels of rollups, blob space fees, and security...",
-    content: "Will Ethereum Layer 2s cannibalize the base chain? We examine the economic flywheels of rollups, blob space fees, and security. As Layer 2 execution becomes dirt cheap, value accrual moves to the settlement layer through L1 blob consumption. The geopolitics of blockchains suggest a future where L1s act as global supreme courts, and L2s act as high-speed commercial cities. This balance is critical to prevent fragmentation and secure long-term decentralization.",
-    price: "0.05",
-    payee: PUBLISHER_WALLET
-  }
-];
+// Mock Article Database is now stored in articles.json and managed dynamically
 
 // Local JSON Database for mappings (email -> walletId, address, balance)
 const USERS_DB_PATH = process.env.VERCEL
@@ -195,6 +139,53 @@ function writeAdminIpsDb(db) {
     fs.writeFileSync(ADMIN_IPS_DB_PATH, JSON.stringify(db, null, 2));
   } catch (err) {
     console.error("Failed to write admin IPs DB:", err);
+  }
+}
+
+
+// Local JSON Database for articles
+const ARTICLES_DB_PATH = process.env.VERCEL
+  ? "/tmp/articles.json"
+  : path.join(__dirname, "articles.json");
+
+function readArticlesDb() {
+  try {
+    if (!fs.existsSync(ARTICLES_DB_PATH)) {
+      const seedPath = path.join(__dirname, "articles.json");
+      if (fs.existsSync(seedPath)) {
+        try {
+          const seedData = fs.readFileSync(seedPath, "utf8");
+          fs.writeFileSync(ARTICLES_DB_PATH, seedData);
+        } catch (err) {
+          fs.writeFileSync(ARTICLES_DB_PATH, JSON.stringify([]));
+        }
+      } else {
+        fs.writeFileSync(ARTICLES_DB_PATH, JSON.stringify([]));
+      }
+    }
+    const data = fs.readFileSync(ARTICLES_DB_PATH, "utf8");
+    return JSON.parse(data);
+  } catch (err) {
+    console.error("Corrupted articles.json, re-initializing:", err);
+    const seedPath = path.join(__dirname, "articles.json");
+    let fallback = [];
+    if (fs.existsSync(seedPath)) {
+      try {
+        fallback = JSON.parse(fs.readFileSync(seedPath, "utf8"));
+      } catch (e) {}
+    }
+    try {
+      fs.writeFileSync(ARTICLES_DB_PATH, JSON.stringify(fallback, null, 2));
+    } catch (e) {}
+    return fallback;
+  }
+}
+
+function writeArticlesDb(db) {
+  try {
+    fs.writeFileSync(ARTICLES_DB_PATH, JSON.stringify(db, null, 2));
+  } catch (err) {
+    console.error("Failed to write articles DB:", err);
   }
 }
 
@@ -421,25 +412,66 @@ function verifyEip3009(authData) {
 
 // Get all articles (Metadatas and Snippets only)
 app.get("/api/articles", (req, res) => {
-  const pubDb = readPublishersDb();
-  const metaArticles = articles.map(({ id, title, author, snippet, price, payee }) => {
-    // Find if author exists in publishers database by name (case-insensitive)
-    const publisherKey = Object.keys(pubDb).find(
-      key => pubDb[key].name.toLowerCase() === author.toLowerCase()
-    );
-    const verified = publisherKey ? pubDb[publisherKey].verified : false;
+  try {
+    const pubDb = readPublishersDb();
+    const articles = readArticlesDb();
+    const metaArticles = articles.map(({ id, title, author, snippet, price, payee }) => {
+      // Find if author exists in publishers database by name (case-insensitive)
+      const publisherKey = Object.keys(pubDb).find(
+        key => pubDb[key].name.toLowerCase() === author.toLowerCase()
+      );
+      const verified = publisherKey ? pubDb[publisherKey].verified : false;
+      
+      return {
+        id,
+        title,
+        author,
+        snippet,
+        price,
+        payee,
+        verified
+      };
+    });
+    res.json(metaArticles);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST create a new article (from verified publishers)
+app.post("/api/articles", (req, res) => {
+  const { title, content, price, author, payee } = req.body;
+  if (!title || !content || !price || !author || !payee) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  try {
+    const db = readArticlesDb();
     
-    return {
-      id,
+    // Generate new ID
+    const newId = String(db.length);
+    
+    // Create snippet (first sentence or first 120 chars)
+    const firstSentence = content.split(/[.!?]/)[0];
+    const snippet = firstSentence.length > 120 ? firstSentence.substring(0, 117) + "..." : firstSentence + "...";
+    
+    const newArticle = {
+      id: newId,
       title,
       author,
       snippet,
-      price,
-      payee,
-      verified
+      content,
+      price: String(parseFloat(price).toFixed(2)),
+      payee
     };
-  });
-  res.json(metaArticles);
+    
+    db.push(newArticle);
+    writeArticlesDb(db);
+    
+    res.json({ success: true, article: newArticle });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // GET all publishers
@@ -590,6 +622,7 @@ app.delete("/api/publishers/:email", (req, res) => {
 // Get premium article with x402 Paywall logic (Keep for extension backwards compatibility)
 app.get("/api/articles/:id", (req, res) => {
   const articleId = req.params.id;
+  const articles = readArticlesDb();
   const article = articles.find((a) => a.id === articleId);
 
   if (!article) {
@@ -814,6 +847,7 @@ app.post("/api/articles/unlock", async (req, res) => {
     return res.status(400).json({ error: "Email and articleId are required" });
   }
 
+  const articles = readArticlesDb();
   const article = articles.find(a => a.id === articleId);
   if (!article) {
     return res.status(404).json({ error: "Article not found" });

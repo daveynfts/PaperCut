@@ -291,6 +291,103 @@ function App() {
   const [pubClaiming, setPubClaiming] = useState(false);
   const [pubClaimSuccess, setPubClaimSuccess] = useState("");
 
+  const [publisherTab, setPublisherTab] = useState("ledger");
+  const [newArticleTitle, setNewArticleTitle] = useState("");
+  const [newArticlePrice, setNewArticlePrice] = useState("0.05");
+  const [newArticleContent, setNewArticleContent] = useState("");
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishStatusMsg, setPublishStatusMsg] = useState("");
+
+  const parseMarkdownToHtml = (text) => {
+    if (!text) return "";
+    let html = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    
+    html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+    html = html.replace(/\*(.*?)\*/g, "<em>$1</em>");
+    html = html.replace(/`(.*?)`/g, "<code class=\"inline-code\">$1</code>");
+    html = html.replace(/^##\s+(.*?)$/gm, "<h2>$1</h2>");
+    html = html.replace(/^###\s+(.*?)$/gm, "<h3>$1</h3>");
+    
+    const lines = html.split("\n");
+    const parsedLines = lines.map(line => {
+      if (line.startsWith("<h2>") || line.startsWith("<h3>")) {
+        return line;
+      }
+      return line.trim() === "" ? "<br/>" : `<p>${line}</p>`;
+    });
+    
+    return parsedLines.join("");
+  };
+
+  const insertMarkdown = (syntax) => {
+    const textarea = document.getElementById("dispatch-editor-textarea");
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = newArticleContent;
+    const selectedText = text.substring(start, end);
+    let replacement = "";
+    if (syntax === "h2") {
+      replacement = `\n## ${selectedText || "Heading 2"}\n`;
+    } else if (syntax === "h3") {
+      replacement = `\n### ${selectedText || "Heading 3"}\n`;
+    } else if (syntax === "bold") {
+      replacement = `**${selectedText || "bold text"}**`;
+    } else if (syntax === "italic") {
+      replacement = `*${selectedText || "italic text"}*`;
+    } else if (syntax === "code") {
+      replacement = `\`${selectedText || "code text"}\``;
+    }
+    const newText = text.substring(0, start) + replacement + text.substring(end);
+    setNewArticleContent(newText);
+    
+    setTimeout(() => {
+      textarea.focus();
+      const newCursorPos = start + replacement.length;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }, 0);
+  };
+
+  const fetchFullArticleContent = async (articleId, priceStr) => {
+    try {
+      const userEmail = user?.email?.address || user?.id || "anonymous-user";
+      const unlockedInfo = unlockedArticles[articleId];
+      if (!unlockedInfo) return;
+
+      const expectedAmount = Math.round(parseFloat(priceStr) * 1000000);
+      const payload = {
+        signature: "circle-authorized",
+        value: expectedAmount,
+        from: userEmail
+      };
+      const authHeader = "x402 " + btoa(JSON.stringify(payload));
+
+      const response = await fetch(`${BACKEND_URL}/api/articles/${articleId}`, {
+        headers: {
+          "Authorization": authHeader
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.content) {
+          setArticles(prev => prev.map(art => art.id === articleId ? { ...art, content: data.content } : art));
+          setSelectedArticle(prev => prev && prev.id === articleId ? { ...prev, content: data.content } : prev);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch full article content:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedArticle && unlockedArticles[selectedArticle.id] && !selectedArticle.content) {
+      fetchFullArticleContent(selectedArticle.id, selectedArticle.price);
+    }
+  }, [selectedArticle, unlockedArticles]);
+
   const fetchArticles = async () => {
     try {
       const response = await fetch(`${BACKEND_URL}/api/articles`);
@@ -403,6 +500,59 @@ function App() {
       localStorage.setItem(`papercut_pub_claimed_${userEmail}`, finalClaimed.toString());
     }
   }, [isPublisherView, userEmail, publishers, articles, unlockedArticles]);
+
+  const handlePublishArticleSubmit = async (e) => {
+    e.preventDefault();
+    if (!newArticleTitle || !newArticleContent || !newArticlePrice) {
+      setPublishStatusMsg("Please fill in all fields.");
+      return;
+    }
+    
+    setIsPublishing(true);
+    setPublishStatusMsg("Publishing dispatch to database...");
+    
+    const publisherRecord = publishers[user?.email?.address || ""];
+    const authorName = publisherRecord ? publisherRecord.name : "Anonymous Publisher";
+    const payoutWallet = publisherRecord ? publisherRecord.walletAddress : (smartWalletAddress || activeWallet?.address || user?.wallet?.address || "");
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/articles`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          title: newArticleTitle,
+          content: newArticleContent,
+          price: newArticlePrice,
+          author: authorName,
+          payee: payoutWallet
+        })
+      });
+      
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to publish article.");
+      }
+      
+      setPublishStatusMsg("Article published successfully!");
+      setNewArticleTitle("");
+      setNewArticleContent("");
+      
+      await fetchArticles();
+      
+      setTimeout(() => {
+        setPublisherTab("ledger");
+        setPublishStatusMsg("");
+      }, 1500);
+      
+    } catch (err) {
+      console.error("Publish article error:", err);
+      setPublishStatusMsg(`Error: ${err.message}`);
+    } finally {
+      setIsPublishing(false);
+    }
+  };
 
   const handleApplyPublisherSubmit = async (e) => {
     e.preventDefault();
@@ -1176,78 +1326,218 @@ function App() {
         ) : (
           <main className="publisher-container" style={{ padding: '32px', maxWidth: '800px', margin: '40px auto', border: '2px solid var(--ink-black)', backgroundColor: 'var(--paper-bg)', boxShadow: '6px 6px 0 var(--ink-black)' }}>
             <div className="greek-key"></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--ink-black)', paddingBottom: '12px', marginBottom: '24px' }}>
+            
+            {/* Header section */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--ink-black)', paddingBottom: '12px', marginBottom: '20px' }}>
               <div>
-                <h2 className="serif-title font-italic" style={{ color: 'var(--ink-black)', fontSize: '32px', margin: 0 }}>Publisher Ledger</h2>
+                <h2 className="serif-title font-italic" style={{ color: 'var(--ink-black)', fontSize: '32px', margin: 0 }}>Publisher Portal</h2>
                 <p className="mono-text text-muted" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '4px 0 0 0' }}>
-                  Accredited Author Account
+                  Accredited Author Workspace
                 </p>
               </div>
               <span className="rubber-stamp stamp-green" style={{ transform: 'rotate(2deg)' }}>✔ ACCREDITED</span>
             </div>
 
-            <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', marginBottom: '24px' }}>
-              <div style={{ flex: '1 1 300px', border: '1px solid var(--ink-black)', padding: '16px', background: 'var(--paper-accent)' }}>
-                <div className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-grey)', marginBottom: '12px' }}>AUTHOR PROFILE</div>
-                <div style={{ fontFamily: 'var(--font-serif)', fontSize: '16px', fontWeight: 'bold', color: 'var(--ink-black)' }}>{publishers[user?.email?.address || ""].name}</div>
-                <div className="mono-text" style={{ fontSize: '11px', color: 'var(--ink-grey)', margin: '4px 0' }}>Beat: {publishers[user?.email?.address || ""].category}</div>
-                <div className="mono-text" style={{ fontSize: '11px', color: 'var(--ink-red)' }}>Domain: {publishers[user?.email?.address || ""].domain}</div>
-              </div>
-
-              <div style={{ flex: '1 1 300px', border: '1px solid var(--ink-black)', padding: '16px', background: 'var(--paper-bg)' }}>
-                <div className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-grey)', marginBottom: '8px' }}>REVENUE BALANCE</div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <span className="mono-text" style={{ fontSize: '11px', color: 'var(--ink-grey)' }}>Total Earned:</span>
-                  <span className="mono-text" style={{ fontSize: '12px', fontWeight: 'bold' }}>{pubEarnings.toFixed(4)} USDC</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <span className="mono-text" style={{ fontSize: '11px', color: 'var(--ink-grey)' }}>Total Claimed:</span>
-                  <span className="mono-text" style={{ fontSize: '12px', color: 'var(--ink-grey)' }}>{pubClaimed.toFixed(4)} USDC</span>
-                </div>
-                <div style={{ borderTop: '1px dashed var(--ink-light-grey)', margin: '8px 0', paddingTop: '8px', display: 'flex', justifyContent: 'space-between' }}>
-                  <span className="mono-text" style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--ink-black)' }}>Available to Claim:</span>
-                  <span className="mono-text" style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--ink-red)' }}>{(pubEarnings - pubClaimed).toFixed(4)} USDC</span>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+            {/* Navigation Tabs */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '2px solid var(--ink-black)' }}>
               <button 
-                className="btn" 
-                disabled={pubEarnings - pubClaimed <= 0 || pubClaiming} 
-                onClick={handlePublisherClaim} 
-                style={{ padding: '12px 32px', fontSize: '13px', width: '100%', letterSpacing: '0.05em' }}
+                onClick={() => setPublisherTab("ledger")} 
+                style={{
+                  padding: '8px 16px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                  cursor: 'pointer',
+                  border: 'none',
+                  borderBottom: publisherTab === "ledger" ? '3px solid var(--ink-red)' : '3px solid transparent',
+                  background: 'none',
+                  color: publisherTab === "ledger" ? 'var(--ink-black)' : 'var(--ink-grey)',
+                  fontWeight: 'bold',
+                  outline: 'none'
+                }}
               >
-                {pubClaiming ? "EXECUTING SECURE CLAIM..." : pubEarnings - pubClaimed <= 0 ? "NO REVENUE AVAILABLE TO CLAIM" : "CLAIM REVENUE ON-CHAIN"}
+                LEDGER & REVENUE
               </button>
-              {pubClaimSuccess && (
-                <div className="mono-text" style={{ marginTop: '16px', fontSize: '11px', color: 'green', border: '1px dashed green', padding: '10px', background: 'rgba(0,128,0,0.03)', textAlign: 'left', lineHeight: '1.4' }}>
-                  {pubClaimSuccess}
-                </div>
-              )}
+              <button 
+                onClick={() => setPublisherTab("write")} 
+                style={{
+                  padding: '8px 16px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                  cursor: 'pointer',
+                  border: 'none',
+                  borderBottom: publisherTab === "write" ? '3px solid var(--ink-red)' : '3px solid transparent',
+                  background: 'none',
+                  color: publisherTab === "write" ? 'var(--ink-black)' : 'var(--ink-grey)',
+                  fontWeight: 'bold',
+                  outline: 'none'
+                }}
+              >
+                ✎ WRITE DISPATCH
+              </button>
             </div>
 
-            <div style={{ borderTop: '1px solid var(--ink-black)', paddingTop: '16px' }}>
-              <div className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-grey)', marginBottom: '12px', textTransform: 'uppercase' }}>Induction & Payout Registry Information</div>
-              <table style={{ width: '100%', fontSize: '12px', fontFamily: 'var(--font-serif)', borderCollapse: 'collapse', textAlign: 'left' }}>
-                <tbody>
-                  <tr style={{ borderBottom: '1px solid var(--ink-light-grey)' }}>
-                    <td style={{ padding: '6px 0', color: 'var(--ink-grey)' }}>Induction Wallet Address</td>
-                    <td style={{ padding: '6px 0', textAlign: 'right', fontFamily: 'var(--font-mono)' }} title={publishers[user?.email?.address || ""].walletAddress}>
-                      {publishers[user?.email?.address || ""].walletAddress}
-                    </td>
-                  </tr>
-                  <tr style={{ borderBottom: '1px solid var(--ink-light-grey)' }}>
-                    <td style={{ padding: '6px 0', color: 'var(--ink-grey)' }}>EIP-3009 Gas-Free Claiming</td>
-                    <td style={{ padding: '6px 0', textAlign: 'right', color: 'var(--ink-red)', fontFamily: 'var(--font-mono)' }}>SUPPORTED</td>
-                  </tr>
-                  <tr>
-                    <td style={{ padding: '6px 0', color: 'var(--ink-grey)' }}>Settlement Blockchain</td>
-                    <td style={{ padding: '6px 0', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>ARC TESTNET</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            {publisherTab === "ledger" ? (
+              <>
+                <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', marginBottom: '24px' }}>
+                  <div style={{ flex: '1 1 300px', border: '1px solid var(--ink-black)', padding: '16px', background: 'var(--paper-accent)' }}>
+                    <div className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-grey)', marginBottom: '12px' }}>AUTHOR PROFILE</div>
+                    <div style={{ fontFamily: 'var(--font-serif)', fontSize: '16px', fontWeight: 'bold', color: 'var(--ink-black)' }}>{publishers[user?.email?.address || ""].name}</div>
+                    <div className="mono-text" style={{ fontSize: '11px', color: 'var(--ink-grey)', margin: '4px 0' }}>Beat: {publishers[user?.email?.address || ""].category}</div>
+                    <div className="mono-text" style={{ fontSize: '11px', color: 'var(--ink-red)' }}>Domain: {publishers[user?.email?.address || ""].domain}</div>
+                  </div>
+
+                  <div style={{ flex: '1 1 300px', border: '1px solid var(--ink-black)', padding: '16px', background: 'var(--paper-bg)' }}>
+                    <div className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-grey)', marginBottom: '8px' }}>REVENUE BALANCE</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span className="mono-text" style={{ fontSize: '11px', color: 'var(--ink-grey)' }}>Total Earned:</span>
+                      <span className="mono-text" style={{ fontSize: '12px', fontWeight: 'bold' }}>{pubEarnings.toFixed(4)} USDC</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span className="mono-text" style={{ fontSize: '11px', color: 'var(--ink-grey)' }}>Total Claimed:</span>
+                      <span className="mono-text" style={{ fontSize: '12px', color: 'var(--ink-grey)' }}>{pubClaimed.toFixed(4)} USDC</span>
+                    </div>
+                    <div style={{ borderTop: '1px dashed var(--ink-light-grey)', margin: '8px 0', paddingTop: '8px', display: 'flex', justifyContent: 'space-between' }}>
+                      <span className="mono-text" style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--ink-black)' }}>Available to Claim:</span>
+                      <span className="mono-text" style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--ink-red)' }}>{(pubEarnings - pubClaimed).toFixed(4)} USDC</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                  <button 
+                    className="btn" 
+                    disabled={pubEarnings - pubClaimed <= 0 || pubClaiming} 
+                    onClick={handlePublisherClaim} 
+                    style={{ padding: '12px 32px', fontSize: '13px', width: '100%', letterSpacing: '0.05em' }}
+                  >
+                    {pubClaiming ? "EXECUTING SECURE CLAIM..." : pubEarnings - pubClaimed <= 0 ? "NO REVENUE AVAILABLE TO CLAIM" : "CLAIM REVENUE ON-CHAIN"}
+                  </button>
+                  {pubClaimSuccess && (
+                    <div className="mono-text" style={{ marginTop: '16px', fontSize: '11px', color: 'green', border: '1px dashed green', padding: '10px', background: 'rgba(0,128,0,0.03)', textAlign: 'left', lineHeight: '1.4' }}>
+                      {pubClaimSuccess}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ borderTop: '1px solid var(--ink-black)', paddingTop: '16px' }}>
+                  <div className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-grey)', marginBottom: '12px', textTransform: 'uppercase' }}>Induction & Payout Registry Information</div>
+                  <table style={{ width: '100%', fontSize: '12px', fontFamily: 'var(--font-serif)', borderCollapse: 'collapse', textAlign: 'left' }}>
+                    <tbody>
+                      <tr style={{ borderBottom: '1px solid var(--ink-light-grey)' }}>
+                        <td style={{ padding: '6px 0', color: 'var(--ink-grey)' }}>Induction Wallet Address</td>
+                        <td style={{ padding: '6px 0', textAlign: 'right', fontFamily: 'var(--font-mono)' }} title={publishers[user?.email?.address || ""].walletAddress}>
+                          {publishers[user?.email?.address || ""].walletAddress}
+                        </td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid var(--ink-light-grey)' }}>
+                        <td style={{ padding: '6px 0', color: 'var(--ink-grey)' }}>EIP-3009 Gas-Free Claiming</td>
+                        <td style={{ padding: '6px 0', textAlign: 'right', color: 'var(--ink-red)', fontFamily: 'var(--font-mono)' }}>SUPPORTED</td>
+                      </tr>
+                      <tr>
+                        <td style={{ padding: '6px 0', color: 'var(--ink-grey)' }}>Settlement Blockchain</td>
+                        <td style={{ padding: '6px 0', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>ARC TESTNET</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <div className="dispatch-writer-container">
+                <form onSubmit={handlePublishArticleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div className="writer-field-group">
+                    <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>1. DISPATCH TITLE</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={newArticleTitle}
+                      onChange={(e) => setNewArticleTitle(e.target.value)}
+                      placeholder="e.g. Decentralized Governance in Autonomous Agent Networks" 
+                      className="writer-input"
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div className="writer-field-group">
+                      <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>2. READ TARIFF (USDC)</label>
+                      <input 
+                        type="number" 
+                        step="0.01" 
+                        min="0.01" 
+                        max="10.00"
+                        required 
+                        value={newArticlePrice}
+                        onChange={(e) => setNewArticlePrice(e.target.value)}
+                        className="writer-input"
+                        style={{ fontFamily: 'var(--font-mono)' }}
+                      />
+                    </div>
+                    <div className="writer-field-group">
+                      <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>3. RECIPIENT WALLET (LOCKED)</label>
+                      <input 
+                        type="text" 
+                        disabled
+                        value={publishers[user?.email?.address || ""].walletAddress} 
+                        className="writer-input"
+                        style={{ fontFamily: 'var(--font-mono)', backgroundColor: 'var(--paper-bg-darker)', color: 'var(--ink-grey)', border: '1px solid var(--ink-light-grey)' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="writer-field-group">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                      <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>4. CONTENT (MARKDOWN SUPPORTED)</label>
+                      <span className="mono-text" style={{ fontSize: '9px', color: 'var(--ink-grey)' }}>Formatted live in preview</span>
+                    </div>
+
+                    {/* Editor & Preview layout */}
+                    <div className="editor-layout">
+                      <div>
+                        {/* Formatting Toolbar */}
+                        <div className="format-toolbar">
+                          <button type="button" className="btn-format" onClick={() => insertMarkdown("h2")}>H2</button>
+                          <button type="button" className="btn-format" onClick={() => insertMarkdown("h3")}>H3</button>
+                          <button type="button" className="btn-format" onClick={() => insertMarkdown("bold")}>B</button>
+                          <button type="button" className="btn-format" onClick={() => insertMarkdown("italic")}>I</button>
+                          <button type="button" className="btn-format" onClick={() => insertMarkdown("code")}>&lt;&gt;</button>
+                        </div>
+                        <textarea
+                          id="dispatch-editor-textarea"
+                          required
+                          value={newArticleContent}
+                          onChange={(e) => setNewArticleContent(e.target.value)}
+                          placeholder="Write your dispatch article content here... Use the markdown tools above to format headings, bold/italic text, and inline code."
+                          className="writer-textarea"
+                        />
+                      </div>
+                      
+                      <div className="preview-pane">
+                        <div className="preview-pane-title">LIVE PREVIEW</div>
+                        <div 
+                          className="content-text" 
+                          style={{ maxHeight: '250px', overflowY: 'auto', textJustify: 'auto', columnCount: '1' }}
+                          dangerouslySetInnerHTML={{ __html: parseMarkdownToHtml(newArticleContent) || "<p style='color: var(--ink-grey); font-style: italic;'>No content written yet. Start typing to see layout preview.</p>" }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <button 
+                    type="submit" 
+                    className="btn" 
+                    disabled={isPublishing}
+                    style={{ padding: '12px 0', marginTop: '8px', letterSpacing: '0.06em', fontSize: '13px', width: '100%' }}
+                  >
+                    {isPublishing ? "PUBLISHING DISPATCH..." : "PUBLISH DISPATCH ON-CHAIN"}
+                  </button>
+
+                  {publishStatusMsg && (
+                    <div className="mono-text" style={{ marginTop: '8px', fontSize: '11px', color: 'var(--ink-red)', textAlign: 'center', border: '1px dashed var(--ink-red)', padding: '8px', background: 'rgba(186,45,45,0.03)' }}>
+                      {publishStatusMsg}
+                    </div>
+                  )}
+                </form>
+              </div>
+            )}
           </main>
         )
       ) : isAdminView ? (
@@ -1726,9 +2016,10 @@ function App() {
 
                 <div className="article-body">
                   {unlockedArticles[selectedArticle.id] ? (
-                    <div className="content-text premium-unlocked">
-                      {selectedArticle.content}
-                    </div>
+                    <div 
+                      className="content-text premium-unlocked"
+                      dangerouslySetInnerHTML={{ __html: parseMarkdownToHtml(selectedArticle.content) }}
+                    />
                   ) : (
                     <>
                       <div className="content-text">
