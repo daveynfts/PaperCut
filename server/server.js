@@ -1033,6 +1033,9 @@ app.post("/api/user/faucet", async (req, res) => {
     } else {
       const txId = await transferCircleUsdc(process.env.PUBLISHER_WALLET_ID, userAddress, amount);
       const result = await pollTransactionStatus(txId);
+      if (result.status === "FAILED" || result.status === "DENIED") {
+        throw new Error(`Circle transaction failed with status: ${result.status}`);
+      }
       txHash = result.txHash;
       db[normalizedEmail].lastFaucetTime = now;
     }
@@ -1109,6 +1112,9 @@ app.post("/api/articles/unlock", async (req, res) => {
     } else {
       const txId = await transferCircleUsdc(userWalletId, PUBLISHER_WALLET, cost);
       const result = await pollTransactionStatus(txId);
+      if (result.status === "FAILED" || result.status === "DENIED") {
+        throw new Error(`Circle transaction failed with status: ${result.status}`);
+      }
       txHash = result.txHash;
     }
 
@@ -1178,6 +1184,9 @@ app.post("/api/publishers/claim", async (req, res) => {
       const txId = await transferCircleUsdc(process.env.PUBLISHER_WALLET_ID, publisher.walletAddress, claimable);
       // Wait for completion 1 time using our updated 1-check poller
       const result = await pollTransactionStatus(txId);
+      if (result.status === "FAILED" || result.status === "DENIED") {
+        throw new Error(`Circle transaction failed with status: ${result.status}`);
+      }
       txHash = result.txHash;
     }
 
@@ -1262,6 +1271,9 @@ app.post("/api/user/withdraw", async (req, res) => {
     } else {
       const txId = await transferCircleUsdc(userWalletId, destinationAddress, withdrawAmount);
       const result = await pollTransactionStatus(txId);
+      if (result.status === "FAILED" || result.status === "DENIED") {
+        throw new Error(`Circle transaction failed with status: ${result.status}`);
+      }
       txHash = result.txHash;
     }
 
