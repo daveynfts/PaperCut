@@ -40,5 +40,12 @@
     "walletAddress": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
     "verified": true,
     "category": "On-Chain Micropayments & L2 Scaling"
+  },
+  "daveynfts@gmail.com": {
+    "name": "DaveyNFTs",
+    "domain": "daveynfts.com",
+    "walletAddress": "0x1746978f956142e0482f0aff320d917ace450bcf",
+    "verified": true,
+    "category": "Web3 Infrastructures & Protocols"
   }
 }
