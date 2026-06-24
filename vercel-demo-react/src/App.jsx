@@ -76,9 +76,8 @@ const getInferredBackendUrl = () => {
     if (window.location.hostname.includes("papercut")) {
       return `https://${window.location.hostname.replace("papercut", "paper-cut-apce")}`;
     }
-    return "https://paper-cut-apce.vercel.app";
   }
-  return "http://localhost:4000";
+  return "https://paper-cut-apce.vercel.app";
 };
 const BACKEND_URL = getInferredBackendUrl();
 
@@ -1446,7 +1445,7 @@ function App() {
         }
       } catch (err) {
         console.error("Error fetching Circle wallet:", err);
-        setError("Backend server connection failed. Make sure port 4000 is running.");
+        setError("Backend server connection failed. Please check your network or Vercel deployment.");
       } finally {
         setIsLoadingWallet(false);
       }
