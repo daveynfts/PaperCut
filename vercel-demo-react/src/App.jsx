@@ -2032,6 +2032,36 @@ function App() {
                       {pubClaimSuccess}
                     </div>
                   )}
+
+                  {getPublisherRecord(user?.email?.address || "")?.claimHistory?.length > 0 && (
+                    <div style={{ marginTop: '20px', borderTop: '1px solid var(--ink-light-grey)', paddingTop: '16px' }}>
+                      <div className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-grey)', marginBottom: '8px', textTransform: 'uppercase' }}>Recent Claims History</div>
+                      <div style={{ border: '1px solid var(--ink-light-grey)', maxHeight: '150px', overflowY: 'auto' }}>
+                        <table style={{ width: '100%', fontSize: '10px', fontFamily: 'var(--font-mono)', borderCollapse: 'collapse', textAlign: 'left' }}>
+                          <thead style={{ position: 'sticky', top: 0, background: 'var(--paper-bg)', borderBottom: '1px solid var(--ink-light-grey)' }}>
+                            <tr>
+                              <th style={{ padding: '6px' }}>TIME</th>
+                              <th style={{ padding: '6px' }}>AMOUNT</th>
+                              <th style={{ padding: '6px' }}>TX HASH</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {getPublisherRecord(user?.email?.address || "").claimHistory.map((claim, idx) => (
+                              <tr key={idx} style={{ borderBottom: '1px solid var(--ink-light-grey)' }}>
+                                <td style={{ padding: '6px' }}>{new Date(claim.timestamp).toLocaleString()}</td>
+                                <td style={{ padding: '6px', color: 'green' }}>+{claim.amount} USDC</td>
+                                <td style={{ padding: '6px' }}>
+                                  <a href={`https://testnet.explorer.circle.com/tx/${claim.txHash}`} target="_blank" rel="noreferrer" style={{ color: 'var(--ink-blue)', textDecoration: 'underline' }}>
+                                    {claim.txHash.length > 30 ? claim.txHash.substring(0, 16) + "..." : claim.txHash}
+                                  </a>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ borderTop: '1px solid var(--ink-black)', paddingTop: '16px' }}>

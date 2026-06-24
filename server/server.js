@@ -1182,12 +1182,24 @@ app.post("/api/publishers/claim", async (req, res) => {
     }
 
     publisher.totalClaimed = (totalClaimed + claimable).toFixed(4);
+    
+    // Record claim history
+    if (!publisher.claimHistory) {
+      publisher.claimHistory = [];
+    }
+    publisher.claimHistory.unshift({
+      amount: claimable.toFixed(4),
+      txHash: txHash,
+      timestamp: Date.now()
+    });
+
     writePublishersDb(pubDb);
 
     res.json({
       success: true,
       txHash,
       totalClaimed: publisher.totalClaimed,
+      claimHistory: publisher.claimHistory,
       isMock: isMockMode
     });
 
