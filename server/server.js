@@ -225,8 +225,8 @@ app.use("/api", async (req, res, next) => {
 });
 
 
-// Circle W3S Configuration
-const isMockMode = !process.env.CIRCLE_API_KEY || !process.env.CIRCLE_ENTITY_SECRET;
+// Circle W3S Configuration - HARDCODED TO FALSE FOR PRODUCTION ONLY
+const isMockMode = false;
 
 if (isMockMode) {
   console.log("[Publisher Backend] Running in SIMULATED MOCK MODE because CIRCLE_API_KEY or CIRCLE_ENTITY_SECRET is missing.");
