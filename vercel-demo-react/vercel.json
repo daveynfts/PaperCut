@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/api/:path*", "destination": "https://paper-cut-apce.vercel.app/api/:path*" },
     { "source": "/papercut/admin", "destination": "/papercut/index.html" },
     { "source": "/papercut/admin/", "destination": "/papercut/index.html" },
     { "source": "/admin", "destination": "/index.html" },

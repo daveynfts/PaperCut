@@ -73,9 +73,8 @@ const getInferredBackendUrl = () => {
   const isLocalHost = (val) => !val || val.includes("localhost") || val.includes("127.0.0.1");
   
   if (typeof window !== "undefined" && !isLocalHost(window.location.hostname)) {
-    if (isLocalHost(url)) {
-      return "https://paper-cut-apce.vercel.app";
-    }
+    // Force relative path to use Vercel's rewrite rule for same-origin routing
+    return "";
   }
   return url || "https://paper-cut-apce.vercel.app";
 };
