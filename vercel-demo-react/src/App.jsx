@@ -1280,7 +1280,12 @@ function App() {
   };
 
   const handleSyncBalance = async () => {
-    if (!authenticated || !user || !circleWallet) return;
+    if (!authenticated || !user) return;
+    if (!circleWallet) {
+      setCopyStatus("Initializing wallet...");
+      await fetchUserCircleWallet();
+      return;
+    }
     setCopyStatus("Syncing balance...");
     try {
       const userEmail = user.email?.address || user.id || "anonymous-user";
@@ -1312,7 +1317,12 @@ function App() {
   };
 
   const handleRequestFaucet = async () => {
-    if (!authenticated || !user || !circleWallet) return;
+    if (!authenticated || !user) return;
+    if (!circleWallet) {
+      setFaucetError("Wallet not initialized. Attempting initialization...");
+      await fetchUserCircleWallet();
+      return;
+    }
     setFaucetLoading(true);
     setFaucetSuccess("");
     setFaucetError("");
@@ -1402,64 +1412,64 @@ function App() {
   }, [wallets]);
 
   // Fetch or create user's Circle Programmable Wallet on backend upon login
-  useEffect(() => {
-    const fetchUserCircleWallet = async () => {
-      if (!authenticated || !user) {
-        setCircleWallet(null);
-        return;
-      }
-      
-      setIsLoadingWallet(true);
-      setError("");
-      
-      const userEmail = user.email?.address || user.id || "anonymous-user";
-      
-      // Load local wallet backup if available to recover mapping on serverless cold starts
-      let localBackup = null;
-      try {
-        const stored = localStorage.getItem(`circle_wallet_${userEmail}`);
-        if (stored) {
-          localBackup = JSON.parse(stored);
-        }
-      } catch (e) {
-        console.error("Failed to read local wallet backup:", e);
-      }
-      
-      try {
-        const response = await fetch(`${BACKEND_URL}/api/user/wallet`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ 
-            email: userEmail,
-            walletId: localBackup?.walletId,
-            address: localBackup?.address,
-            balance: localBackup?.balance,
-            isMock: localBackup?.isMock
-          })
-        });
-        const data = await response.json();
-        if (response.ok) {
-          const walletData = {
-            address: data.address,
-            balance: data.balance,
-            walletId: data.walletId,
-            isMock: data.isMock
-          };
-          setCircleWallet(walletData);
-          localStorage.setItem(`circle_wallet_${userEmail}`, JSON.stringify(walletData));
-        } else {
-          setError(data.error || "Failed to load Circle MPC wallet.");
-        }
-      } catch (err) {
-        console.error("Error fetching Circle wallet:", err);
-        setError("Backend server connection failed. Please check your network or Vercel deployment.");
-      } finally {
-        setIsLoadingWallet(false);
-      }
-    };
+  const fetchUserCircleWallet = async () => {
+    if (!authenticated || !user) {
+      setCircleWallet(null);
+      return;
+    }
     
+    setIsLoadingWallet(true);
+    setError("");
+    
+    const userEmail = user.email?.address || user.id || "anonymous-user";
+    
+    // Load local wallet backup if available to recover mapping on serverless cold starts
+    let localBackup = null;
+    try {
+      const stored = localStorage.getItem(`circle_wallet_${userEmail}`);
+      if (stored) {
+        localBackup = JSON.parse(stored);
+      }
+    } catch (e) {
+      console.error("Failed to read local wallet backup:", e);
+    }
+    
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/user/wallet`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ 
+          email: userEmail,
+          walletId: localBackup?.walletId,
+          address: localBackup?.address,
+          balance: localBackup?.balance,
+          isMock: localBackup?.isMock
+        })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        const walletData = {
+          address: data.address,
+          balance: data.balance,
+          walletId: data.walletId,
+          isMock: data.isMock
+        };
+        setCircleWallet(walletData);
+        localStorage.setItem(`circle_wallet_${userEmail}`, JSON.stringify(walletData));
+      } else {
+        setError(data.error || "Failed to load Circle MPC wallet.");
+      }
+    } catch (err) {
+      console.error("Error fetching Circle wallet:", err);
+      setError("Backend server connection failed. Please check your network or Vercel deployment.");
+    } finally {
+      setIsLoadingWallet(false);
+    }
+  };
+
+  useEffect(() => {
     fetchUserCircleWallet();
   }, [authenticated, user]);
 
@@ -3200,13 +3210,17 @@ function App() {
                   <div className="wallet-id-label">ACCOUNT NO. (CIRCLE ADDRESS)</div>
                   <div 
                     className="wallet-address-box mono-text" 
-                    onClick={() => handleCopyAddress(circleWallet?.address || smartWalletAddress || activeWallet?.address || user?.wallet?.address)}
-                    title="Click to copy address"
+                    onClick={() => {
+                      if (circleWallet?.address) {
+                        handleCopyAddress(circleWallet.address);
+                      }
+                    }}
+                    title={circleWallet?.address ? "Click to copy address" : "Wallet not loaded"}
                   >
                     <span className="address-text">
-                      {circleWallet?.address || smartWalletAddress || activeWallet?.address || user?.wallet?.address}
+                      {isLoadingWallet ? "LOADING/CREATING WALLET..." : (circleWallet?.address || "NOT INITIALIZED (CLICK SYNC/FAUCET TO RETRY)")}
                     </span>
-                    <span className="copy-badge">{copyStatus}</span>
+                    <span className="copy-badge">{circleWallet?.address ? copyStatus : ""}</span>
                   </div>
                 </div>
 
@@ -3214,7 +3228,9 @@ function App() {
                   <div className="wallet-id-label">CURRENT BALANCE</div>
                   <div className="wallet-balance-row" style={{ display: 'flex', alignItems: 'center' }}>
                     <UsdcCoinIcon size={24} className="coin-balance-icon" style={{ marginRight: '6px' }} />
-                    <span className="balance-num">{parseFloat(circleWallet?.balance || "0.0000").toFixed(4)}</span>
+                    <span className="balance-num">
+                      {isLoadingWallet ? "..." : parseFloat(circleWallet?.balance || "0.0000").toFixed(4)}
+                    </span>
                     <span className="balance-denom">USDC</span>
                     <button 
                       onClick={handleSyncBalance} 
@@ -3239,6 +3255,28 @@ function App() {
                     <div className="wallet-id-value mono-text text-stamp">PUBLISHER PAID</div>
                   </div>
                 </div>
+
+                {!circleWallet && error && (
+                  <div className="mono-text" style={{ fontSize: '10px', color: 'var(--ink-red)', border: '1px solid var(--ink-red)', padding: '8px', background: 'rgba(186,45,45,0.05)', marginBottom: '12px', textAlign: 'left', width: '100%', boxSizing: 'border-box' }}>
+                    <strong>WALLET LOAD ERROR:</strong> {error}
+                    <button 
+                      onClick={fetchUserCircleWallet}
+                      style={{ 
+                        display: 'block', 
+                        marginTop: '6px', 
+                        padding: '4px 8px', 
+                        background: 'var(--ink-red)', 
+                        color: 'white', 
+                        border: '1px solid var(--ink-black)', 
+                        cursor: 'pointer',
+                        fontSize: '9px',
+                        fontFamily: 'var(--font-mono)'
+                      }}
+                    >
+                      RETRY INITIALIZATION
+                    </button>
+                  </div>
+                )}
 
                 <div className="wallet-actions-section">
                   <button 

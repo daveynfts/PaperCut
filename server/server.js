@@ -289,9 +289,14 @@ function encryptEntitySecret(entitySecretHex, publicKeyPem) {
   return encrypted.toString("base64");
 }
 
+let cachedCiphertext = null;
 async function getEntitySecretCiphertext() {
+  if (cachedCiphertext) {
+    return cachedCiphertext;
+  }
   const pubKey = await fetchCirclePublicKey();
-  return encryptEntitySecret(process.env.CIRCLE_ENTITY_SECRET, pubKey);
+  cachedCiphertext = encryptEntitySecret(process.env.CIRCLE_ENTITY_SECRET, pubKey);
+  return cachedCiphertext;
 }
 
 // Check balance helper
