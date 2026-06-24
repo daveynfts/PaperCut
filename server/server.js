@@ -934,29 +934,14 @@ app.post("/api/user/wallet", async (req, res) => {
     db[normalizedEmail] = {
       walletId: newWalletId,
       address: newAddress,
-      balance: "0.0100"
+      balance: "0.0000"
     };
-    writeUsersDb(db);
-
-    if (!isMockMode) {
-      try {
-        console.log(`[Circle W3S] Fauceting 0.01 USDC to new wallet: ${newAddress}`);
-        const txId = await transferCircleUsdc(process.env.PUBLISHER_WALLET_ID, newAddress, 0.01);
-        await pollTransactionStatus(txId);
-        console.log(`[Circle W3S] Faucet transaction complete.`);
-      } catch (faucetErr) {
-        console.error("Faucet transfer failed:", faucetErr);
-      }
-    }
-
-    const finalBalance = await getWalletUsdcBalance(newWalletId);
-    db[normalizedEmail].balance = finalBalance;
     writeUsersDb(db);
 
     res.json({
       walletId: newWalletId,
       address: newAddress,
-      balance: finalBalance,
+      balance: "0.0000",
       isMock: isMockMode
     });
 
