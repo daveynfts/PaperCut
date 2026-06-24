@@ -19,175 +19,210 @@ let PUBLISHER_WALLET = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"; // Hardhat 
 const ARC_USDC_ADDRESS = "0x0000000000000000000000000000000000001010"; // Mock USDC
 const ARC_CHAIN_ID = 54321; // Mock Arc ChainID
 
-// Mock Article Database is now stored in articles.json and managed dynamically
+// Initialize Cloud Database if env vars are present (powered by Upstash Redis / Vercel KV)
+const { Redis } = require("@upstash/redis");
+let redisClient = null;
+if (
+  (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) ||
+  (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN)
+) {
+  try {
+    redisClient = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN,
+    });
+    console.log("[Database] Connected successfully to Cloud Redis/KV Store.");
+  } catch (err) {
+    console.error("[Database] Failed to connect to Redis/KV client:", err);
+  }
+} else {
+  console.log("[Database] Running with local file-based database. Add UPSTASH_REDIS_REST_URL to synchronize across servers.");
+}
 
-// Local JSON Database for mappings (email -> walletId, address, balance)
-const USERS_DB_PATH = process.env.VERCEL
-  ? "/tmp/users.json"
-  : path.join(__dirname, "users.json");
+// In-Memory Database Caches (synchronized per request when using Cloud DB)
+global.USERS_DB = null;
+global.PUBLISHERS_DB = null;
+global.ADMIN_IPS_DB = null;
+global.ARTICLES_DB = null;
 
-function readUsersDb() {
+// Database paths for local fallback
+const USERS_DB_PATH = process.env.VERCEL ? "/tmp/users.json" : path.join(__dirname, "users.json");
+const PUBLISHERS_DB_PATH = process.env.VERCEL ? "/tmp/publishers.json" : path.join(__dirname, "publishers.json");
+const ADMIN_IPS_DB_PATH = process.env.VERCEL ? "/tmp/admin_ips.json" : path.join(__dirname, "admin_ips.json");
+const ARTICLES_DB_PATH = process.env.VERCEL ? "/tmp/articles.json" : path.join(__dirname, "articles.json");
+
+// Helper functions to read directly from local files
+function readUsersDbFromFile() {
   try {
     if (!fs.existsSync(USERS_DB_PATH)) {
       const seedPath = path.join(__dirname, "users.json");
-      if (fs.existsSync(seedPath)) {
-        try {
-          const seedData = fs.readFileSync(seedPath, "utf8");
-          fs.writeFileSync(USERS_DB_PATH, seedData);
-        } catch (err) {
-          fs.writeFileSync(USERS_DB_PATH, JSON.stringify({}));
-        }
-      } else {
-        fs.writeFileSync(USERS_DB_PATH, JSON.stringify({}));
-      }
+      if (fs.existsSync(seedPath)) return JSON.parse(fs.readFileSync(seedPath, "utf8"));
+      return {};
     }
-    const data = fs.readFileSync(USERS_DB_PATH, "utf8");
-    return JSON.parse(data);
-  } catch (err) {
-    console.error("Corrupted users.json, re-initializing:", err);
-    const seedPath = path.join(__dirname, "users.json");
-    let fallback = {};
-    if (fs.existsSync(seedPath)) {
-      try {
-        fallback = JSON.parse(fs.readFileSync(seedPath, "utf8"));
-      } catch (e) {}
-    }
-    try {
-      fs.writeFileSync(USERS_DB_PATH, JSON.stringify(fallback, null, 2));
-    } catch (e) {}
-    return fallback;
+    return JSON.parse(fs.readFileSync(USERS_DB_PATH, "utf8"));
+  } catch (e) {
+    return {};
   }
 }
 
-function writeUsersDb(db) {
-  try {
-    fs.writeFileSync(USERS_DB_PATH, JSON.stringify(db, null, 2));
-  } catch (err) {
-    console.error("Failed to write users DB:", err);
-  }
-}
-
-// Local JSON Database for publishers (email -> details)
-const PUBLISHERS_DB_PATH = process.env.VERCEL
-  ? "/tmp/publishers.json"
-  : path.join(__dirname, "publishers.json");
-
-function readPublishersDb() {
+function readPublishersDbFromFile() {
   try {
     if (!fs.existsSync(PUBLISHERS_DB_PATH)) {
       const seedPath = path.join(__dirname, "publishers.json");
-      if (fs.existsSync(seedPath)) {
-        try {
-          const seedData = fs.readFileSync(seedPath, "utf8");
-          fs.writeFileSync(PUBLISHERS_DB_PATH, seedData);
-        } catch (err) {
-          fs.writeFileSync(PUBLISHERS_DB_PATH, JSON.stringify({}));
-        }
-      } else {
-        fs.writeFileSync(PUBLISHERS_DB_PATH, JSON.stringify({}));
-      }
+      if (fs.existsSync(seedPath)) return JSON.parse(fs.readFileSync(seedPath, "utf8"));
+      return {};
     }
-    const data = fs.readFileSync(PUBLISHERS_DB_PATH, "utf8");
-    return JSON.parse(data);
-  } catch (err) {
-    console.error("Corrupted publishers.json, re-initializing:", err);
-    const seedPath = path.join(__dirname, "publishers.json");
-    let fallback = {};
-    if (fs.existsSync(seedPath)) {
-      try {
-        fallback = JSON.parse(fs.readFileSync(seedPath, "utf8"));
-      } catch (e) {}
-    }
-    try {
-      fs.writeFileSync(PUBLISHERS_DB_PATH, JSON.stringify(fallback, null, 2));
-    } catch (e) {}
-    return fallback;
+    return JSON.parse(fs.readFileSync(PUBLISHERS_DB_PATH, "utf8"));
+  } catch (e) {
+    return {};
   }
 }
 
-function writePublishersDb(db) {
+function readAdminIpsDbFromFile() {
   try {
-    fs.writeFileSync(PUBLISHERS_DB_PATH, JSON.stringify(db, null, 2));
-  } catch (err) {
-    console.error("Failed to write publishers DB:", err);
-  }
-}
-
-// Local JSON Database for authorized admin IPs
-const ADMIN_IPS_DB_PATH = process.env.VERCEL
-  ? "/tmp/admin_ips.json"
-  : path.join(__dirname, "admin_ips.json");
-
-function readAdminIpsDb() {
-  try {
-    if (!fs.existsSync(ADMIN_IPS_DB_PATH)) {
-      fs.writeFileSync(ADMIN_IPS_DB_PATH, JSON.stringify([]));
-    }
-    const data = fs.readFileSync(ADMIN_IPS_DB_PATH, "utf8");
-    return JSON.parse(data);
-  } catch (err) {
-    console.error("Corrupted admin_ips.json, re-initializing:", err);
-    try {
-      fs.writeFileSync(ADMIN_IPS_DB_PATH, JSON.stringify([]));
-    } catch (e) {}
+    if (!fs.existsSync(ADMIN_IPS_DB_PATH)) return [];
+    return JSON.parse(fs.readFileSync(ADMIN_IPS_DB_PATH, "utf8"));
+  } catch (e) {
     return [];
   }
 }
 
-function writeAdminIpsDb(db) {
-  try {
-    fs.writeFileSync(ADMIN_IPS_DB_PATH, JSON.stringify(db, null, 2));
-  } catch (err) {
-    console.error("Failed to write admin IPs DB:", err);
-  }
-}
-
-
-// Local JSON Database for articles
-const ARTICLES_DB_PATH = process.env.VERCEL
-  ? "/tmp/articles.json"
-  : path.join(__dirname, "articles.json");
-
-function readArticlesDb() {
+function readArticlesDbFromFile() {
   try {
     if (!fs.existsSync(ARTICLES_DB_PATH)) {
       const seedPath = path.join(__dirname, "articles.json");
-      if (fs.existsSync(seedPath)) {
-        try {
-          const seedData = fs.readFileSync(seedPath, "utf8");
-          fs.writeFileSync(ARTICLES_DB_PATH, seedData);
-        } catch (err) {
-          fs.writeFileSync(ARTICLES_DB_PATH, JSON.stringify([]));
-        }
-      } else {
-        fs.writeFileSync(ARTICLES_DB_PATH, JSON.stringify([]));
-      }
+      if (fs.existsSync(seedPath)) return JSON.parse(fs.readFileSync(seedPath, "utf8"));
+      return [];
     }
-    const data = fs.readFileSync(ARTICLES_DB_PATH, "utf8");
-    return JSON.parse(data);
-  } catch (err) {
-    console.error("Corrupted articles.json, re-initializing:", err);
-    const seedPath = path.join(__dirname, "articles.json");
-    let fallback = [];
-    if (fs.existsSync(seedPath)) {
-      try {
-        fallback = JSON.parse(fs.readFileSync(seedPath, "utf8"));
-      } catch (e) {}
-    }
-    try {
-      fs.writeFileSync(ARTICLES_DB_PATH, JSON.stringify(fallback, null, 2));
-    } catch (e) {}
-    return fallback;
+    return JSON.parse(fs.readFileSync(ARTICLES_DB_PATH, "utf8"));
+  } catch (e) {
+    return [];
   }
 }
 
-function writeArticlesDb(db) {
-  try {
-    fs.writeFileSync(ARTICLES_DB_PATH, JSON.stringify(db, null, 2));
-  } catch (err) {
-    console.error("Failed to write articles DB:", err);
+// Synchronous wrapper functions used by endpoints
+function readUsersDb() {
+  if (redisClient) return global.USERS_DB || {};
+  return readUsersDbFromFile();
+}
+
+function writeUsersDb(db) {
+  if (redisClient) {
+    global.USERS_DB = db;
+    redisClient.set("papercut_users", db).catch(err => console.error("Redis set users error:", err));
+  } else {
+    try {
+      fs.writeFileSync(USERS_DB_PATH, JSON.stringify(db, null, 2));
+    } catch (err) {
+      console.error("Failed to write users DB file:", err);
+    }
   }
 }
+
+// Check for legacy function definitions just in case
+function readPublishersDb() {
+  if (redisClient) return global.PUBLISHERS_DB || {};
+  return readPublishersDbFromFile();
+}
+
+function writePublishersDb(db) {
+  if (redisClient) {
+    global.PUBLISHERS_DB = db;
+    redisClient.set("papercut_publishers", db).catch(err => console.error("Redis set publishers error:", err));
+  } else {
+    try {
+      fs.writeFileSync(PUBLISHERS_DB_PATH, JSON.stringify(db, null, 2));
+    } catch (err) {
+      console.error("Failed to write publishers DB file:", err);
+    }
+  }
+}
+
+function readAdminIpsDb() {
+  if (redisClient) return global.ADMIN_IPS_DB || [];
+  return readAdminIpsDbFromFile();
+}
+
+function writeAdminIpsDb(db) {
+  if (redisClient) {
+    global.ADMIN_IPS_DB = db;
+    redisClient.set("papercut_admin_ips", db).catch(err => console.error("Redis set admin_ips error:", err));
+  } else {
+    try {
+      fs.writeFileSync(ADMIN_IPS_DB_PATH, JSON.stringify(db, null, 2));
+    } catch (err) {
+      console.error("Failed to write admin_ips DB file:", err);
+    }
+  }
+}
+
+function readArticlesDb() {
+  if (redisClient) return global.ARTICLES_DB || [];
+  return readArticlesDbFromFile();
+}
+
+function writeArticlesDb(db) {
+  if (redisClient) {
+    global.ARTICLES_DB = db;
+    redisClient.set("papercut_articles", db).catch(err => console.error("Redis set articles error:", err));
+  } else {
+    try {
+      fs.writeFileSync(ARTICLES_DB_PATH, JSON.stringify(db, null, 2));
+    } catch (err) {
+      console.error("Failed to write articles DB file:", err);
+    }
+  }
+}
+
+// Middleware to sync from Cloud Redis before executing any API route
+app.use("/api", async (req, res, next) => {
+  if (redisClient) {
+    try {
+      const [users, articles, publishers, adminIps] = await Promise.all([
+        redisClient.get("papercut_users"),
+        redisClient.get("papercut_articles"),
+        redisClient.get("papercut_publishers"),
+        redisClient.get("papercut_admin_ips")
+      ]);
+
+      // Seed databases on first launch if empty
+      if (users === null) {
+        const seed = readUsersDbFromFile();
+        global.USERS_DB = seed;
+        redisClient.set("papercut_users", seed).catch(e => console.error(e));
+      } else {
+        global.USERS_DB = users;
+      }
+
+      if (publishers === null) {
+        const seed = readPublishersDbFromFile();
+        global.PUBLISHERS_DB = seed;
+        redisClient.set("papercut_publishers", seed).catch(e => console.error(e));
+      } else {
+        global.PUBLISHERS_DB = publishers;
+      }
+
+      if (adminIps === null) {
+        const seed = readAdminIpsDbFromFile();
+        global.ADMIN_IPS_DB = seed;
+        redisClient.set("papercut_admin_ips", seed).catch(e => console.error(e));
+      } else {
+        global.ADMIN_IPS_DB = adminIps;
+      }
+
+      if (articles === null) {
+        const seed = readArticlesDbFromFile();
+        global.ARTICLES_DB = seed;
+        redisClient.set("papercut_articles", seed).catch(e => console.error(e));
+      } else {
+        global.ARTICLES_DB = articles;
+      }
+    } catch (err) {
+      console.error("[Database] Failed to sync database from Cloud Redis/KV:", err);
+    }
+  }
+  next();
+});
 
 
 // Circle W3S Configuration
