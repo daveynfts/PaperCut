@@ -292,11 +292,24 @@ function App() {
   const [pubClaimSuccess, setPubClaimSuccess] = useState("");
 
   const [publisherTab, setPublisherTab] = useState("ledger");
-  const [newArticleTitle, setNewArticleTitle] = useState("");
-  const [newArticlePrice, setNewArticlePrice] = useState("0.05");
-  const [newArticleContent, setNewArticleContent] = useState("");
+  const [newArticleTitle, setNewArticleTitle] = useState(() => {
+    return localStorage.getItem("papercut_draft_title") || "";
+  });
+  const [newArticlePrice, setNewArticlePrice] = useState(() => {
+    return localStorage.getItem("papercut_draft_price") || "0.05";
+  });
+  const [newArticleContent, setNewArticleContent] = useState(() => {
+    return localStorage.getItem("papercut_draft_content") || "";
+  });
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishStatusMsg, setPublishStatusMsg] = useState("");
+  const [showMdGuide, setShowMdGuide] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem("papercut_draft_title", newArticleTitle);
+    localStorage.setItem("papercut_draft_price", newArticlePrice);
+    localStorage.setItem("papercut_draft_content", newArticleContent);
+  }, [newArticleTitle, newArticlePrice, newArticleContent]);
 
   const parseMarkdownToHtml = (text) => {
     if (!text) return "";
@@ -305,18 +318,50 @@ function App() {
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
     
-    html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
-    html = html.replace(/\*(.*?)\*/g, "<em>$1</em>");
-    html = html.replace(/`(.*?)`/g, "<code class=\"inline-code\">$1</code>");
+    // Parse code blocks (```lang ... ```)
+    html = html.replace(/```([\s\S]*?)```/g, '<pre class="code-block"><code>$1</code></pre>');
+    
+    // Parse inline code (`code`)
+    html = html.replace(/`(.*?)`/g, '<code class="inline-code">$1</code>');
+    
+    // Parse headings
+    html = html.replace(/^#\s+(.*?)$/gm, "<h1>$1</h1>");
     html = html.replace(/^##\s+(.*?)$/gm, "<h2>$1</h2>");
     html = html.replace(/^###\s+(.*?)$/gm, "<h3>$1</h3>");
     
+    // Parse bold & italic
+    html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+    html = html.replace(/\*(.*?)\*/g, "<em>$1</em>");
+    
+    // Parse links [text](url)
+    html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="preview-link">$1</a>');
+    
+    // Parse horizontal rules (---)
+    html = html.replace(/^---$/gm, "<hr class=\"preview-hr\" />");
+    
+    // Parse blockquotes (> text) -> Note > is encoded as &gt;
+    html = html.replace(/^&gt;\s+(.*?)$/gm, '<blockquote class="preview-blockquote">$1</blockquote>');
+    
+    // Parse bulleted lists (- or * item)
+    html = html.replace(/^[\-\*]\s+(.*?)$/gm, '<li class="preview-li">$1</li>');
+    
     const lines = html.split("\n");
     const parsedLines = lines.map(line => {
-      if (line.startsWith("<h2>") || line.startsWith("<h3>")) {
+      const trimmed = line.trim();
+      if (
+        trimmed.startsWith("<h1>") || 
+        trimmed.startsWith("<h2>") || 
+        trimmed.startsWith("<h3>") || 
+        trimmed.startsWith("<pre") || 
+        trimmed.startsWith("<code") || 
+        trimmed.startsWith("<hr") || 
+        trimmed.startsWith("<blockquote") || 
+        trimmed.startsWith("<li") ||
+        trimmed === ""
+      ) {
         return line;
       }
-      return line.trim() === "" ? "<br/>" : `<p>${line}</p>`;
+      return `<p class="preview-p">${line}</p>`;
     });
     
     return parsedLines.join("");
@@ -330,7 +375,9 @@ function App() {
     const text = newArticleContent;
     const selectedText = text.substring(start, end);
     let replacement = "";
-    if (syntax === "h2") {
+    if (syntax === "h1") {
+      replacement = `\n# ${selectedText || "Heading 1"}\n`;
+    } else if (syntax === "h2") {
       replacement = `\n## ${selectedText || "Heading 2"}\n`;
     } else if (syntax === "h3") {
       replacement = `\n### ${selectedText || "Heading 3"}\n`;
@@ -340,6 +387,14 @@ function App() {
       replacement = `*${selectedText || "italic text"}*`;
     } else if (syntax === "code") {
       replacement = `\`${selectedText || "code text"}\``;
+    } else if (syntax === "codeblock") {
+      replacement = `\n\`\`\`javascript\n${selectedText || "// code block"}\n\`\`\`\n`;
+    } else if (syntax === "link") {
+      replacement = `[${selectedText || "Link Text"}](https://example.com)`;
+    } else if (syntax === "quote") {
+      replacement = `\n> ${selectedText || "Blockquote text"}\n`;
+    } else if (syntax === "list") {
+      replacement = `\n- ${selectedText || "List item"}\n`;
     }
     const newText = text.substring(0, start) + replacement + text.substring(end);
     setNewArticleContent(newText);
@@ -349,6 +404,55 @@ function App() {
       const newCursorPos = start + replacement.length;
       textarea.setSelectionRange(newCursorPos, newCursorPos);
     }, 0);
+  };
+
+  const handleImportMarkdown = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setNewArticleContent(event.target.result || "");
+    };
+    reader.readAsText(file);
+  };
+
+  const getWordCount = (text) => {
+    if (!text) return 0;
+    const cleanText = text.trim().replace(/\s+/g, ' ');
+    return cleanText ? cleanText.split(' ').length : 0;
+  };
+
+  const handleClearDraft = () => {
+    if (window.confirm("Are you sure you want to clear your current draft? This will wipe the title, price, and content.")) {
+      setNewArticleTitle("");
+      setNewArticlePrice("0.05");
+      setNewArticleContent("");
+      setPublishStatusMsg("Draft cleared.");
+      setTimeout(() => setPublishStatusMsg(""), 3000);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = e.dataTransfer.files[0];
+    if (file && (file.name.endsWith('.md') || file.name.endsWith('.txt'))) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setNewArticleContent(event.target.result || "");
+        setPublishStatusMsg("Markdown file loaded successfully via drag-and-drop!");
+        setTimeout(() => setPublishStatusMsg(""), 3000);
+      };
+      reader.readAsText(file);
+    } else {
+      setPublishStatusMsg("Please drop a valid .md or .txt file.");
+      setTimeout(() => setPublishStatusMsg(""), 3000);
+    }
   };
 
   const fetchFullArticleContent = async (articleId, priceStr) => {
@@ -1324,7 +1428,7 @@ function App() {
             </p>
           </main>
         ) : (
-          <main className="publisher-container" style={{ padding: '32px', maxWidth: '800px', margin: '40px auto', border: '2px solid var(--ink-black)', backgroundColor: 'var(--paper-bg)', boxShadow: '6px 6px 0 var(--ink-black)' }}>
+          <main className="publisher-container" style={{ padding: '32px', maxWidth: '1200px', width: '95%', margin: '40px auto', border: '2px solid var(--ink-black)', backgroundColor: 'var(--paper-bg)', boxShadow: '6px 6px 0 var(--ink-black)', transition: 'max-width 0.3s ease' }}>
             <div className="greek-key"></div>
             
             {/* Header section */}
@@ -1485,40 +1589,166 @@ function App() {
 
                   <div className="writer-field-group">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                      <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>4. CONTENT (MARKDOWN SUPPORTED)</label>
-                      <span className="mono-text" style={{ fontSize: '9px', color: 'var(--ink-grey)' }}>Formatted live in preview</span>
+                      <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>4. CONTENT (MARKDOWN & DRAG-PASTE SUPPORTED)</label>
+                      <span className="mono-text" style={{ fontSize: '9px', color: 'var(--ink-grey)' }}>Drag-and-drop a .md file or paste content directly</span>
                     </div>
 
                     {/* Editor & Preview layout */}
                     <div className="editor-layout">
-                      <div>
+                      <div className="editor-pane-container">
                         {/* Formatting Toolbar */}
-                        <div className="format-toolbar">
-                          <button type="button" className="btn-format" onClick={() => insertMarkdown("h2")}>H2</button>
-                          <button type="button" className="btn-format" onClick={() => insertMarkdown("h3")}>H3</button>
-                          <button type="button" className="btn-format" onClick={() => insertMarkdown("bold")}>B</button>
-                          <button type="button" className="btn-format" onClick={() => insertMarkdown("italic")}>I</button>
-                          <button type="button" className="btn-format" onClick={() => insertMarkdown("code")}>&lt;&gt;</button>
+                        <div className="format-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+                          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                            <button type="button" className="btn-format" onClick={() => insertMarkdown("h1")}>H1</button>
+                            <button type="button" className="btn-format" onClick={() => insertMarkdown("h2")}>H2</button>
+                            <button type="button" className="btn-format" onClick={() => insertMarkdown("h3")}>H3</button>
+                            <button type="button" className="btn-format" onClick={() => insertMarkdown("bold")}>B</button>
+                            <button type="button" className="btn-format" onClick={() => insertMarkdown("italic")}>I</button>
+                            <button type="button" className="btn-format" onClick={() => insertMarkdown("code")}>&lt;&gt;</button>
+                            <button type="button" className="btn-format" onClick={() => insertMarkdown("codeblock")}>BLOCKCODE</button>
+                            <button type="button" className="btn-format" onClick={() => insertMarkdown("link")}>LINK</button>
+                            <button type="button" className="btn-format" onClick={() => insertMarkdown("quote")}>QUOTE</button>
+                            <button type="button" className="btn-format" onClick={() => insertMarkdown("list")}>LIST</button>
+                          </div>
+                          
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <label htmlFor="markdown-file-import" className="btn-format" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer', margin: 0 }}>
+                              📥 IMPORT MD
+                            </label>
+                            <input 
+                              type="file" 
+                              id="markdown-file-import" 
+                              accept=".md,.txt" 
+                              onChange={handleImportMarkdown} 
+                              style={{ display: 'none' }} 
+                            />
+                            <button type="button" className="btn-format btn-format-danger" onClick={handleClearDraft} style={{ border: '1px solid var(--ink-red)', color: 'var(--ink-red)' }}>
+                              🗑 CLEAR
+                            </button>
+                          </div>
                         </div>
+
                         <textarea
                           id="dispatch-editor-textarea"
                           required
                           value={newArticleContent}
                           onChange={(e) => setNewArticleContent(e.target.value)}
-                          placeholder="Write your dispatch article content here... Use the markdown tools above to format headings, bold/italic text, and inline code."
+                          onDragOver={handleDragOver}
+                          onDrop={handleDrop}
+                          placeholder="Write or paste your markdown content here... Drag and drop a .md file directly to import it."
                           className="writer-textarea"
                         />
                       </div>
                       
                       <div className="preview-pane">
-                        <div className="preview-pane-title">LIVE PREVIEW</div>
+                        <div className="preview-pane-title">LIVE PREVIEW (16:9 RENDER)</div>
                         <div 
-                          className="content-text" 
-                          style={{ maxHeight: '250px', overflowY: 'auto', textJustify: 'auto', columnCount: '1' }}
-                          dangerouslySetInnerHTML={{ __html: parseMarkdownToHtml(newArticleContent) || "<p style='color: var(--ink-grey); font-style: italic;'>No content written yet. Start typing to see layout preview.</p>" }}
+                          className="content-text markdown-render" 
+                          style={{ height: 'calc(100% - 24px)', overflowY: 'auto', textJustify: 'auto', columnCount: '1' }}
+                          dangerouslySetInnerHTML={{ __html: parseMarkdownToHtml(newArticleContent) || "<p style='color: var(--ink-grey); font-style: italic;'>No content written yet. Start typing or paste Markdown to see layout preview.</p>" }}
                         />
                       </div>
                     </div>
+
+                    {/* Word Count & AutoSave Status Bar */}
+                    <div className="editor-status-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', padding: '8px 12px', border: '1px solid var(--ink-black)', backgroundColor: 'var(--paper-accent)', fontSize: '10px', fontFamily: 'var(--font-mono)' }}>
+                      <div style={{ display: 'flex', gap: '16px' }}>
+                        <span><strong>WORDS:</strong> {getWordCount(newArticleContent)}</span>
+                        <span><strong>CHARACTERS:</strong> {newArticleContent.length}</span>
+                        <span><strong>EST. READ TIME:</strong> ~{Math.ceil(getWordCount(newArticleContent) / 200) || 1} MIN</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span className="save-status-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#22c55e', display: 'inline-block', boxShadow: '0 0 6px #22c55e' }}></span>
+                        <span style={{ color: 'var(--ink-black)', fontWeight: 'bold' }}>DRAFT SYNCED</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Markdown Reference Drawer */}
+                  <div style={{ border: '1px solid var(--ink-black)', background: 'var(--paper-bg-darker)' }}>
+                    <button 
+                      type="button" 
+                      onClick={() => setShowMdGuide(!showMdGuide)}
+                      style={{
+                        width: '100%',
+                        padding: '10px 16px',
+                        textAlign: 'left',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        background: 'var(--paper-bg-darker)',
+                        color: 'var(--ink-black)',
+                        border: 'none',
+                        borderBottom: showMdGuide ? '1px solid var(--ink-black)' : 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <span>📖 MARKDOWN FORMATTING QUICK REFERENCE</span>
+                      <span>{showMdGuide ? "▲ COLLAPSE Guide" : "▼ EXPAND Guide"}</span>
+                    </button>
+                    {showMdGuide && (
+                      <div style={{ padding: '16px', background: 'var(--paper-bg)', overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '11px', fontFamily: 'var(--font-mono)' }}>
+                          <thead>
+                            <tr style={{ borderBottom: '1px solid var(--ink-black)' }}>
+                              <th style={{ padding: '6px 4px' }}>ELEMENT</th>
+                              <th style={{ padding: '6px 4px' }}>MARKDOWN</th>
+                              <th style={{ padding: '6px 4px' }}>RESULT</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr style={{ borderBottom: '1px dashed var(--ink-light-grey)' }}>
+                              <td style={{ padding: '6px 4px' }}>Heading 1</td>
+                              <td style={{ padding: '6px 4px' }}><code># Title</code></td>
+                              <td style={{ padding: '6px 4px', fontSize: '14px', fontWeight: 'bold' }}>Title</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px dashed var(--ink-light-grey)' }}>
+                              <td style={{ padding: '6px 4px' }}>Heading 2</td>
+                              <td style={{ padding: '6px 4px' }}><code>## Section</code></td>
+                              <td style={{ padding: '6px 4px', fontSize: '12px', fontWeight: 'bold' }}>Section</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px dashed var(--ink-light-grey)' }}>
+                              <td style={{ padding: '6px 4px' }}>Bold Text</td>
+                              <td style={{ padding: '6px 4px' }}><code>**bold**</code></td>
+                              <td style={{ padding: '6px 4px' }}><strong>bold</strong></td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px dashed var(--ink-light-grey)' }}>
+                              <td style={{ padding: '6px 4px' }}>Italic Text</td>
+                              <td style={{ padding: '6px 4px' }}><code>*italic*</code></td>
+                              <td style={{ padding: '6px 4px' }}><em>italic</em></td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px dashed var(--ink-light-grey)' }}>
+                              <td style={{ padding: '6px 4px' }}>Inline Code</td>
+                              <td style={{ padding: '6px 4px' }}><code>`code`</code></td>
+                              <td style={{ padding: '6px 4px' }}><code style={{ padding: '2px 4px', background: 'var(--paper-bg-darker)' }}>code</code></td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px dashed var(--ink-light-grey)' }}>
+                              <td style={{ padding: '6px 4px' }}>Code Block</td>
+                              <td style={{ padding: '6px 4px' }}><code>```javascript \n code \n ```</code></td>
+                              <td style={{ padding: '6px 4px' }}><pre style={{ margin: 0, padding: '4px', background: 'var(--paper-bg-darker)', display: 'inline-block' }}>code</pre></td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px dashed var(--ink-light-grey)' }}>
+                              <td style={{ padding: '6px 4px' }}>Hyperlink</td>
+                              <td style={{ padding: '6px 4px' }}><code>[Text](URL)</code></td>
+                              <td style={{ padding: '6px 4px' }}><a href="#" onClick={(e) => e.preventDefault()} style={{ color: 'var(--ink-red)', textDecoration: 'underline' }}>Text</a></td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px dashed var(--ink-light-grey)' }}>
+                              <td style={{ padding: '6px 4px' }}>Blockquote</td>
+                              <td style={{ padding: '6px 4px' }}><code>&gt; Quote</code></td>
+                              <td style={{ padding: '6px 4px', fontStyle: 'italic', borderLeft: '2px solid var(--ink-red)', paddingLeft: '6px' }}>Quote</td>
+                            </tr>
+                            <tr>
+                              <td style={{ padding: '6px 4px' }}>Bulleted List</td>
+                              <td style={{ padding: '6px 4px' }}><code>- Item</code> or <code>* Item</code></td>
+                              <td style={{ padding: '6px 4px' }}>• Item</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
 
                   <button 
