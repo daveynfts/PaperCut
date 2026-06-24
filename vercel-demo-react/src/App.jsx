@@ -69,10 +69,15 @@ const INITIAL_ARTICLES = [
 
 // Auto-infer backend URL on Vercel deployment if VITE_API_URL is not baked in
 const getInferredBackendUrl = () => {
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
+  const url = import.meta.env.VITE_API_URL;
+  const isLocalHost = (val) => !val || val.includes("localhost") || val.includes("127.0.0.1");
+  
+  if (typeof window !== "undefined" && !isLocalHost(window.location.hostname)) {
+    if (isLocalHost(url)) {
+      return "https://paper-cut-apce.vercel.app";
+    }
   }
-  return "https://paper-cut-apce.vercel.app";
+  return url || "https://paper-cut-apce.vercel.app";
 };
 const BACKEND_URL = getInferredBackendUrl();
 
