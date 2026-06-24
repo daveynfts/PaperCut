@@ -1042,6 +1042,79 @@ app.post("/api/articles/unlock", async (req, res) => {
   }
 });
 
+// Endpoint to withdraw funds from user Circle wallet to a personal EVM wallet
+app.post("/api/user/withdraw", async (req, res) => {
+  const { email, walletId, address, destinationAddress, amount } = req.body;
+  if (!email || !destinationAddress || !amount) {
+    return res.status(400).json({ error: "Email, destinationAddress and amount are required" });
+  }
+  const normalizedEmail = email.toLowerCase();
+  const withdrawAmount = parseFloat(amount);
+  if (isNaN(withdrawAmount) || withdrawAmount <= 0) {
+    return res.status(400).json({ error: "Invalid withdraw amount" });
+  }
+
+  try {
+    const db = readUsersDb();
+    
+    // Restore wallet mapping from client storage if it was lost on serverless cold start
+    if (!db[normalizedEmail] && walletId && address) {
+      console.log(`[Circle W3S] Restoring wallet for ${normalizedEmail} from client: ${address}`);
+      db[normalizedEmail] = {
+        walletId,
+        address,
+        balance: "0.0"
+      };
+      writeUsersDb(db);
+    }
+
+    if (!db[normalizedEmail]) {
+      return res.status(400).json({ error: "User wallet not initialized. Please log in again." });
+    }
+
+    const userWalletId = db[normalizedEmail].walletId;
+    const userWalletAddress = db[normalizedEmail].address;
+    
+    const currentBalance = await getWalletUsdcBalance(userWalletId);
+    
+    if (parseFloat(currentBalance) < withdrawAmount) {
+      return res.status(400).json({ error: "Insufficient balance for withdrawal", balance: currentBalance });
+    }
+
+    console.log(`[Circle W3S] Withdrawing ${withdrawAmount} USDC from user wallet (${userWalletAddress}) to personal wallet (${destinationAddress})`);
+    
+    let txHash;
+
+    if (isMockMode) {
+      txHash = "0x" + crypto.randomBytes(32).toString("hex");
+      const newBal = (parseFloat(currentBalance) - withdrawAmount).toFixed(4);
+      db[normalizedEmail].balance = newBal;
+      writeUsersDb(db);
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      console.log(`[Mock Mode] Withdrawal successful. TxHash: ${txHash}`);
+    } else {
+      const txId = await transferCircleUsdc(userWalletId, destinationAddress, withdrawAmount);
+      const result = await pollTransactionStatus(txId);
+      txHash = result.txHash;
+    }
+
+    const finalBalance = await getWalletUsdcBalance(userWalletId);
+    db[normalizedEmail].balance = finalBalance;
+    writeUsersDb(db);
+
+    res.json({
+      success: true,
+      txHash,
+      balance: finalBalance,
+      isMock: isMockMode
+    });
+
+  } catch (error) {
+    console.error("Withdrawal error:", error);
+    res.status(500).json({ error: error.message || "Failed to process withdrawal on Arc Testnet" });
+  }
+});
+
 if (process.env.NODE_ENV !== "production") {
   app.listen(PORT, () => {
     console.log(`[Server] Lepton x402 Publisher running on http://localhost:${PORT}`);

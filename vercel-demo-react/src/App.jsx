@@ -310,6 +310,11 @@ function App() {
   const [editContent, setEditContent] = useState("");
   const [isEditingSubmit, setIsEditingSubmit] = useState(false);
   const [editStatusMsg, setEditStatusMsg] = useState("");
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [withdrawAddress, setWithdrawAddress] = useState("");
+  const [withdrawLoading, setWithdrawLoading] = useState(false);
+  const [withdrawError, setWithdrawError] = useState("");
+  const [withdrawSuccess, setWithdrawSuccess] = useState("");
 
   useEffect(() => {
     localStorage.setItem("papercut_draft_title", newArticleTitle);
@@ -1436,7 +1441,85 @@ function App() {
     fetchUserCircleWallet();
   }, [authenticated, user]);
 
+  useEffect(() => {
+    if (showWalletModal) {
+      const personalAddress = activeWallet?.address || user?.wallet?.address || "";
+      setWithdrawAddress(personalAddress);
+      setWithdrawAmount("");
+      setWithdrawError("");
+      setWithdrawSuccess("");
+    }
+  }, [showWalletModal, activeWallet, user]);
 
+  const handleWithdrawSubmit = async (e) => {
+    e.preventDefault();
+    if (!withdrawAmount || !withdrawAddress) {
+      setWithdrawError("Please enter both amount and destination address.");
+      return;
+    }
+    
+    const amountVal = parseFloat(withdrawAmount);
+    if (isNaN(amountVal) || amountVal <= 0) {
+      setWithdrawError("Please enter a valid amount greater than 0.");
+      return;
+    }
+    
+    if (amountVal > parseFloat(circleWallet?.balance || "0")) {
+      setWithdrawError("Withdraw amount exceeds current balance.");
+      return;
+    }
+
+    setWithdrawLoading(true);
+    setWithdrawError("");
+    setWithdrawSuccess("");
+
+    const userEmail = user?.email?.address || user?.id || "anonymous-user";
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/user/withdraw`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          email: userEmail,
+          walletId: circleWallet.walletId,
+          address: circleWallet.address,
+          destinationAddress: withdrawAddress,
+          amount: withdrawAmount
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Withdrawal request failed.");
+      }
+
+      setCircleWallet(prev => prev ? { ...prev, balance: data.balance } : null);
+      
+      // Update local storage backup
+      const stored = localStorage.getItem(`circle_wallet_${userEmail}`);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          parsed.balance = data.balance;
+          localStorage.setItem(`circle_wallet_${userEmail}`, JSON.stringify(parsed));
+        } catch (err) {}
+      }
+
+      setWithdrawSuccess(`Success! Withdrew ${amountVal.toFixed(4)} USDC. TxHash: ${shortenAddress(data.txHash)}`);
+      setWithdrawAmount("");
+      
+      // Fetch articles again to sync
+      await fetchArticles();
+
+    } catch (err) {
+      console.error("Withdrawal failed:", err);
+      setWithdrawError(err.message || "Failed to execute withdrawal.");
+    } finally {
+      setWithdrawLoading(false);
+    }
+  };
 
   const shortenAddress = (addr) => {
     if (!addr) return "";
@@ -3139,9 +3222,88 @@ function App() {
                     className="btn-faucet-stamp" 
                     onClick={handleRequestFaucet} 
                     disabled={faucetLoading}
+                    style={{ width: '100%' }}
                   >
                     {faucetLoading ? "STAMPING TARIFF..." : "CLAIM 0.05 USDC FAUCET"}
                   </button>
+                </div>
+
+                <div className="wallet-actions-section" style={{ marginTop: '16px', borderTop: '1px dashed var(--ink-light-grey)', paddingTop: '16px' }}>
+                  <form onSubmit={handleWithdrawSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div className="wallet-id-label" style={{ marginBottom: '2px' }}>USDC WITHDRAWAL TO EVM WALLET</div>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label className="mono-text" style={{ fontSize: '8px', fontWeight: 'bold', color: 'var(--ink-grey)' }}>DESTINATION ADDRESS</label>
+                      <input 
+                        type="text" 
+                        required 
+                        value={withdrawAddress}
+                        onChange={(e) => setWithdrawAddress(e.target.value)}
+                        placeholder="0x..." 
+                        style={{ 
+                          padding: '6px 8px', 
+                          border: '1px solid var(--ink-black)', 
+                          background: 'var(--paper-bg)', 
+                          fontFamily: 'var(--font-mono)', 
+                          fontSize: '11px',
+                          width: '100%',
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label className="mono-text" style={{ fontSize: '8px', fontWeight: 'bold', color: 'var(--ink-grey)' }}>AMOUNT (USDC)</label>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <input 
+                          type="number" 
+                          step="0.0001" 
+                          min="0.0001" 
+                          required 
+                          value={withdrawAmount}
+                          onChange={(e) => setWithdrawAmount(e.target.value)}
+                          placeholder="0.00" 
+                          style={{ 
+                            flex: 1,
+                            padding: '6px 8px', 
+                            border: '1px solid var(--ink-black)', 
+                            background: 'var(--paper-bg)', 
+                            fontFamily: 'var(--font-mono)', 
+                            fontSize: '11px',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                        <button 
+                          type="button" 
+                          onClick={() => setWithdrawAmount(circleWallet?.balance || "0")}
+                          className="btn-format"
+                          style={{ fontSize: '9px', padding: '0 8px', height: 'auto', border: '1px solid var(--ink-black)', background: 'var(--paper-accent)', cursor: 'pointer' }}
+                        >
+                          MAX
+                        </button>
+                      </div>
+                    </div>
+
+                    <button 
+                      type="submit" 
+                      className="btn" 
+                      disabled={withdrawLoading || parseFloat(circleWallet?.balance || "0") <= 0}
+                      style={{ padding: '8px 0', fontSize: '11px', letterSpacing: '0.05em', width: '100%', marginTop: '4px' }}
+                    >
+                      {withdrawLoading ? "EXECUTING WITHDRAWAL..." : "WITHDRAW FUNDS"}
+                    </button>
+
+                    {withdrawError && (
+                      <div className="mono-text" style={{ fontSize: '9px', color: 'var(--ink-red)', border: '1px dashed var(--ink-red)', padding: '6px', background: 'rgba(186,45,45,0.03)', marginTop: '4px', wordBreak: 'break-word' }}>
+                        {withdrawError}
+                      </div>
+                    )}
+                    {withdrawSuccess && (
+                      <div className="mono-text" style={{ fontSize: '9px', color: 'green', border: '1px dashed green', padding: '6px', background: 'rgba(0,128,0,0.03)', marginTop: '4px', wordBreak: 'break-word' }}>
+                        {withdrawSuccess}
+                      </div>
+                    )}
+                  </form>
                 </div>
               </div>
               
