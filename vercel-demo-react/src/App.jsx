@@ -491,10 +491,26 @@ function App() {
         if (data.success && data.content) {
           setArticles(prev => prev.map(art => art.id === articleId ? { ...art, content: data.content } : art));
           setSelectedArticle(prev => prev && prev.id === articleId ? { ...prev, content: data.content } : prev);
+          return;
         }
+      }
+      
+      // Fallback
+      const localArticles = JSON.parse(localStorage.getItem("papercut_local_articles") || "[]");
+      const matched = localArticles.find(la => la.id === articleId);
+      if (matched && matched.content) {
+        setArticles(prev => prev.map(art => art.id === articleId ? { ...art, content: matched.content } : art));
+        setSelectedArticle(prev => prev && prev.id === articleId ? { ...prev, content: matched.content } : prev);
       }
     } catch (err) {
       console.error("Failed to fetch full article content:", err);
+      // Fallback
+      const localArticles = JSON.parse(localStorage.getItem("papercut_local_articles") || "[]");
+      const matched = localArticles.find(la => la.id === articleId);
+      if (matched && matched.content) {
+        setArticles(prev => prev.map(art => art.id === articleId ? { ...art, content: matched.content } : art));
+        setSelectedArticle(prev => prev && prev.id === articleId ? { ...prev, content: matched.content } : prev);
+      }
     }
   };
 
@@ -507,21 +523,69 @@ function App() {
   const fetchArticles = async () => {
     try {
       const response = await fetch(`${BACKEND_URL}/api/articles`);
+      let fetchedArticles = [];
       if (response.ok) {
         const data = await response.json();
         if (Array.isArray(data)) {
-          const merged = data.map(item => {
-            const local = INITIAL_ARTICLES.find(la => la.id === item.id);
-            return {
-              ...local,
-              ...item
-            };
-          });
-          setArticles(merged);
+          fetchedArticles = data;
         }
       }
+      
+      // Merge with INITIAL_ARTICLES first
+      const mergedWithInitial = fetchedArticles.map(item => {
+        const local = INITIAL_ARTICLES.find(la => la.id === item.id);
+        return {
+          ...local,
+          ...item
+        };
+      });
+      
+      // Ensure all INITIAL_ARTICLES are present
+      INITIAL_ARTICLES.forEach(la => {
+        if (!mergedWithInitial.some(a => a.id === la.id)) {
+          mergedWithInitial.push(la);
+        }
+      });
+      
+      // Load local storage articles
+      const localArticles = JSON.parse(localStorage.getItem("papercut_local_articles") || "[]");
+      
+      // Merge them
+      const allArticles = [...mergedWithInitial];
+      localArticles.forEach(la => {
+        if (!allArticles.some(a => a.id === la.id)) {
+          allArticles.push(la);
+        }
+      });
+      
+      // Sort by ID descending so newest dispatches appear at the top of LATEST DISPATCHES list
+      allArticles.sort((a, b) => {
+        const idA = parseInt(a.id.replace("local-", "")) || 0;
+        const idB = parseInt(b.id.replace("local-", "")) || 0;
+        if (idA !== idB) {
+          return idB - idA;
+        }
+        return b.id.localeCompare(a.id);
+      });
+      
+      setArticles(allArticles);
     } catch (err) {
       console.error("Failed to fetch articles:", err);
+      // Fallback
+      const localArticles = JSON.parse(localStorage.getItem("papercut_local_articles") || "[]");
+      const allArticles = [...INITIAL_ARTICLES];
+      localArticles.forEach(la => {
+        if (!allArticles.some(a => a.id === la.id)) {
+          allArticles.push(la);
+        }
+      });
+      allArticles.sort((a, b) => {
+        const idA = parseInt(a.id.replace("local-", "")) || 0;
+        const idB = parseInt(b.id.replace("local-", "")) || 0;
+        if (idA !== idB) return idB - idA;
+        return b.id.localeCompare(a.id);
+      });
+      setArticles(allArticles);
     }
   };
 
@@ -644,6 +708,24 @@ function App() {
         throw new Error(data.error || "Failed to publish article.");
       }
       
+      // Save locally to local storage as well
+      const newId = data.article?.id || String(Date.now());
+      const newLocalArticle = {
+        id: newId,
+        title: newArticleTitle,
+        content: newArticleContent,
+        price: String(parseFloat(newArticlePrice).toFixed(2)),
+        author: authorName,
+        payee: payoutWallet,
+        verified: true
+      };
+      
+      const existingLocal = JSON.parse(localStorage.getItem("papercut_local_articles") || "[]");
+      if (!existingLocal.some(a => a.id === newId)) {
+        existingLocal.push(newLocalArticle);
+        localStorage.setItem("papercut_local_articles", JSON.stringify(existingLocal));
+      }
+      
       setPublishStatusMsg("Article published successfully!");
       setNewArticleTitle("");
       setNewArticleContent("");
@@ -657,7 +739,29 @@ function App() {
       
     } catch (err) {
       console.error("Publish article error:", err);
-      setPublishStatusMsg(`Error: ${err.message}`);
+      // Fallback
+      const fallbackId = "local-" + Date.now();
+      const newLocalArticle = {
+        id: fallbackId,
+        title: newArticleTitle,
+        content: newArticleContent,
+        price: String(parseFloat(newArticlePrice).toFixed(2)),
+        author: authorName,
+        payee: payoutWallet,
+        verified: true
+      };
+      const existingLocal = JSON.parse(localStorage.getItem("papercut_local_articles") || "[]");
+      existingLocal.push(newLocalArticle);
+      localStorage.setItem("papercut_local_articles", JSON.stringify(existingLocal));
+      
+      setPublishStatusMsg("Article saved to local draft storage!");
+      setNewArticleTitle("");
+      setNewArticleContent("");
+      await fetchArticles();
+      setTimeout(() => {
+        setPublisherTab("ledger");
+        setPublishStatusMsg("");
+      }, 1500);
     } finally {
       setIsPublishing(false);
     }
