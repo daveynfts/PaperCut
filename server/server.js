@@ -438,6 +438,36 @@ app.get("/api/articles", (req, res) => {
   }
 });
 
+// Helper to generate a clean plain-text snippet of the article content
+function generateSnippet(content) {
+  if (!content) return "";
+  
+  // Strip markdown headers
+  let cleanText = content.replace(/^#+\s+/gm, "");
+  
+  // Strip blockquotes, lists, links, inline code and code blocks
+  cleanText = cleanText
+    .replace(/^>\s+/gm, "")
+    .replace(/^[\s-*+]+(.*?)$/gm, "$1")
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+    
+  // Clean up formatting
+  cleanText = cleanText.replace(/\s+/g, " ").trim();
+  
+  if (cleanText.length <= 200) {
+    return cleanText + (cleanText.endsWith("...") ? "" : "...");
+  }
+  
+  let snippet = cleanText.substring(0, 197);
+  const lastSpace = snippet.lastIndexOf(" ");
+  if (lastSpace > 150) {
+    snippet = snippet.substring(0, lastSpace);
+  }
+  return snippet + "...";
+}
+
 // POST create a new article (from verified publishers)
 app.post("/api/articles", (req, res) => {
   const { title, content, price, author, payee } = req.body;
@@ -448,12 +478,18 @@ app.post("/api/articles", (req, res) => {
   try {
     const db = readArticlesDb();
     
-    // Generate new ID
-    const newId = String(db.length);
+    // Generate new ID by finding the maximum numeric ID present
+    let maxId = 5;
+    db.forEach(art => {
+      const numId = parseInt(art.id);
+      if (!isNaN(numId) && numId > maxId) {
+        maxId = numId;
+      }
+    });
+    const newId = String(maxId + 1);
     
-    // Create snippet (first sentence or first 120 chars)
-    const firstSentence = content.split(/[.!?]/)[0];
-    const snippet = firstSentence.length > 120 ? firstSentence.substring(0, 117) + "..." : firstSentence + "...";
+    // Create snippet (clean plain text summary)
+    const snippet = generateSnippet(content);
     
     const newArticle = {
       id: newId,
@@ -530,9 +566,10 @@ app.post("/api/publishers", (req, res) => {
   if (!email || !name || !domain || !walletAddress) {
     return res.status(400).json({ error: "Missing required fields" });
   }
+  const normalizedEmail = email.toLowerCase();
   try {
     const db = readPublishersDb();
-    db[email] = {
+    db[normalizedEmail] = {
       name,
       domain,
       walletAddress,
@@ -540,7 +577,7 @@ app.post("/api/publishers", (req, res) => {
       category: category || "General"
     };
     writePublishersDb(db);
-    res.json({ success: true, publisher: db[email] });
+    res.json({ success: true, publisher: db[normalizedEmail] });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -553,14 +590,15 @@ app.put("/api/publishers/verify", (req, res) => {
   if (!email) {
     return res.status(400).json({ error: "Email is required" });
   }
+  const normalizedEmail = email.toLowerCase();
   try {
     const db = readPublishersDb();
-    if (!db[email]) {
+    if (!db[normalizedEmail]) {
       return res.status(404).json({ error: "Publisher not found" });
     }
-    db[email].verified = typeof verified === 'boolean' ? verified : !db[email].verified;
+    db[normalizedEmail].verified = typeof verified === 'boolean' ? verified : !db[normalizedEmail].verified;
     writePublishersDb(db);
-    res.json({ success: true, publisher: db[email] });
+    res.json({ success: true, publisher: db[normalizedEmail] });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -570,14 +608,18 @@ app.put("/api/publishers/verify", (req, res) => {
 app.put("/api/publishers/:email/verify", (req, res) => {
   const email = req.params.email;
   const { verified } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: "Email is required" });
+  }
+  const normalizedEmail = email.toLowerCase();
   try {
     const db = readPublishersDb();
-    if (!db[email]) {
+    if (!db[normalizedEmail]) {
       return res.status(404).json({ error: "Publisher not found" });
     }
-    db[email].verified = typeof verified === 'boolean' ? verified : !db[email].verified;
+    db[normalizedEmail].verified = typeof verified === 'boolean' ? verified : !db[normalizedEmail].verified;
     writePublishersDb(db);
-    res.json({ success: true, publisher: db[email] });
+    res.json({ success: true, publisher: db[normalizedEmail] });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -589,12 +631,13 @@ app.delete("/api/publishers", (req, res) => {
   if (!email) {
     return res.status(400).json({ error: "Email is required" });
   }
+  const normalizedEmail = email.toLowerCase();
   try {
     const db = readPublishersDb();
-    if (!db[email]) {
+    if (!db[normalizedEmail]) {
       return res.status(404).json({ error: "Publisher not found" });
     }
-    delete db[email];
+    delete db[normalizedEmail];
     writePublishersDb(db);
     res.json({ success: true });
   } catch (err) {
@@ -605,12 +648,16 @@ app.delete("/api/publishers", (req, res) => {
 // DELETE publisher (legacy parameter fallback)
 app.delete("/api/publishers/:email", (req, res) => {
   const email = req.params.email;
+  if (!email) {
+    return res.status(400).json({ error: "Email is required" });
+  }
+  const normalizedEmail = email.toLowerCase();
   try {
     const db = readPublishersDb();
-    if (!db[email]) {
+    if (!db[normalizedEmail]) {
       return res.status(404).json({ error: "Publisher not found" });
     }
-    delete db[email];
+    delete db[normalizedEmail];
     writePublishersDb(db);
     res.json({ success: true });
   } catch (err) {
@@ -627,6 +674,18 @@ app.get("/api/articles/:id", (req, res) => {
 
   if (!article) {
     return res.status(404).json({ error: "Article not found" });
+  }
+
+  // Allow author to fetch their own article content directly without paywall validation
+  const authorQuery = req.query.author;
+  if (authorQuery && article.author.toLowerCase() === authorQuery.toLowerCase()) {
+    return res.json({
+      success: true,
+      articleId,
+      title: article.title,
+      author: article.author,
+      content: article.content
+    });
   }
 
   const authHeader = req.headers["authorization"];
@@ -682,20 +741,86 @@ app.get("/api/articles/:id", (req, res) => {
   }
 });
 
+// PUT edit an article (requires authorship verification)
+app.put("/api/articles/:id", (req, res) => {
+  const articleId = req.params.id;
+  const { title, content, price, author } = req.body;
+  if (!title || !content || !price || !author) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  try {
+    const db = readArticlesDb();
+    const articleIndex = db.findIndex(a => a.id === articleId);
+    if (articleIndex === -1) {
+      return res.status(404).json({ error: "Article not found" });
+    }
+
+    // Verify authorship case-insensitively
+    if (db[articleIndex].author.toLowerCase() !== author.toLowerCase()) {
+      return res.status(403).json({ error: "Unauthorized: You are not the author of this article" });
+    }
+
+    const snippet = generateSnippet(content);
+
+    db[articleIndex] = {
+      ...db[articleIndex],
+      title,
+      content,
+      price: String(parseFloat(price).toFixed(2)),
+      snippet
+    };
+
+    writeArticlesDb(db);
+    res.json({ success: true, article: db[articleIndex] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE an article (requires authorship verification)
+app.delete("/api/articles/:id", (req, res) => {
+  const articleId = req.params.id;
+  const { author } = req.body;
+  if (!author) {
+    return res.status(400).json({ error: "Author is required to verify ownership" });
+  }
+
+  try {
+    const db = readArticlesDb();
+    const articleIndex = db.findIndex(a => a.id === articleId);
+    if (articleIndex === -1) {
+      return res.status(404).json({ error: "Article not found" });
+    }
+
+    // Verify authorship case-insensitively
+    if (db[articleIndex].author.toLowerCase() !== author.toLowerCase()) {
+      return res.status(403).json({ error: "Unauthorized: You are not the author of this article" });
+    }
+
+    db.splice(articleIndex, 1);
+    writeArticlesDb(db);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Endpoint to get/create user wallet
 app.post("/api/user/wallet", async (req, res) => {
   const { email, walletId, address } = req.body;
   if (!email) {
     return res.status(400).json({ error: "Email is required" });
   }
+  const normalizedEmail = email.toLowerCase();
 
   try {
     const db = readUsersDb();
     
     // Restore wallet mapping from client storage if it was lost on serverless cold start
-    if (!db[email] && walletId && address) {
-      console.log(`[Circle W3S] Restoring wallet for ${email} from client: ${address}`);
-      db[email] = {
+    if (!db[normalizedEmail] && walletId && address) {
+      console.log(`[Circle W3S] Restoring wallet for ${normalizedEmail} from client: ${address}`);
+      db[normalizedEmail] = {
         walletId,
         address,
         balance: "0.0"
@@ -703,19 +828,19 @@ app.post("/api/user/wallet", async (req, res) => {
       writeUsersDb(db);
     }
     
-    if (db[email]) {
-      const balance = await getWalletUsdcBalance(db[email].walletId);
-      db[email].balance = balance;
+    if (db[normalizedEmail]) {
+      const balance = await getWalletUsdcBalance(db[normalizedEmail].walletId);
+      db[normalizedEmail].balance = balance;
       writeUsersDb(db);
       return res.json({
-        walletId: db[email].walletId,
-        address: db[email].address,
+        walletId: db[normalizedEmail].walletId,
+        address: db[normalizedEmail].address,
         balance,
         isMock: isMockMode
       });
     }
 
-    console.log(`[Circle W3S] Creating new wallet for: ${email}`);
+    console.log(`[Circle W3S] Creating new wallet for: ${normalizedEmail}`);
     let newWalletId, newAddress;
 
     if (isMockMode) {
@@ -728,7 +853,7 @@ app.post("/api/user/wallet", async (req, res) => {
       newAddress = wallet.address;
     }
 
-    db[email] = {
+    db[normalizedEmail] = {
       walletId: newWalletId,
       address: newAddress,
       balance: "0.0100"
@@ -747,7 +872,7 @@ app.post("/api/user/wallet", async (req, res) => {
     }
 
     const finalBalance = await getWalletUsdcBalance(newWalletId);
-    db[email].balance = finalBalance;
+    db[normalizedEmail].balance = finalBalance;
     writeUsersDb(db);
 
     res.json({
@@ -769,14 +894,15 @@ app.post("/api/user/faucet", async (req, res) => {
   if (!email) {
     return res.status(400).json({ error: "Email is required" });
   }
+  const normalizedEmail = email.toLowerCase();
 
   try {
     const db = readUsersDb();
     
     // Restore wallet mapping from client storage if it was lost on serverless cold start
-    if (!db[email] && walletId && address) {
-      console.log(`[Circle W3S] Restoring wallet for ${email} from client: ${address}`);
-      db[email] = {
+    if (!db[normalizedEmail] && walletId && address) {
+      console.log(`[Circle W3S] Restoring wallet for ${normalizedEmail} from client: ${address}`);
+      db[normalizedEmail] = {
         walletId,
         address,
         balance: "0.0"
@@ -784,13 +910,13 @@ app.post("/api/user/faucet", async (req, res) => {
       writeUsersDb(db);
     }
 
-    if (!db[email]) {
+    if (!db[normalizedEmail]) {
       return res.status(400).json({ error: "User wallet not initialized" });
     }
 
     // Cooldown check (30 minutes)
     const now = Date.now();
-    const lastFaucet = db[email].lastFaucetTime || 0;
+    const lastFaucet = db[normalizedEmail].lastFaucetTime || 0;
     const cooldown = 30 * 60 * 1000; // 30 minutes in ms
     const timePassed = now - lastFaucet;
 
@@ -802,8 +928,8 @@ app.post("/api/user/faucet", async (req, res) => {
       });
     }
 
-    const userWalletId = db[email].walletId;
-    const userAddress = db[email].address;
+    const userWalletId = db[normalizedEmail].walletId;
+    const userAddress = db[normalizedEmail].address;
     const amount = 0.05;
 
     console.log(`[Circle W3S] Fauceting ${amount} USDC from publisher wallet to ${userAddress}`);
@@ -811,21 +937,21 @@ app.post("/api/user/faucet", async (req, res) => {
     let txHash;
     if (isMockMode) {
       txHash = "0x" + crypto.randomBytes(32).toString("hex");
-      const currentBal = parseFloat(db[email].balance || "0.0");
-      db[email].balance = (currentBal + amount).toFixed(4);
-      db[email].lastFaucetTime = now;
+      const currentBal = parseFloat(db[normalizedEmail].balance || "0.0");
+      db[normalizedEmail].balance = (currentBal + amount).toFixed(4);
+      db[normalizedEmail].lastFaucetTime = now;
       writeUsersDb(db);
       await new Promise(resolve => setTimeout(resolve, 1000));
-      console.log(`[Mock Faucet] Added ${amount} USDC to ${email}`);
+      console.log(`[Mock Faucet] Added ${amount} USDC to ${normalizedEmail}`);
     } else {
       const txId = await transferCircleUsdc(process.env.PUBLISHER_WALLET_ID, userAddress, amount);
       const result = await pollTransactionStatus(txId);
       txHash = result.txHash;
-      db[email].lastFaucetTime = now;
+      db[normalizedEmail].lastFaucetTime = now;
     }
 
     const finalBalance = await getWalletUsdcBalance(userWalletId);
-    db[email].balance = finalBalance;
+    db[normalizedEmail].balance = finalBalance;
     writeUsersDb(db);
 
     res.json({
@@ -846,6 +972,7 @@ app.post("/api/articles/unlock", async (req, res) => {
   if (!email || !articleId) {
     return res.status(400).json({ error: "Email and articleId are required" });
   }
+  const normalizedEmail = email.toLowerCase();
 
   const articles = readArticlesDb();
   const article = articles.find(a => a.id === articleId);
@@ -857,9 +984,9 @@ app.post("/api/articles/unlock", async (req, res) => {
     const db = readUsersDb();
     
     // Restore wallet mapping from client storage if it was lost on serverless cold start
-    if (!db[email] && walletId && address) {
-      console.log(`[Circle W3S] Restoring wallet for ${email} from client: ${address}`);
-      db[email] = {
+    if (!db[normalizedEmail] && walletId && address) {
+      console.log(`[Circle W3S] Restoring wallet for ${normalizedEmail} from client: ${address}`);
+      db[normalizedEmail] = {
         walletId,
         address,
         balance: "0.0"
@@ -867,12 +994,12 @@ app.post("/api/articles/unlock", async (req, res) => {
       writeUsersDb(db);
     }
 
-    if (!db[email]) {
+    if (!db[normalizedEmail]) {
       return res.status(400).json({ error: "User wallet not initialized. Please log in again." });
     }
 
-    const userWalletId = db[email].walletId;
-    const userWalletAddress = db[email].address;
+    const userWalletId = db[normalizedEmail].walletId;
+    const userWalletAddress = db[normalizedEmail].address;
     
     const currentBalance = await getWalletUsdcBalance(userWalletId);
     const cost = parseFloat(article.price);
@@ -888,7 +1015,7 @@ app.post("/api/articles/unlock", async (req, res) => {
     if (isMockMode) {
       txHash = "0x" + crypto.randomBytes(32).toString("hex");
       const newBal = (parseFloat(currentBalance) - cost).toFixed(4);
-      db[email].balance = newBal;
+      db[normalizedEmail].balance = newBal;
       writeUsersDb(db);
       await new Promise(resolve => setTimeout(resolve, 1500));
       console.log(`[Mock Mode] Transfer successful. TxHash: ${txHash}`);
@@ -899,7 +1026,7 @@ app.post("/api/articles/unlock", async (req, res) => {
     }
 
     const finalBalance = await getWalletUsdcBalance(userWalletId);
-    db[email].balance = finalBalance;
+    db[normalizedEmail].balance = finalBalance;
     writeUsersDb(db);
 
     res.json({

@@ -304,6 +304,12 @@ function App() {
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishStatusMsg, setPublishStatusMsg] = useState("");
   const [showMdGuide, setShowMdGuide] = useState(false);
+  const [editingArticle, setEditingArticle] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editPrice, setEditPrice] = useState("");
+  const [editContent, setEditContent] = useState("");
+  const [isEditingSubmit, setIsEditingSubmit] = useState(false);
+  const [editStatusMsg, setEditStatusMsg] = useState("");
 
   useEffect(() => {
     localStorage.setItem("papercut_draft_title", newArticleTitle);
@@ -367,12 +373,13 @@ function App() {
     return parsedLines.join("");
   };
 
-  const insertMarkdown = (syntax) => {
-    const textarea = document.getElementById("dispatch-editor-textarea");
+  const insertMarkdown = (syntax, isEdit = false) => {
+    const textareaId = isEdit ? "dispatch-editor-textarea-edit" : "dispatch-editor-textarea";
+    const textarea = document.getElementById(textareaId);
     if (!textarea) return;
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
-    const text = newArticleContent;
+    const text = isEdit ? editContent : newArticleContent;
     const selectedText = text.substring(start, end);
     let replacement = "";
     if (syntax === "h1") {
@@ -397,7 +404,11 @@ function App() {
       replacement = `\n- ${selectedText || "List item"}\n`;
     }
     const newText = text.substring(0, start) + replacement + text.substring(end);
-    setNewArticleContent(newText);
+    if (isEdit) {
+      setEditContent(newText);
+    } else {
+      setNewArticleContent(newText);
+    }
     
     setTimeout(() => {
       textarea.focus();
@@ -406,12 +417,16 @@ function App() {
     }, 0);
   };
 
-  const handleImportMarkdown = (e) => {
+  const handleImportMarkdown = (e, isEdit = false) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (event) => {
-      setNewArticleContent(event.target.result || "");
+      if (isEdit) {
+        setEditContent(event.target.result || "");
+      } else {
+        setNewArticleContent(event.target.result || "");
+      }
     };
     reader.readAsText(file);
   };
@@ -534,15 +549,19 @@ function App() {
       // Merge with INITIAL_ARTICLES first
       const mergedWithInitial = fetchedArticles.map(item => {
         const local = INITIAL_ARTICLES.find(la => la.id === item.id);
-        return {
-          ...local,
-          ...item
-        };
+        // Only merge if the authors match case-insensitively
+        if (local && local.author.toLowerCase() === item.author.toLowerCase()) {
+          return {
+            ...local,
+            ...item
+          };
+        }
+        return item;
       });
       
       // Ensure all INITIAL_ARTICLES are present
       INITIAL_ARTICLES.forEach(la => {
-        if (!mergedWithInitial.some(a => a.id === la.id)) {
+        if (!mergedWithInitial.some(a => a.id === la.id && a.author.toLowerCase() === la.author.toLowerCase())) {
           mergedWithInitial.push(la);
         }
       });
@@ -553,7 +572,7 @@ function App() {
       // Merge them
       const allArticles = [...mergedWithInitial];
       localArticles.forEach(la => {
-        if (!allArticles.some(a => a.id === la.id)) {
+        if (!allArticles.some(a => a.id === la.id && a.author.toLowerCase() === la.author.toLowerCase())) {
           allArticles.push(la);
         }
       });
@@ -575,7 +594,7 @@ function App() {
       const localArticles = JSON.parse(localStorage.getItem("papercut_local_articles") || "[]");
       const allArticles = [...INITIAL_ARTICLES];
       localArticles.forEach(la => {
-        if (!allArticles.some(a => a.id === la.id)) {
+        if (!allArticles.some(a => a.id === la.id && a.author.toLowerCase() === la.author.toLowerCase())) {
           allArticles.push(la);
         }
       });
@@ -594,11 +613,20 @@ function App() {
       const response = await fetch(`${BACKEND_URL}/api/publishers`);
       if (response.ok) {
         const data = await response.json();
-        setPublishers(data);
+        const normalized = {};
+        Object.keys(data).forEach(key => {
+          normalized[key.toLowerCase()] = data[key];
+        });
+        setPublishers(normalized);
       }
     } catch (err) {
       console.error("Failed to fetch publishers:", err);
     }
+  };
+
+  const getPublisherRecord = (email) => {
+    if (!publishers || !email) return null;
+    return publishers[email.toLowerCase()] || null;
   };
 
   // Handle URL subpath routing for /admin, /papercut/admin, or hash #/admin / #/publisher
@@ -650,11 +678,11 @@ function App() {
 
   // Dynamic earnings calculation for verified publishers
   useEffect(() => {
-    if (isPublisherView && userEmail && publishers && publishers[userEmail] && publishers[userEmail].verified) {
+    const pubRecord = getPublisherRecord(userEmail);
+    if (isPublisherView && userEmail && pubRecord && pubRecord.verified) {
       const storedClaimed = localStorage.getItem(`papercut_pub_claimed_${userEmail}`);
       
       // Calculate dynamic earnings based on how many dispatches by this author are unlocked by readers
-      const pubRecord = publishers[userEmail];
       const authorArticles = articles.filter(a => a.author.toLowerCase() === pubRecord.name.toLowerCase());
       let calculatedEarned = 0.0;
       
@@ -684,7 +712,7 @@ function App() {
     setIsPublishing(true);
     setPublishStatusMsg("Publishing dispatch to database...");
     
-    const publisherRecord = publishers[user?.email?.address || ""];
+    const publisherRecord = getPublisherRecord(user?.email?.address || "");
     const authorName = publisherRecord ? publisherRecord.name : "Anonymous Publisher";
     const payoutWallet = publisherRecord ? publisherRecord.walletAddress : (smartWalletAddress || activeWallet?.address || user?.wallet?.address || "");
 
@@ -764,6 +792,211 @@ function App() {
       }, 1500);
     } finally {
       setIsPublishing(false);
+    }
+  };
+
+  const startEditing = async (art) => {
+    setEditingArticle(art);
+    setEditTitle(art.title);
+    setEditPrice(art.price);
+    setEditContent("");
+    setEditStatusMsg("Loading content...");
+
+    const publisherRecord = getPublisherRecord(user?.email?.address || "");
+    const authorName = publisherRecord ? publisherRecord.name : "";
+
+    // If content is already present (e.g. from local storage), use it
+    if (art.content) {
+      setEditContent(art.content);
+      setEditStatusMsg("");
+      return;
+    }
+
+    // Otherwise, fetch it from server
+    try {
+      const rawId = art.id.replace("local-", "");
+      const response = await fetch(`${BACKEND_URL}/api/articles/${rawId}?author=${encodeURIComponent(authorName)}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.content) {
+          setEditContent(data.content);
+          setEditStatusMsg("");
+          return;
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch full article for editing:", err);
+    }
+
+    // Fallback if not found or server error
+    setEditContent(art.snippet || "");
+    setEditStatusMsg("");
+  };
+
+  const handleEditArticleSubmit = async (e) => {
+    e.preventDefault();
+    if (!editingArticle || !editTitle || !editContent || !editPrice) {
+      setEditStatusMsg("Please fill in all fields.");
+      return;
+    }
+
+    setIsEditingSubmit(true);
+    setEditStatusMsg("Saving updates on server...");
+
+    const publisherRecord = getPublisherRecord(user?.email?.address || "");
+    const authorName = publisherRecord ? publisherRecord.name : "Anonymous Publisher";
+    const rawId = editingArticle.id.replace("local-", "");
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/articles/${rawId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          title: editTitle,
+          content: editContent,
+          price: editPrice,
+          author: authorName
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to update article.");
+      }
+
+      // Update client-side local storage cache if it exists
+      const existingLocal = JSON.parse(localStorage.getItem("papercut_local_articles") || "[]");
+      const updatedLocal = existingLocal.map(art => {
+        if (art.id === editingArticle.id || art.id === rawId) {
+          return {
+            ...art,
+            title: editTitle,
+            content: editContent,
+            price: String(parseFloat(editPrice).toFixed(2)),
+            snippet: data.article?.snippet || art.snippet
+          };
+        }
+        return art;
+      });
+      localStorage.setItem("papercut_local_articles", JSON.stringify(updatedLocal));
+
+      setEditStatusMsg("Article updated successfully!");
+      
+      // If we are currently viewing the updated article, refresh it in the viewer too
+      if (selectedArticle && selectedArticle.id === editingArticle.id) {
+        setSelectedArticle(prev => ({
+          ...prev,
+          title: editTitle,
+          content: editContent,
+          price: String(parseFloat(editPrice).toFixed(2)),
+          snippet: data.article?.snippet || prev.snippet
+        }));
+      }
+
+      setEditingArticle(null);
+      setEditTitle("");
+      setEditContent("");
+      setEditPrice("");
+      setEditStatusMsg("");
+      await fetchArticles();
+
+    } catch (err) {
+      console.error("Failed to edit article:", err);
+      // Fallback update in local storage only
+      const existingLocal = JSON.parse(localStorage.getItem("papercut_local_articles") || "[]");
+      const updatedLocal = existingLocal.map(art => {
+        if (art.id === editingArticle.id) {
+          return {
+            ...art,
+            title: editTitle,
+            content: editContent,
+            price: String(parseFloat(editPrice).toFixed(2))
+          };
+        }
+        return art;
+      });
+      localStorage.setItem("papercut_local_articles", JSON.stringify(updatedLocal));
+
+      setEditStatusMsg("Article updated locally (Server connection failed)!");
+      
+      if (selectedArticle && selectedArticle.id === editingArticle.id) {
+        setSelectedArticle(prev => ({
+          ...prev,
+          title: editTitle,
+          content: editContent,
+          price: String(parseFloat(editPrice).toFixed(2))
+        }));
+      }
+
+      setTimeout(() => {
+        setEditingArticle(null);
+        setEditTitle("");
+        setEditContent("");
+        setEditPrice("");
+        setEditStatusMsg("");
+      }, 1500);
+
+      await fetchArticles();
+    } finally {
+      setIsEditingSubmit(false);
+    }
+  };
+
+  const handleDeleteArticle = async (articleToDelete) => {
+    if (!window.confirm(`Are you certain you want to delete the dispatch "${articleToDelete.title}"? This action is permanent.`)) {
+      return;
+    }
+
+    const publisherRecord = getPublisherRecord(user?.email?.address || "");
+    const authorName = publisherRecord ? publisherRecord.name : "Anonymous Publisher";
+    const rawId = articleToDelete.id.replace("local-", "");
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/articles/${rawId}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          author: authorName
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to delete article.");
+      }
+
+      // Remove from local storage cache
+      const existingLocal = JSON.parse(localStorage.getItem("papercut_local_articles") || "[]");
+      const updatedLocal = existingLocal.filter(art => art.id !== articleToDelete.id && art.id !== rawId);
+      localStorage.setItem("papercut_local_articles", JSON.stringify(updatedLocal));
+
+      alert("Dispatch deleted successfully.");
+      
+      // If we are currently viewing the deleted article, clear selectedArticle
+      if (selectedArticle && selectedArticle.id === articleToDelete.id) {
+        setSelectedArticle(null);
+      }
+
+      await fetchArticles();
+
+    } catch (err) {
+      console.error("Failed to delete article:", err);
+      // Fallback delete from local storage only
+      const existingLocal = JSON.parse(localStorage.getItem("papercut_local_articles") || "[]");
+      const updatedLocal = existingLocal.filter(art => art.id !== articleToDelete.id);
+      localStorage.setItem("papercut_local_articles", JSON.stringify(updatedLocal));
+
+      alert("Dispatch deleted locally (Server connection failed).");
+      
+      if (selectedArticle && selectedArticle.id === articleToDelete.id) {
+        setSelectedArticle(null);
+      }
+
+      await fetchArticles();
     }
   };
 
@@ -1447,7 +1680,7 @@ function App() {
               SIGN GUEST REGISTER
             </button>
           </main>
-        ) : !publishers[user?.email?.address || ""] ? (
+        ) : !getPublisherRecord(user?.email?.address || "") ? (
           <main className="publisher-container" style={{ padding: '32px', maxWidth: '600px', margin: '40px auto', border: '2px solid var(--ink-black)', backgroundColor: 'var(--paper-accent)', boxShadow: '6px 6px 0 var(--ink-black)' }}>
             <div className="greek-key"></div>
             <h2 className="serif-title font-italic" style={{ color: 'var(--ink-red)', fontSize: '28px', marginBottom: '8px', textAlign: 'center' }}>Accreditation Application</h2>
@@ -1521,14 +1754,14 @@ function App() {
               </div>
             )}
           </main>
-        ) : !publishers[user?.email?.address || ""].verified ? (
+        ) : !getPublisherRecord(user?.email?.address || "").verified ? (
           <main className="publisher-container" style={{ padding: '40px 32px', maxWidth: '500px', margin: '80px auto', border: '2px solid var(--ink-black)', backgroundColor: 'var(--paper-accent)', boxShadow: '6px 6px 0 var(--ink-black)', textAlign: 'center' }}>
             <div className="greek-key"></div>
             <div style={{ fontSize: '48px', marginBottom: '16px' }}>✉</div>
             <h2 className="serif-title font-italic" style={{ color: 'var(--ink-red)', fontSize: '24px', marginBottom: '12px' }}>APPLICATION PENDING</h2>
             <p className="serif-body" style={{ fontSize: '14px', lineHeight: '1.6', marginBottom: '24px' }}>
-              Dear <strong>{publishers[user?.email?.address || ""].name}</strong>,<br/>
-              Your application with domain <code>{publishers[user?.email?.address || ""].domain}</code> has been linked directly to the Admin Board. 
+              Dear <strong>{getPublisherRecord(user?.email?.address || "")?.name}</strong>,<br/>
+              Your application with domain <code>{getPublisherRecord(user?.email?.address || "")?.domain}</code> has been linked directly to the Admin Board. 
             </p>
             <div className="mono-text" style={{ fontSize: '11px', border: '1px dashed var(--ink-red)', padding: '12px', background: 'rgba(186,45,45,0.03)', color: 'var(--ink-red)', marginBottom: '24px' }}>
               STATUS: AWAITING ADMIN ACCREDITATION APPROVAL
@@ -1588,6 +1821,23 @@ function App() {
               >
                 ✎ WRITE DISPATCH
               </button>
+              <button 
+                onClick={() => setPublisherTab("dispatches")} 
+                style={{
+                  padding: '8px 16px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                  cursor: 'pointer',
+                  border: 'none',
+                  borderBottom: publisherTab === "dispatches" ? '3px solid var(--ink-red)' : '3px solid transparent',
+                  background: 'none',
+                  color: publisherTab === "dispatches" ? 'var(--ink-black)' : 'var(--ink-grey)',
+                  fontWeight: 'bold',
+                  outline: 'none'
+                }}
+              >
+                📂 MY DISPATCHES
+              </button>
             </div>
 
             {publisherTab === "ledger" ? (
@@ -1595,9 +1845,9 @@ function App() {
                 <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', marginBottom: '24px' }}>
                   <div style={{ flex: '1 1 300px', border: '1px solid var(--ink-black)', padding: '16px', background: 'var(--paper-accent)' }}>
                     <div className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-grey)', marginBottom: '12px' }}>AUTHOR PROFILE</div>
-                    <div style={{ fontFamily: 'var(--font-serif)', fontSize: '16px', fontWeight: 'bold', color: 'var(--ink-black)' }}>{publishers[user?.email?.address || ""].name}</div>
-                    <div className="mono-text" style={{ fontSize: '11px', color: 'var(--ink-grey)', margin: '4px 0' }}>Beat: {publishers[user?.email?.address || ""].category}</div>
-                    <div className="mono-text" style={{ fontSize: '11px', color: 'var(--ink-red)' }}>Domain: {publishers[user?.email?.address || ""].domain}</div>
+                    <div style={{ fontFamily: 'var(--font-serif)', fontSize: '16px', fontWeight: 'bold', color: 'var(--ink-black)' }}>{getPublisherRecord(user?.email?.address || "")?.name}</div>
+                    <div className="mono-text" style={{ fontSize: '11px', color: 'var(--ink-grey)', margin: '4px 0' }}>Beat: {getPublisherRecord(user?.email?.address || "")?.category}</div>
+                    <div className="mono-text" style={{ fontSize: '11px', color: 'var(--ink-red)' }}>Domain: {getPublisherRecord(user?.email?.address || "")?.domain}</div>
                   </div>
 
                   <div style={{ flex: '1 1 300px', border: '1px solid var(--ink-black)', padding: '16px', background: 'var(--paper-bg)' }}>
@@ -1639,8 +1889,8 @@ function App() {
                     <tbody>
                       <tr style={{ borderBottom: '1px solid var(--ink-light-grey)' }}>
                         <td style={{ padding: '6px 0', color: 'var(--ink-grey)' }}>Induction Wallet Address</td>
-                        <td style={{ padding: '6px 0', textAlign: 'right', fontFamily: 'var(--font-mono)' }} title={publishers[user?.email?.address || ""].walletAddress}>
-                          {publishers[user?.email?.address || ""].walletAddress}
+                        <td style={{ padding: '6px 0', textAlign: 'right', fontFamily: 'var(--font-mono)' }} title={getPublisherRecord(user?.email?.address || "")?.walletAddress}>
+                          {getPublisherRecord(user?.email?.address || "")?.walletAddress}
                         </td>
                       </tr>
                       <tr style={{ borderBottom: '1px solid var(--ink-light-grey)' }}>
@@ -1655,7 +1905,7 @@ function App() {
                   </table>
                 </div>
               </>
-            ) : (
+            ) : publisherTab === "write" ? (
               <div className="dispatch-writer-container">
                 <form onSubmit={handlePublishArticleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   <div className="writer-field-group">
@@ -1690,7 +1940,7 @@ function App() {
                       <input 
                         type="text" 
                         disabled
-                        value={publishers[user?.email?.address || ""].walletAddress} 
+                        value={getPublisherRecord(user?.email?.address || "")?.walletAddress || ""}
                         className="writer-input"
                         style={{ fontFamily: 'var(--font-mono)', backgroundColor: 'var(--paper-bg-darker)', color: 'var(--ink-grey)', border: '1px solid var(--ink-light-grey)' }}
                       />
@@ -1877,6 +2127,264 @@ function App() {
                     </div>
                   )}
                 </form>
+              </div>
+            ) : (
+              <div className="dispatch-writer-container">
+                {editingArticle ? (
+                  /* Edit Article Form */
+                  <form onSubmit={handleEditArticleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--ink-black)', paddingBottom: '8px' }}>
+                      <h3 className="serif-title font-italic" style={{ margin: 0, fontSize: '20px' }}>✎ EDITING DISPATCH: <span style={{ color: 'var(--ink-red)' }}>{editingArticle.title}</span></h3>
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          setEditingArticle(null);
+                          setEditTitle("");
+                          setEditContent("");
+                          setEditPrice("");
+                          setEditStatusMsg("");
+                        }}
+                        className="btn btn-secondary" 
+                        style={{ padding: '6px 16px', fontSize: '11px' }}
+                      >
+                        BACK TO LIST
+                      </button>
+                    </div>
+
+                    <div className="writer-field-group">
+                      <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>1. DISPATCH TITLE</label>
+                      <input 
+                        type="text" 
+                        required 
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        placeholder="e.g. Decentralized Governance in Autonomous Agent Networks" 
+                        className="writer-input"
+                      />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                      <div className="writer-field-group">
+                        <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>2. READ TARIFF (USDC)</label>
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          min="0.01" 
+                          max="10.00"
+                          required 
+                          value={editPrice}
+                          onChange={(e) => setEditPrice(e.target.value)}
+                          className="writer-input"
+                          style={{ fontFamily: 'var(--font-mono)' }}
+                        />
+                      </div>
+                      <div className="writer-field-group">
+                        <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>3. RECIPIENT WALLET (LOCKED)</label>
+                        <input 
+                          type="text" 
+                          disabled
+                          value={getPublisherRecord(user?.email?.address || "")?.walletAddress || ""}
+                          className="writer-input"
+                          style={{ fontFamily: 'var(--font-mono)', backgroundColor: 'var(--paper-bg-darker)', color: 'var(--ink-grey)', border: '1px solid var(--ink-light-grey)' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="writer-field-group">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                        <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>4. CONTENT (MARKDOWN & DRAG-PASTE SUPPORTED)</label>
+                        <span className="mono-text" style={{ fontSize: '9px', color: 'var(--ink-grey)' }}>Drag-and-drop a .md file or paste content directly</span>
+                      </div>
+
+                      {/* Editor & Preview layout */}
+                      <div className="editor-layout">
+                        <div className="editor-pane-container">
+                          {/* Formatting Toolbar */}
+                          <div className="format-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+                            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                              <button type="button" className="btn-format" onClick={() => insertMarkdown("h1", true)}>H1</button>
+                              <button type="button" className="btn-format" onClick={() => insertMarkdown("h2", true)}>H2</button>
+                              <button type="button" className="btn-format" onClick={() => insertMarkdown("h3", true)}>H3</button>
+                              <button type="button" className="btn-format" onClick={() => insertMarkdown("bold", true)}>B</button>
+                              <button type="button" className="btn-format" onClick={() => insertMarkdown("italic", true)}>I</button>
+                              <button type="button" className="btn-format" onClick={() => insertMarkdown("code", true)}>&lt;&gt;</button>
+                              <button type="button" className="btn-format" onClick={() => insertMarkdown("codeblock", true)}>BLOCKCODE</button>
+                              <button type="button" className="btn-format" onClick={() => insertMarkdown("link", true)}>LINK</button>
+                              <button type="button" className="btn-format" onClick={() => insertMarkdown("quote", true)}>QUOTE</button>
+                              <button type="button" className="btn-format" onClick={() => insertMarkdown("list", true)}>LIST</button>
+                            </div>
+                            
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                              <label htmlFor="markdown-file-import-edit" className="btn-format" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer', margin: 0 }}>
+                                📥 IMPORT MD
+                              </label>
+                              <input 
+                                type="file" 
+                                id="markdown-file-import-edit" 
+                                accept=".md,.txt" 
+                                onChange={(e) => handleImportMarkdown(e, true)} 
+                                style={{ display: 'none' }} 
+                              />
+                            </div>
+                          </div>
+
+                          <textarea
+                            id="dispatch-editor-textarea-edit"
+                            required
+                            value={editContent}
+                            onChange={(e) => setEditContent(e.target.value)}
+                            onScroll={handleEditorScroll}
+                            placeholder="Loading content or type here..."
+                            className="writer-textarea"
+                          />
+                        </div>
+                        
+                        <div className="preview-pane">
+                          <div className="preview-pane-title">LIVE PREVIEW (16:9 RENDER)</div>
+                          <div 
+                            className="content-text markdown-render" 
+                            style={{ height: 'calc(100% - 24px)', overflowY: 'auto', textJustify: 'auto', columnCount: '1' }}
+                            dangerouslySetInnerHTML={{ __html: parseMarkdownToHtml(editContent) || "<p style='color: var(--ink-grey); font-style: italic;'>No content written yet. Start typing or paste Markdown to see layout preview.</p>" }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Word Count & Status Bar */}
+                      <div className="editor-status-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', padding: '8px 12px', border: '1px solid var(--ink-black)', backgroundColor: 'var(--paper-accent)', fontSize: '10px', fontFamily: 'var(--font-mono)' }}>
+                        <div style={{ display: 'flex', gap: '16px' }}>
+                          <span><strong>WORDS:</strong> {getWordCount(editContent)}</span>
+                          <span><strong>CHARACTERS:</strong> {editContent.length}</span>
+                          <span><strong>EST. READ TIME:</strong> ~{Math.ceil(getWordCount(editContent) / 200) || 1} MIN</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span className="save-status-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--ink-red)', display: 'inline-block' }}></span>
+                          <span style={{ color: 'var(--ink-black)', fontWeight: 'bold' }}>EDITING MODE</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                      <button 
+                        type="submit" 
+                        className="btn" 
+                        disabled={isEditingSubmit}
+                        style={{ flex: 1, padding: '12px 0', letterSpacing: '0.06em', fontSize: '13px' }}
+                      >
+                        {isEditingSubmit ? "SAVING CHANGES..." : "SAVE CHANGES"}
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          setEditingArticle(null);
+                          setEditTitle("");
+                          setEditContent("");
+                          setEditPrice("");
+                          setEditStatusMsg("");
+                        }}
+                        className="btn btn-secondary" 
+                        style={{ flex: 0.3, padding: '12px 0', fontSize: '13px' }}
+                      >
+                        CANCEL
+                      </button>
+                    </div>
+
+                    {editStatusMsg && (
+                      <div className="mono-text" style={{ marginTop: '8px', fontSize: '11px', color: 'var(--ink-red)', textAlign: 'center', border: '1px dashed var(--ink-red)', padding: '8px', background: 'rgba(186,45,45,0.03)' }}>
+                        {editStatusMsg}
+                      </div>
+                    )}
+                  </form>
+                ) : (
+                  /* Articles List */
+                  <div>
+                    <div style={{ borderBottom: '1px solid var(--ink-black)', paddingBottom: '12px', marginBottom: '20px' }}>
+                      <h3 className="serif-title font-italic" style={{ margin: 0, fontSize: '24px' }}>PUBLISHED DISPATCHES</h3>
+                      <p className="mono-text text-muted" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '4px 0 0 0' }}>
+                        MANAGE AND ARDUOUSLY MAINTAIN YOUR PUBLIC ARCHIVES
+                      </p>
+                    </div>
+
+                    {articles.filter(art => art.author.toLowerCase() === (getPublisherRecord(user?.email?.address || "")?.name || "").toLowerCase()).length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '40px 0', border: '1px dashed var(--ink-light-grey)', background: 'var(--paper-accent)' }}>
+                        <p className="serif-body" style={{ fontSize: '15px', color: 'var(--ink-grey)', margin: 0 }}>
+                          You have not published any dispatches yet. Go to the <strong>✎ WRITE DISPATCH</strong> tab to create one.
+                        </p>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        {articles
+                          .filter(art => art.author.toLowerCase() === (getPublisherRecord(user?.email?.address || "")?.name || "").toLowerCase())
+                          .map((art) => {
+                            const isLocal = art.id.startsWith("local-");
+                            return (
+                              <div 
+                                key={art.id} 
+                                style={{ 
+                                  border: '2px solid var(--ink-black)', 
+                                  padding: '16px', 
+                                  background: 'var(--paper-bg)', 
+                                  boxShadow: '4px 4px 0 var(--ink-black)',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '12px'
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
+                                  <div>
+                                    <h4 className="serif-title font-bold" style={{ margin: 0, fontSize: '18px', color: 'var(--ink-black)' }}>
+                                      {art.title}
+                                    </h4>
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '6px', flexWrap: 'wrap' }}>
+                                      <span className="mono-text" style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--ink-red)' }}>
+                                        TARIFF: {art.price} USDC
+                                      </span>
+                                      <span style={{ color: 'var(--ink-light-grey)' }}>•</span>
+                                      <span className="mono-text" style={{ fontSize: '10px', color: 'var(--ink-grey)' }}>
+                                        ID: {art.id}
+                                      </span>
+                                      <span style={{ color: 'var(--ink-light-grey)' }}>•</span>
+                                      {isLocal ? (
+                                        <span className="mono-text" style={{ fontSize: '9px', border: '1px dashed var(--ink-red)', color: 'var(--ink-red)', padding: '2px 6px', background: 'rgba(186,45,45,0.02)', fontWeight: 'bold' }}>
+                                          LOCAL DRAFT
+                                        </span>
+                                      ) : (
+                                        <span className="mono-text" style={{ fontSize: '9px', border: '1px solid var(--ink-black)', color: 'var(--ink-black)', padding: '2px 6px', background: 'var(--paper-accent)', fontWeight: 'bold' }}>
+                                          ON-CHAIN
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  
+                                  <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button 
+                                      type="button"
+                                      onClick={() => startEditing(art)}
+                                      className="btn btn-sm btn-secondary" 
+                                      style={{ padding: '6px 12px', fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                    >
+                                      ✎ EDIT
+                                    </button>
+                                    <button 
+                                      type="button"
+                                      onClick={() => handleDeleteArticle(art)}
+                                      className="btn btn-sm btn-danger" 
+                                      style={{ padding: '6px 12px', fontSize: '11px', fontWeight: 'bold', background: 'none', border: '1px solid var(--ink-red)', color: 'var(--ink-red)', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                    >
+                                      🗑 DELETE
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <p className="serif-body" style={{ margin: 0, fontSize: '13px', lineHeight: '1.5', color: 'var(--ink-grey)' }}>
+                                  {art.snippet}
+                                </p>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </main>
@@ -2135,8 +2643,8 @@ function App() {
             <div className="article-list">
               {articles.map((art) => (
                 <div
-                  key={art.id}
-                  className={`article-card ${selectedArticle?.id === art.id ? 'active' : ''}`}
+                  key={`${art.id}-${art.author}`}
+                  className={`article-card ${selectedArticle?.id === art.id && selectedArticle?.author.toLowerCase() === art.author.toLowerCase() ? 'active' : ''}`}
                   onClick={() => handleSelectArticle(art)}
                 >
                   <div className="card-title">{art.title}</div>
@@ -2367,7 +2875,7 @@ function App() {
                     />
                   ) : (
                     <>
-                      <div className="content-text">
+                      <div className="content-text-preview" style={{ fontStyle: 'italic', color: 'var(--ink-grey)', marginBottom: '24px', fontSize: '15px', lineHeight: '1.7', whiteSpace: 'pre-line' }}>
                         {selectedArticle.snippet}
                       </div>
 
