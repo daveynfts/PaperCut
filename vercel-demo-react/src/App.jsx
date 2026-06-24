@@ -455,6 +455,18 @@ function App() {
     }
   };
 
+  const handleEditorScroll = (e) => {
+    const textarea = e.target;
+    const previewPane = document.querySelector(".markdown-render");
+    if (!previewPane) return;
+    
+    const scrollableHeight = textarea.scrollHeight - textarea.clientHeight;
+    if (scrollableHeight <= 0) return;
+    
+    const scrollPct = textarea.scrollTop / scrollableHeight;
+    previewPane.scrollTop = scrollPct * (previewPane.scrollHeight - previewPane.clientHeight);
+  };
+
   const fetchFullArticleContent = async (articleId, priceStr) => {
     try {
       const userEmail = user?.email?.address || user?.id || "anonymous-user";
@@ -575,7 +587,6 @@ function App() {
   // Dynamic earnings calculation for verified publishers
   useEffect(() => {
     if (isPublisherView && userEmail && publishers && publishers[userEmail] && publishers[userEmail].verified) {
-      const storedEarned = localStorage.getItem(`papercut_pub_earned_${userEmail}`);
       const storedClaimed = localStorage.getItem(`papercut_pub_claimed_${userEmail}`);
       
       // Calculate dynamic earnings based on how many dispatches by this author are unlocked by readers
@@ -590,17 +601,11 @@ function App() {
         }
       });
       
-      // Seed value of 0.35 USDC to make demo satisfying if no articles are unlocked yet
-      if (calculatedEarned === 0) {
-        calculatedEarned = 0.35;
-      }
-
-      const finalEarned = storedEarned ? parseFloat(storedEarned) : calculatedEarned;
       const finalClaimed = storedClaimed ? parseFloat(storedClaimed) : 0.0;
       
-      setPubEarnings(finalEarned);
+      setPubEarnings(calculatedEarned);
       setPubClaimed(finalClaimed);
-      localStorage.setItem(`papercut_pub_earned_${userEmail}`, finalEarned.toString());
+      localStorage.setItem(`papercut_pub_earned_${userEmail}`, calculatedEarned.toString());
       localStorage.setItem(`papercut_pub_claimed_${userEmail}`, finalClaimed.toString());
     }
   }, [isPublisherView, userEmail, publishers, articles, unlockedArticles]);
@@ -1635,6 +1640,7 @@ function App() {
                           onChange={(e) => setNewArticleContent(e.target.value)}
                           onDragOver={handleDragOver}
                           onDrop={handleDrop}
+                          onScroll={handleEditorScroll}
                           placeholder="Write or paste your markdown content here... Drag and drop a .md file directly to import it."
                           className="writer-textarea"
                         />
