@@ -853,8 +853,13 @@ app.post("/api/user/wallet", async (req, res) => {
     const db = readUsersDb();
     
     // Restore wallet mapping from client storage if it was lost on serverless cold start
+    // ONLY restore if the client's cached mock flag is explicitly defined and matches the server mode.
+    // This prevents legacy cached frontends (which send undefined isMock) from corrupting the live DB.
     const clientMock = clientIsMock === true || clientIsMock === 'true';
-    if (!db[normalizedEmail] && walletId && address && (clientMock === isMockMode)) {
+    const clientLive = clientIsMock === false || clientIsMock === 'false';
+    const canRestore = (isMockMode && clientMock) || (!isMockMode && clientLive);
+    
+    if (!db[normalizedEmail] && walletId && address && canRestore) {
       console.log(`[Circle W3S] Restoring wallet for ${normalizedEmail} from client: ${address}`);
       db[normalizedEmail] = {
         walletId,
