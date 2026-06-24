@@ -2051,7 +2051,7 @@ function App() {
                                 <td style={{ padding: '6px' }}>{new Date(claim.timestamp).toLocaleString()}</td>
                                 <td style={{ padding: '6px', color: 'green' }}>+{claim.amount} USDC</td>
                                 <td style={{ padding: '6px' }}>
-                                  <a href={`https://testnet.explorer.circle.com/tx/${claim.txHash}`} target="_blank" rel="noreferrer" style={{ color: 'var(--ink-blue)', textDecoration: 'underline' }}>
+                                  <a href={`https://testnet.arcscan.app/tx/${claim.txHash}`} target="_blank" rel="noreferrer" style={{ color: 'var(--ink-blue)', textDecoration: 'underline' }}>
                                     {claim.txHash.length > 30 ? claim.txHash.substring(0, 16) + "..." : claim.txHash}
                                   </a>
                                 </td>
