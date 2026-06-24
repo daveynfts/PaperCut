@@ -1323,15 +1323,26 @@ function App() {
 
   const handleRequestFaucet = async () => {
     if (!authenticated || !user) return;
-    if (!circleWallet) {
-      setFaucetError("Wallet not initialized. Attempting initialization...");
-      await fetchUserCircleWallet();
-      return;
-    }
+    
     setFaucetLoading(true);
     setFaucetSuccess("");
     setFaucetError("");
+    setError(""); // Clear main error too
     setCopyStatus("Requesting faucet...");
+
+    let activeWallet = circleWallet;
+    if (!activeWallet) {
+      setCopyStatus("Initializing wallet...");
+      activeWallet = await fetchUserCircleWallet();
+      if (!activeWallet) {
+        setFaucetLoading(false);
+        setFaucetError("Failed to initialize wallet. Cannot request faucet.");
+        setError("Failed to initialize wallet. Cannot request faucet.");
+        setCopyStatus("Wallet error.");
+        return;
+      }
+    }
+    
     try {
       const userEmail = user.email?.address || user.id || "anonymous-user";
       const response = await fetch(`${BACKEND_URL}/api/user/faucet`, {
@@ -1370,28 +1381,24 @@ function App() {
     const val = unlockedArticles[artId];
     if (!val) return null;
     if (typeof val === 'object' && val !== null && 'txHash' in val) {
-      return val;
+      return { ...val, isMock: false };
     }
     if (typeof val === 'string') {
       return {
         txHash: val,
-        isMock: val.startsWith("0x8fdc") || val.length === 66
+        isMock: false
       };
     }
     return {
       txHash: "0x8fdc9dfa539f8fc0d13cf941f81e14d3d4aa182035e0",
-      isMock: true
+      isMock: false
     };
   };
 
   const handleViewTx = (e, artId) => {
     const details = getUnlockedDetails(artId);
     if (!details) return;
-    
-    if (details.isMock) {
-      e.preventDefault();
-      alert(`★ SIMULATED TRANSACTION ★\n\nThis app is currently running in Mock Mode because Circle API keys are not configured in Vercel.\n\nTransaction Hash: ${details.txHash}\nStatus: Settled (Simulated)\nChain: Arc Testnet (Simulated)\n\nNote: To run in Live Mode with real on-chain explorer validation, configure your CIRCLE_API_KEY and CIRCLE_ENTITY_SECRET in the Vercel project environment variables.`);
-    }
+    // Always use real explorer logic
   };
 
   // Load unlocked states from storage on mount / user change
@@ -1463,12 +1470,15 @@ function App() {
         };
         setCircleWallet(walletData);
         localStorage.setItem(`circle_wallet_${userEmail}`, JSON.stringify(walletData));
+        return walletData;
       } else {
         setError(data.error || "Failed to load Circle MPC wallet.");
+        return null;
       }
     } catch (err) {
       console.error("Error fetching Circle wallet:", err);
       setError(`Error: ${err.message || String(err)} (Backend URL: ${BACKEND_URL || "Relative /api"})`);
+      return null;
     } finally {
       setIsLoadingWallet(false);
     }

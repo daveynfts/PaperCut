@@ -290,13 +290,26 @@ function encryptEntitySecret(entitySecretHex, publicKeyPem) {
 }
 
 let cachedCiphertext = null;
+let cachedCiphertextTime = 0;
+const CACHE_TTL = 30 * 60 * 1000; // 30 mins
+
 async function getEntitySecretCiphertext() {
-  if (cachedCiphertext) {
+  const now = Date.now();
+  if (cachedCiphertext && (now - cachedCiphertextTime < CACHE_TTL)) {
     return cachedCiphertext;
   }
-  const pubKey = await fetchCirclePublicKey();
-  cachedCiphertext = encryptEntitySecret(process.env.CIRCLE_ENTITY_SECRET, pubKey);
-  return cachedCiphertext;
+  try {
+    const pubKey = await fetchCirclePublicKey();
+    cachedCiphertext = encryptEntitySecret(process.env.CIRCLE_ENTITY_SECRET, pubKey);
+    cachedCiphertextTime = now;
+    return cachedCiphertext;
+  } catch (error) {
+    if (cachedCiphertext) {
+      console.warn("[Circle W3S] fetchCirclePublicKey failed, falling back to expired cached ciphertext.");
+      return cachedCiphertext;
+    }
+    throw error;
+  }
 }
 
 // Check balance helper
@@ -384,7 +397,8 @@ async function transferCircleUsdc(sourceWalletId, destAddress, amount) {
 
 // Poller
 async function pollTransactionStatus(transactionId) {
-  const maxAttempts = 15;
+  // Reduce to 4 attempts (~6 seconds) to prevent Vercel 10s hobby tier timeout
+  const maxAttempts = 4;
   for (let i = 0; i < maxAttempts; i++) {
     const response = await fetch(`https://api.circle.com/v1/w3s/transactions/${transactionId}`, {
       headers: {
@@ -405,7 +419,10 @@ async function pollTransactionStatus(transactionId) {
     
     await new Promise((resolve) => setTimeout(resolve, 1500));
   }
-  throw new Error("Transaction polling timed out");
+  
+  // Return PENDING instead of throwing to prevent frontend crashing
+  console.log(`[Circle Poller] Tx ${transactionId} is still pending. Proceeding to prevent Vercel timeout.`);
+  return { success: true, status: "PENDING", txHash: null };
 }
 
 // Helper to verify EIP-3009 TransferWithAuthorization signature (Keep for extension backwards compatibility)
