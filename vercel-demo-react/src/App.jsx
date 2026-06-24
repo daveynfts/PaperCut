@@ -76,7 +76,13 @@ const getInferredBackendUrl = () => {
     // Force relative path to use Vercel's rewrite rule for same-origin routing
     return "";
   }
-  return url || "https://paper-cut-apce.vercel.app";
+  
+  // For local frontend development, default to the live backend URL
+  // so developers don't need to run the backend server locally.
+  if (url && !isLocalHost(url)) {
+    return url;
+  }
+  return "https://paper-cut-apce.vercel.app";
 };
 const BACKEND_URL = getInferredBackendUrl();
 
