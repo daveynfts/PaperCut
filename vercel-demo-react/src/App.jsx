@@ -1435,7 +1435,8 @@ function App() {
             email: userEmail,
             walletId: localBackup?.walletId,
             address: localBackup?.address,
-            balance: localBackup?.balance
+            balance: localBackup?.balance,
+            isMock: localBackup?.isMock
           })
         });
         const data = await response.json();
@@ -1443,7 +1444,8 @@ function App() {
           const walletData = {
             address: data.address,
             balance: data.balance,
-            walletId: data.walletId
+            walletId: data.walletId,
+            isMock: data.isMock
           };
           setCircleWallet(walletData);
           localStorage.setItem(`circle_wallet_${userEmail}`, JSON.stringify(walletData));

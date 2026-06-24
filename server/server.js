@@ -843,7 +843,7 @@ app.delete("/api/articles/:id", (req, res) => {
 
 // Endpoint to get/create user wallet
 app.post("/api/user/wallet", async (req, res) => {
-  const { email, walletId, address, balance: clientBalance } = req.body;
+  const { email, walletId, address, balance: clientBalance, isMock: clientIsMock } = req.body;
   if (!email) {
     return res.status(400).json({ error: "Email is required" });
   }
@@ -853,7 +853,8 @@ app.post("/api/user/wallet", async (req, res) => {
     const db = readUsersDb();
     
     // Restore wallet mapping from client storage if it was lost on serverless cold start
-    if (!db[normalizedEmail] && walletId && address) {
+    const clientMock = clientIsMock === true || clientIsMock === 'true';
+    if (!db[normalizedEmail] && walletId && address && (clientMock === isMockMode)) {
       console.log(`[Circle W3S] Restoring wallet for ${normalizedEmail} from client: ${address}`);
       db[normalizedEmail] = {
         walletId,
@@ -864,15 +865,21 @@ app.post("/api/user/wallet", async (req, res) => {
     }
     
     if (db[normalizedEmail]) {
-      const balance = await getWalletUsdcBalance(db[normalizedEmail].walletId);
-      db[normalizedEmail].balance = balance;
-      writeUsersDb(db);
-      return res.json({
-        walletId: db[normalizedEmail].walletId,
-        address: db[normalizedEmail].address,
-        balance,
-        isMock: isMockMode
-      });
+      try {
+        const balance = await getWalletUsdcBalance(db[normalizedEmail].walletId);
+        db[normalizedEmail].balance = balance;
+        writeUsersDb(db);
+        return res.json({
+          walletId: db[normalizedEmail].walletId,
+          address: db[normalizedEmail].address,
+          balance,
+          isMock: isMockMode
+        });
+      } catch (err) {
+        console.warn(`[Circle W3S] Legacy or mock wallet ID ${db[normalizedEmail].walletId} failed to query on Circle API. Cleaning up database record.`, err.message);
+        delete db[normalizedEmail];
+        writeUsersDb(db);
+      }
     }
 
     console.log(`[Circle W3S] Creating new wallet for: ${normalizedEmail}`);
