@@ -401,32 +401,27 @@ async function transferCircleUsdc(sourceWalletId, destAddress, amount) {
 
 // Poller
 async function pollTransactionStatus(transactionId) {
-  // Reduce to 4 attempts (~6 seconds) to prevent Vercel 10s hobby tier timeout
-  const maxAttempts = 4;
-  for (let i = 0; i < maxAttempts; i++) {
-    const response = await fetch(`https://api.circle.com/v1/w3s/transactions/${transactionId}`, {
-      headers: {
-        "Authorization": `Bearer ${process.env.CIRCLE_API_KEY}`
-      }
-    });
-    const json = await response.json();
-    const status = json.data?.transaction?.state;
-    const txHash = json.data?.transaction?.txHash;
-    console.log(`[Circle Poller] Tx ${transactionId} status: ${status}`);
-    
-    if (status === "COMPLETE") {
-      return { success: true, txHash };
+  // Check exactly 1 time to prevent Vercel 10s hobby tier timeout completely
+  const response = await fetch(`https://api.circle.com/v1/w3s/transactions/${transactionId}`, {
+    headers: {
+      "Authorization": `Bearer ${process.env.CIRCLE_API_KEY}`
     }
-    if (status === "FAILED" || status === "CANCELLED" || status === "DENIED") {
-      throw new Error(`Transaction ended in state: ${status}`);
-    }
-    
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+  });
+  const json = await response.json();
+  const status = json.data?.transaction?.state;
+  const txHash = json.data?.transaction?.txHash;
+  console.log(`[Circle Poller] Tx ${transactionId} status: ${status}`);
+  
+  if (status === "COMPLETE") {
+    return { success: true, txHash };
+  }
+  if (status === "FAILED" || status === "CANCELLED" || status === "DENIED") {
+    throw new Error(`Transaction ended in state: ${status}`);
   }
   
-  // Return PENDING instead of throwing to prevent frontend crashing
-  console.log(`[Circle Poller] Tx ${transactionId} is still pending. Proceeding to prevent Vercel timeout.`);
-  return { success: true, status: "PENDING", txHash: null };
+  // Return PENDING instead of throwing or polling to prevent frontend crashing
+  console.log(`[Circle Poller] Tx ${transactionId} is still pending. Proceeding immediately to prevent Vercel timeout.`);
+  return { success: true, status: "PENDING", txHash: txHash || null };
 }
 
 // Helper to verify EIP-3009 TransferWithAuthorization signature (Keep for extension backwards compatibility)
