@@ -391,7 +391,7 @@ async function pollTransactionStatus(transactionId) {
     const txHash = json.data?.transaction?.txHash;
     console.log(`[Circle Poller] Tx ${transactionId} status: ${status}`);
     
-    if (status === "COMPLETE" || txHash) {
+    if (status === "COMPLETE") {
       return { success: true, txHash };
     }
     if (status === "FAILED" || status === "CANCELLED" || status === "DENIED") {

@@ -1232,6 +1232,8 @@ function App() {
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [copyStatus, setCopyStatus] = useState("Click address to copy");
   const [faucetLoading, setFaucetLoading] = useState(false);
+  const [faucetSuccess, setFaucetSuccess] = useState("");
+  const [faucetError, setFaucetError] = useState("");
 
   // Scraper Simulation States
   const [isScraping, setIsScraping] = useState(false);
@@ -1312,6 +1314,8 @@ function App() {
   const handleRequestFaucet = async () => {
     if (!authenticated || !user || !circleWallet) return;
     setFaucetLoading(true);
+    setFaucetSuccess("");
+    setFaucetError("");
     setCopyStatus("Requesting faucet...");
     try {
       const userEmail = user.email?.address || user.id || "anonymous-user";
@@ -1329,16 +1333,19 @@ function App() {
       const data = await response.json();
       if (response.ok) {
         setCircleWallet(prev => prev ? { ...prev, balance: data.balance } : null);
-        setCopyStatus("Faucet complete (+0.05 USDC)!");
+        setFaucetSuccess("Faucet complete! +0.05 USDC has been credited to your account.");
+        setCopyStatus("Faucet complete!");
         setTimeout(() => setCopyStatus("Click address to copy"), 2000);
       } else {
-        setCopyStatus(data.error || "Faucet failed.");
-        setTimeout(() => setCopyStatus("Click address to copy"), 5000);
+        setFaucetError(data.error || "Faucet claim failed.");
+        setCopyStatus("Faucet failed.");
+        setTimeout(() => setCopyStatus("Click address to copy"), 3000);
       }
     } catch (err) {
       console.error(err);
+      setFaucetError("Faucet is currently offline or unreachable.");
       setCopyStatus("Faucet offline.");
-      setTimeout(() => setCopyStatus("Click address to copy"), 5000);
+      setTimeout(() => setCopyStatus("Click address to copy"), 3000);
     } finally {
       setFaucetLoading(false);
     }
@@ -1460,6 +1467,8 @@ function App() {
       setWithdrawAmount("");
       setWithdrawError("");
       setWithdrawSuccess("");
+      setFaucetSuccess("");
+      setFaucetError("");
     }
   }, [showWalletModal]);
 
@@ -3238,6 +3247,16 @@ function App() {
                   >
                     {faucetLoading ? "STAMPING TARIFF..." : "CLAIM 0.05 USDC FAUCET"}
                   </button>
+                  {faucetSuccess && (
+                    <div className="mono-text" style={{ fontSize: '9px', color: 'green', border: '1px dashed green', padding: '6px', background: 'rgba(0,128,0,0.03)', marginTop: '8px', textAlign: 'center' }}>
+                      {faucetSuccess}
+                    </div>
+                  )}
+                  {faucetError && (
+                    <div className="mono-text" style={{ fontSize: '9px', color: 'var(--ink-red)', border: '1px dashed var(--ink-red)', padding: '6px', background: 'rgba(186,45,45,0.03)', marginTop: '8px', textAlign: 'center' }}>
+                      {faucetError}
+                    </div>
+                  )}
                 </div>
 
                 <div className="wallet-actions-section" style={{ marginTop: '16px', borderTop: '1px dashed var(--ink-light-grey)', paddingTop: '16px' }}>
