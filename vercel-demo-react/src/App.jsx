@@ -373,6 +373,27 @@ function App() {
     return parsedLines.join("");
   };
 
+  const generateClientSnippet = (content) => {
+    if (!content) return "";
+    let cleanText = content.replace(/^#+\s+/gm, "");
+    cleanText = cleanText
+      .replace(/^>\s+/gm, "")
+      .replace(/^[\s-*+]+(.*?)$/gm, "$1")
+      .replace(/```[\s\S]*?```/g, "")
+      .replace(/`([^`]+)`/g, "$1")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+    cleanText = cleanText.replace(/\s+/g, " ").trim();
+    if (cleanText.length <= 200) {
+      return cleanText + (cleanText.endsWith("...") ? "" : "...");
+    }
+    let snippet = cleanText.substring(0, 197);
+    const lastSpace = snippet.lastIndexOf(" ");
+    if (lastSpace > 150) {
+      snippet = snippet.substring(0, lastSpace);
+    }
+    return snippet + "...";
+  };
+
   const insertMarkdown = (syntax, isEdit = false) => {
     const textareaId = isEdit ? "dispatch-editor-textarea-edit" : "dispatch-editor-textarea";
     const textarea = document.getElementById(textareaId);
@@ -742,6 +763,7 @@ function App() {
         id: newId,
         title: newArticleTitle,
         content: newArticleContent,
+        snippet: generateClientSnippet(newArticleContent),
         price: String(parseFloat(newArticlePrice).toFixed(2)),
         author: authorName,
         payee: payoutWallet,
@@ -773,6 +795,7 @@ function App() {
         id: fallbackId,
         title: newArticleTitle,
         content: newArticleContent,
+        snippet: generateClientSnippet(newArticleContent),
         price: String(parseFloat(newArticlePrice).toFixed(2)),
         author: authorName,
         payee: payoutWallet,
@@ -912,6 +935,7 @@ function App() {
             ...art,
             title: editTitle,
             content: editContent,
+            snippet: generateClientSnippet(editContent),
             price: String(parseFloat(editPrice).toFixed(2))
           };
         }
@@ -926,6 +950,7 @@ function App() {
           ...prev,
           title: editTitle,
           content: editContent,
+          snippet: generateClientSnippet(editContent),
           price: String(parseFloat(editPrice).toFixed(2))
         }));
       }
@@ -2376,7 +2401,7 @@ function App() {
                                 </div>
 
                                 <p className="serif-body" style={{ margin: 0, fontSize: '13px', lineHeight: '1.5', color: 'var(--ink-grey)' }}>
-                                  {art.snippet}
+                                  {art.snippet || generateClientSnippet(art.content)}
                                 </p>
                               </div>
                             );
@@ -2658,7 +2683,7 @@ function App() {
                       {art.price}
                     </span>
                   </div>
-                  <div className={`card-snippet ${!authenticated ? 'blurred' : ''}`}>{art.snippet}</div>
+                  <div className={`card-snippet ${!authenticated ? 'blurred' : ''}`}>{art.snippet || generateClientSnippet(art.content)}</div>
                 </div>
               ))}
             </div>
@@ -2876,7 +2901,7 @@ function App() {
                   ) : (
                     <>
                       <div className="content-text-preview" style={{ fontStyle: 'italic', color: 'var(--ink-grey)', marginBottom: '24px', fontSize: '15px', lineHeight: '1.7', whiteSpace: 'pre-line' }}>
-                        {selectedArticle.snippet}
+                        {selectedArticle.snippet || generateClientSnippet(selectedArticle.content)}
                       </div>
 
                       {/* PAYWALL */}
