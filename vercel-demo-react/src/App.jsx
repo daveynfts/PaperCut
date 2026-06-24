@@ -486,6 +486,26 @@ function App() {
     fetchPublishers();
   }, []);
 
+  // Check if current IP is authorized admin when entering admin view
+  useEffect(() => {
+    if (isAdminView && !isAdminAuthenticated) {
+      const checkAdminIp = async () => {
+        try {
+          const response = await fetch(`${BACKEND_URL}/api/admin/check-ip`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.authenticated) {
+              setIsAdminAuthenticated(true);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to check admin IP authorization:", err);
+        }
+      };
+      checkAdminIp();
+    }
+  }, [isAdminView, isAdminAuthenticated]);
+
   const handleToggleVerify = async (email, currentStatus) => {
     setAdminStatusMsg(`Updating verification for ${email}...`);
     try {
@@ -1239,13 +1259,32 @@ function App() {
               Cryptographic Signature Key Required
             </p>
             
-            <form onSubmit={(e) => {
+            <form onSubmit={async (e) => {
               e.preventDefault();
-              if (adminPasswordInput === "123456A@a") {
-                setIsAdminAuthenticated(true);
-                setAdminPasswordError("");
-              } else {
-                setAdminPasswordError("INVALID ACCESS PASSKEY");
+              setAdminPasswordError("");
+              try {
+                const response = await fetch(`${BACKEND_URL}/api/admin/authorize-ip`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json"
+                  },
+                  body: JSON.stringify({ password: adminPasswordInput })
+                });
+                if (response.ok) {
+                  setIsAdminAuthenticated(true);
+                  setAdminPasswordError("");
+                } else {
+                  setAdminPasswordError("INVALID ACCESS PASSKEY");
+                }
+              } catch (err) {
+                console.error("Failed to authorize admin IP:", err);
+                // Fallback locally in case backend server is down or has connection issues
+                if (adminPasswordInput === "123456A@a") {
+                  setIsAdminAuthenticated(true);
+                  setAdminPasswordError("");
+                } else {
+                  setAdminPasswordError("INVALID ACCESS PASSKEY");
+                }
               }
             }} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', textAlign: 'left' }}>

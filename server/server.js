@@ -83,20 +83,36 @@ const USERS_DB_PATH = process.env.VERCEL
   : path.join(__dirname, "users.json");
 
 function readUsersDb() {
-  if (!fs.existsSync(USERS_DB_PATH)) {
-    const seedPath = path.join(__dirname, "users.json");
-    if (fs.existsSync(seedPath)) {
-      try {
-        const seedData = fs.readFileSync(seedPath, "utf8");
-        fs.writeFileSync(USERS_DB_PATH, seedData);
-      } catch (err) {
+  try {
+    if (!fs.existsSync(USERS_DB_PATH)) {
+      const seedPath = path.join(__dirname, "users.json");
+      if (fs.existsSync(seedPath)) {
+        try {
+          const seedData = fs.readFileSync(seedPath, "utf8");
+          fs.writeFileSync(USERS_DB_PATH, seedData);
+        } catch (err) {
+          fs.writeFileSync(USERS_DB_PATH, JSON.stringify({}));
+        }
+      } else {
         fs.writeFileSync(USERS_DB_PATH, JSON.stringify({}));
       }
-    } else {
-      fs.writeFileSync(USERS_DB_PATH, JSON.stringify({}));
     }
+    const data = fs.readFileSync(USERS_DB_PATH, "utf8");
+    return JSON.parse(data);
+  } catch (err) {
+    console.error("Corrupted users.json, re-initializing:", err);
+    const seedPath = path.join(__dirname, "users.json");
+    let fallback = {};
+    if (fs.existsSync(seedPath)) {
+      try {
+        fallback = JSON.parse(fs.readFileSync(seedPath, "utf8"));
+      } catch (e) {}
+    }
+    try {
+      fs.writeFileSync(USERS_DB_PATH, JSON.stringify(fallback, null, 2));
+    } catch (e) {}
+    return fallback;
   }
-  return JSON.parse(fs.readFileSync(USERS_DB_PATH, "utf8"));
 }
 
 function writeUsersDb(db) {
@@ -113,20 +129,36 @@ const PUBLISHERS_DB_PATH = process.env.VERCEL
   : path.join(__dirname, "publishers.json");
 
 function readPublishersDb() {
-  if (!fs.existsSync(PUBLISHERS_DB_PATH)) {
-    const seedPath = path.join(__dirname, "publishers.json");
-    if (fs.existsSync(seedPath)) {
-      try {
-        const seedData = fs.readFileSync(seedPath, "utf8");
-        fs.writeFileSync(PUBLISHERS_DB_PATH, seedData);
-      } catch (err) {
+  try {
+    if (!fs.existsSync(PUBLISHERS_DB_PATH)) {
+      const seedPath = path.join(__dirname, "publishers.json");
+      if (fs.existsSync(seedPath)) {
+        try {
+          const seedData = fs.readFileSync(seedPath, "utf8");
+          fs.writeFileSync(PUBLISHERS_DB_PATH, seedData);
+        } catch (err) {
+          fs.writeFileSync(PUBLISHERS_DB_PATH, JSON.stringify({}));
+        }
+      } else {
         fs.writeFileSync(PUBLISHERS_DB_PATH, JSON.stringify({}));
       }
-    } else {
-      fs.writeFileSync(PUBLISHERS_DB_PATH, JSON.stringify({}));
     }
+    const data = fs.readFileSync(PUBLISHERS_DB_PATH, "utf8");
+    return JSON.parse(data);
+  } catch (err) {
+    console.error("Corrupted publishers.json, re-initializing:", err);
+    const seedPath = path.join(__dirname, "publishers.json");
+    let fallback = {};
+    if (fs.existsSync(seedPath)) {
+      try {
+        fallback = JSON.parse(fs.readFileSync(seedPath, "utf8"));
+      } catch (e) {}
+    }
+    try {
+      fs.writeFileSync(PUBLISHERS_DB_PATH, JSON.stringify(fallback, null, 2));
+    } catch (e) {}
+    return fallback;
   }
-  return JSON.parse(fs.readFileSync(PUBLISHERS_DB_PATH, "utf8"));
 }
 
 function writePublishersDb(db) {
@@ -136,6 +168,36 @@ function writePublishersDb(db) {
     console.error("Failed to write publishers DB:", err);
   }
 }
+
+// Local JSON Database for authorized admin IPs
+const ADMIN_IPS_DB_PATH = process.env.VERCEL
+  ? "/tmp/admin_ips.json"
+  : path.join(__dirname, "admin_ips.json");
+
+function readAdminIpsDb() {
+  try {
+    if (!fs.existsSync(ADMIN_IPS_DB_PATH)) {
+      fs.writeFileSync(ADMIN_IPS_DB_PATH, JSON.stringify([]));
+    }
+    const data = fs.readFileSync(ADMIN_IPS_DB_PATH, "utf8");
+    return JSON.parse(data);
+  } catch (err) {
+    console.error("Corrupted admin_ips.json, re-initializing:", err);
+    try {
+      fs.writeFileSync(ADMIN_IPS_DB_PATH, JSON.stringify([]));
+    } catch (e) {}
+    return [];
+  }
+}
+
+function writeAdminIpsDb(db) {
+  try {
+    fs.writeFileSync(ADMIN_IPS_DB_PATH, JSON.stringify(db, null, 2));
+  } catch (err) {
+    console.error("Failed to write admin IPs DB:", err);
+  }
+}
+
 
 // Circle W3S Configuration
 const isMockMode = !process.env.CIRCLE_API_KEY || !process.env.CIRCLE_ENTITY_SECRET;
@@ -385,6 +447,46 @@ app.get("/api/publishers", (req, res) => {
   try {
     const db = readPublishersDb();
     res.json(db);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Helper to get client IP
+function getClientIp(req) {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (forwarded) {
+    return forwarded.split(",")[0].trim();
+  }
+  return req.socket.remoteAddress;
+}
+
+// GET check if current IP is authorized admin
+app.get("/api/admin/check-ip", (req, res) => {
+  try {
+    const clientIp = getClientIp(req);
+    const db = readAdminIpsDb();
+    const authenticated = db.includes(clientIp);
+    res.json({ authenticated, ip: clientIp });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST authorize current IP as admin (requires password)
+app.post("/api/admin/authorize-ip", (req, res) => {
+  const { password } = req.body;
+  if (password !== "123456A@a") {
+    return res.status(401).json({ error: "Invalid password" });
+  }
+  try {
+    const clientIp = getClientIp(req);
+    const db = readAdminIpsDb();
+    if (!db.includes(clientIp)) {
+      db.push(clientIp);
+      writeAdminIpsDb(db);
+    }
+    res.json({ success: true, ip: clientIp });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
