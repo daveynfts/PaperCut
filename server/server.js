@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 4000;
 app.use(cors({
   origin: process.env.CORS_ORIGIN 
     ? process.env.CORS_ORIGIN.split(',')
-    : ['http://localhost:5173', 'http://localhost:3000', 'https://paper-cut-apce.vercel.app'],
+    : ['http://localhost:5173', 'http://localhost:3000', 'https://paper-cut-apce.vercel.app', 'https://daveynfts.com', 'https://www.daveynfts.com'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true
 }));
