@@ -9,7 +9,13 @@ require("dotenv").config({ path: path.join(__dirname, ".env") });
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-app.use(cors());
+app.use(cors({
+  origin: process.env.CORS_ORIGIN 
+    ? process.env.CORS_ORIGIN.split(',')
+    : ['http://localhost:5173', 'http://localhost:3000', 'https://paper-cut-apce.vercel.app'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  credentials: true
+}));
 app.use(express.json());
 
 // Mock Publisher Wallet Address (Recipient of micropayments)
@@ -241,8 +247,8 @@ async function fetchWithRetry(url, options, retries = 3) {
   }
 }
 
-// Circle W3S Configuration - HARDCODED TO FALSE FOR PRODUCTION ONLY
-const isMockMode = false;
+// Circle W3S Configuration - Auto-detect mock mode based on environment variables
+const isMockMode = !process.env.CIRCLE_API_KEY || !process.env.CIRCLE_ENTITY_SECRET;
 
 if (isMockMode) {
   console.log("[Publisher Backend] Running in SIMULATED MOCK MODE because CIRCLE_API_KEY or CIRCLE_ENTITY_SECRET is missing.");
@@ -624,7 +630,8 @@ app.get("/api/admin/check-ip", (req, res) => {
 // POST authorize current IP as admin (requires password)
 app.post("/api/admin/authorize-ip", (req, res) => {
   const { password } = req.body;
-  if (password !== "123456A@a") {
+  const adminPassword = process.env.ADMIN_PASSWORD || "123456A@a";
+  if (password !== adminPassword) {
     return res.status(401).json({ error: "Invalid password" });
   }
   try {
@@ -795,7 +802,9 @@ app.get("/api/articles/:id", (req, res) => {
       return res.status(400).json({ error: "Invalid payment amount" });
     }
 
-    const isValid = authData.signature === "circle-authorized" || verifyEip3009(authData);
+    // SECURITY FIX: Removed hardcoded "circle-authorized" bypass that allowed free article access.
+    // In production, only trust actual EIP-3009 cryptographic verification.
+    const isValid = verifyEip3009(authData);
 
     if (!isValid) {
       return res.status(403).json({ error: "Invalid signature or authorization failed" });
@@ -936,9 +945,16 @@ app.post("/api/user/wallet", async (req, res) => {
           isMock: isMockMode
         });
       } catch (err) {
-        console.warn(`[Circle W3S] Legacy or mock wallet ID ${db[normalizedEmail].walletId} failed to query on Circle API. Cleaning up database record.`, err.message);
-        delete db[normalizedEmail];
-        writeUsersDb(db);
+        // BUGFIX: Do NOT delete the user's wallet record on transient API errors.
+        // Return cached data instead of destroying the user's wallet registration.
+        console.warn(`[Circle W3S] Balance query failed for wallet ${db[normalizedEmail].walletId}: ${err.message}. Returning cached balance.`);
+        return res.json({
+          walletId: db[normalizedEmail].walletId,
+          address: db[normalizedEmail].address,
+          balance: db[normalizedEmail].balance || "0.0",
+          isMock: isMockMode,
+          warning: "Balance may be stale due to API error"
+        });
       }
     }
 
@@ -987,7 +1003,12 @@ app.post("/api/user/faucet", async (req, res) => {
     const db = readUsersDb();
     
     // Restore wallet mapping from client storage if it was lost on serverless cold start
-    if (!db[normalizedEmail] && walletId && address) {
+    // BUGFIX: Only restore if client sends matching mode flag to prevent cross-mode corruption
+    const clientMock = req.body.isMock === true || req.body.isMock === 'true';
+    const clientLive = req.body.isMock === false || req.body.isMock === 'false';
+    const canRestore = (isMockMode && clientMock) || (!isMockMode && clientLive);
+    
+    if (!db[normalizedEmail] && walletId && address && canRestore) {
       console.log(`[Circle W3S] Restoring wallet for ${normalizedEmail} from client: ${address}`);
       db[normalizedEmail] = {
         walletId,
@@ -1074,7 +1095,12 @@ app.post("/api/articles/unlock", async (req, res) => {
     const db = readUsersDb();
     
     // Restore wallet mapping from client storage if it was lost on serverless cold start
-    if (!db[normalizedEmail] && walletId && address) {
+    // BUGFIX: Only restore if client sends matching mode flag to prevent cross-mode corruption
+    const clientMock = req.body.isMock === true || req.body.isMock === 'true';
+    const clientLive = req.body.isMock === false || req.body.isMock === 'false';
+    const canRestore = (isMockMode && clientMock) || (!isMockMode && clientLive);
+    
+    if (!db[normalizedEmail] && walletId && address && canRestore) {
       console.log(`[Circle W3S] Restoring wallet for ${normalizedEmail} from client: ${address}`);
       db[normalizedEmail] = {
         walletId,
@@ -1234,7 +1260,12 @@ app.post("/api/user/withdraw", async (req, res) => {
     const db = readUsersDb();
     
     // Restore wallet mapping from client storage if it was lost on serverless cold start
-    if (!db[normalizedEmail] && walletId && address) {
+    // BUGFIX: Only restore if client sends matching mode flag to prevent cross-mode corruption
+    const clientMock = req.body.isMock === true || req.body.isMock === 'true';
+    const clientLive = req.body.isMock === false || req.body.isMock === 'false';
+    const canRestore = (isMockMode && clientMock) || (!isMockMode && clientLive);
+    
+    if (!db[normalizedEmail] && walletId && address && canRestore) {
       console.log(`[Circle W3S] Restoring wallet for ${normalizedEmail} from client: ${address}`);
       db[normalizedEmail] = {
         walletId,

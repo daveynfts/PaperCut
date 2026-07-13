@@ -1,5 +1,10 @@
-const apiKey = "TEST_API_KEY:3679ee54d8238127ae76124f76e21849:a08f549a93b403bc66ce7f1609cbeab5";
-const txId = "c700c56d-1e58-5c81-a504-5739a720cc2d";
+require("dotenv").config({ path: require("path").join(__dirname, ".env") });
+const apiKey = process.env.CIRCLE_API_KEY;
+if (!apiKey) {
+  console.error("CIRCLE_API_KEY is not set. Please set it in server/.env");
+  process.exit(1);
+}
+const txId = process.argv[2] || "c700c56d-1e58-5c81-a504-5739a720cc2d";
 
 async function checkTx() {
   try {

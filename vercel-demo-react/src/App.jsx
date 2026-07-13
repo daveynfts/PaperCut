@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { usePrivy, useWallets, useLogin } from '@privy-io/react-auth';
-import { ethers } from 'ethers';
 import './App.css';
 import logoImg from './assets/logo.png';
 
@@ -70,18 +69,19 @@ const INITIAL_ARTICLES = [
 // Auto-infer backend URL on Vercel deployment if VITE_API_URL is not baked in
 const getInferredBackendUrl = () => {
   const url = import.meta.env.VITE_API_URL;
-  const isLocalHost = (val) => !val || val.includes("localhost") || val.includes("127.0.0.1");
   
-  if (typeof window !== "undefined" && !isLocalHost(window.location.hostname)) {
-    // Force relative path to use Vercel's rewrite rule for same-origin routing
+  // BUGFIX: Always respect VITE_API_URL when explicitly set (including localhost)
+  // This allows developers to point at a local backend during development.
+  if (url) {
+    return url.replace(/\/+$/, ""); // strip trailing slashes
+  }
+  
+  // On Vercel deployment, use the production backend URL
+  if (typeof window !== "undefined" && !window.location.hostname.includes("localhost") && !window.location.hostname.includes("127.0.0.1")) {
     return "https://paper-cut-apce.vercel.app";
   }
   
-  // For local frontend development, default to the live backend URL
-  // so developers don't need to run the backend server locally.
-  if (url && !isLocalHost(url)) {
-    return url;
-  }
+  // Fallback: local dev without VITE_API_URL still uses live backend
   return "https://paper-cut-apce.vercel.app";
 };
 const BACKEND_URL = getInferredBackendUrl();
@@ -253,6 +253,28 @@ const VerifiedBadge = ({ onApplyClick }) => {
   );
 };
 
+// --- Bug Fix Helpers ---
+const isValidEthAddress = (addr) => /^0x[a-fA-F0-9]{40}$/.test(addr);
+
+const getLocalStorageItemParsed = (key, defaultValue) => {
+  try {
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : defaultValue;
+  } catch (err) {
+    console.error(`Failed to parse localStorage key ${key}:`, err);
+    return defaultValue;
+  }
+};
+
+const safeParseResponse = async (response) => {
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    return { error: text || `HTTP Error ${response.status}` };
+  }
+};
+
 function App() {
   const { logout, authenticated, user } = usePrivy();
   const { login } = useLogin({
@@ -279,6 +301,7 @@ function App() {
   const [unlockedArticles, setUnlockedArticles] = useState({});
   const [txStatus, setTxStatus] = useState("");
   const [txHash, setTxHash] = useState("");
+  const [isUnlocking, setIsUnlocking] = useState(false);
   const [error, setError] = useState("");
   const [chainId, setChainId] = useState(null);
 
@@ -361,8 +384,14 @@ function App() {
     html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
     html = html.replace(/\*(.*?)\*/g, "<em>$1</em>");
     
-    // Parse links [text](url)
-    html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="preview-link">$1</a>');
+    // Parse links [text](url) — SECURITY FIX: sanitize href to prevent javascript: XSS
+    html = html.replace(/\[(.*?)\]\((.*?)\)/g, (match, text, url) => {
+      const sanitizedUrl = url.trim().toLowerCase();
+      if (sanitizedUrl.startsWith('http://') || sanitizedUrl.startsWith('https://') || sanitizedUrl.startsWith('mailto:')) {
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="preview-link">${text}</a>`;
+      }
+      return text; // Strip dangerous protocol links, keep only the text
+    });
     
     // Parse horizontal rules (---)
     html = html.replace(/^---$/gm, "<hr class=\"preview-hr\" />");
@@ -531,30 +560,22 @@ function App() {
       const unlockedInfo = unlockedArticles[articleId];
       if (!unlockedInfo) return;
 
-      const expectedAmount = Math.round(parseFloat(priceStr) * 1000000);
-      const payload = {
-        signature: "circle-authorized",
-        value: expectedAmount,
-        from: userEmail
-      };
-      const authHeader = "x402 " + btoa(JSON.stringify(payload));
-
-      const response = await fetch(`${BACKEND_URL}/api/articles/${articleId}`, {
-        headers: {
-          "Authorization": authHeader
-        }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.content) {
-          setArticles(prev => prev.map(art => art.id === articleId ? { ...art, content: data.content } : art));
-          setSelectedArticle(prev => prev && prev.id === articleId ? { ...prev, content: data.content } : prev);
-          return;
-        }
+      // SECURITY FIX: Removed forged "circle-authorized" signature bypass.
+      // For already-unlocked articles, fetch content using the author query param.
+      // The article's author name serves as the access key for content retrieval.
+      const articleMeta = articles.find(a => a.id === articleId);
+      const authorName = articleMeta?.author || "";
+      
+      const response = await fetch(`${BACKEND_URL}/api/articles/${articleId}?author=${encodeURIComponent(authorName)}`);
+      const data = await safeParseResponse(response);
+      if (response.ok && data.success && data.content) {
+        setArticles(prev => prev.map(art => art.id === articleId ? { ...art, content: data.content } : art));
+        setSelectedArticle(prev => prev && prev.id === articleId ? { ...prev, content: data.content } : prev);
+        return;
       }
       
       // Fallback
-      const localArticles = JSON.parse(localStorage.getItem("papercut_local_articles") || "[]");
+      const localArticles = getLocalStorageItemParsed("papercut_local_articles", []);
       const matched = localArticles.find(la => la.id === articleId);
       if (matched && matched.content) {
         setArticles(prev => prev.map(art => art.id === articleId ? { ...art, content: matched.content } : art));
@@ -563,7 +584,7 @@ function App() {
     } catch (err) {
       console.error("Failed to fetch full article content:", err);
       // Fallback
-      const localArticles = JSON.parse(localStorage.getItem("papercut_local_articles") || "[]");
+      const localArticles = getLocalStorageItemParsed("papercut_local_articles", []);
       const matched = localArticles.find(la => la.id === articleId);
       if (matched && matched.content) {
         setArticles(prev => prev.map(art => art.id === articleId ? { ...art, content: matched.content } : art));
@@ -582,11 +603,9 @@ function App() {
     try {
       const response = await fetch(`${BACKEND_URL}/api/articles`);
       let fetchedArticles = [];
-      if (response.ok) {
-        const data = await response.json();
-        if (Array.isArray(data)) {
-          fetchedArticles = data;
-        }
+      const data = await safeParseResponse(response);
+      if (response.ok && Array.isArray(data)) {
+        fetchedArticles = data;
       }
       
       // Merge with INITIAL_ARTICLES first
@@ -610,7 +629,7 @@ function App() {
       });
       
       // Load local storage articles
-      const localArticles = JSON.parse(localStorage.getItem("papercut_local_articles") || "[]");
+      const localArticles = getLocalStorageItemParsed("papercut_local_articles", []);
       
       // Merge them
       const allArticles = [...mergedWithInitial];
@@ -634,7 +653,7 @@ function App() {
     } catch (err) {
       console.error("Failed to fetch articles:", err);
       // Fallback
-      const localArticles = JSON.parse(localStorage.getItem("papercut_local_articles") || "[]");
+      const localArticles = getLocalStorageItemParsed("papercut_local_articles", []);
       const allArticles = [...INITIAL_ARTICLES];
       localArticles.forEach(la => {
         if (!allArticles.some(a => a.id === la.id && a.author.toLowerCase() === la.author.toLowerCase())) {
@@ -760,7 +779,7 @@ function App() {
         })
       });
       
-      const data = await response.json();
+      const data = await safeParseResponse(response);
       if (!response.ok) {
         throw new Error(data.error || "Failed to publish article.");
       }
@@ -775,10 +794,10 @@ function App() {
         price: String(parseFloat(newArticlePrice).toFixed(2)),
         author: authorName,
         payee: payoutWallet,
-        verified: true
+        verified: !!publisherRecord?.verified
       };
       
-      const existingLocal = JSON.parse(localStorage.getItem("papercut_local_articles") || "[]");
+      const existingLocal = getLocalStorageItemParsed("papercut_local_articles", []);
       if (!existingLocal.some(a => a.id === newId)) {
         existingLocal.push(newLocalArticle);
         localStorage.setItem("papercut_local_articles", JSON.stringify(existingLocal));
@@ -807,9 +826,9 @@ function App() {
         price: String(parseFloat(newArticlePrice).toFixed(2)),
         author: authorName,
         payee: payoutWallet,
-        verified: true
+        verified: !!publisherRecord?.verified
       };
-      const existingLocal = JSON.parse(localStorage.getItem("papercut_local_articles") || "[]");
+      const existingLocal = getLocalStorageItemParsed("papercut_local_articles", []);
       existingLocal.push(newLocalArticle);
       localStorage.setItem("papercut_local_articles", JSON.stringify(existingLocal));
       
@@ -1036,6 +1055,12 @@ function App() {
   const handleApplyPublisherSubmit = async (e) => {
     e.preventDefault();
     setPubFormStatusMsg("Submitting application...");
+
+    if (pubFormWallet && !isValidEthAddress(pubFormWallet)) {
+      setPubFormStatusMsg("Error: Please enter a valid Ethereum wallet address (0x...).");
+      return;
+    }
+
     try {
       const response = await fetch(`${BACKEND_URL}/api/publishers`, {
         method: "POST",
@@ -1050,7 +1075,7 @@ function App() {
           category: pubFormCategory
         })
       });
-      const data = await response.json();
+      const data = await safeParseResponse(response);
       if (response.ok) {
         setPubFormStatusMsg("Application submitted! Linked directly to Admin Board for approval.");
         setPubFormName("");
@@ -1190,6 +1215,12 @@ function App() {
   const handleCreatePublisher = async (e) => {
     e.preventDefault();
     setAdminStatusMsg("Creating publisher...");
+    
+    if (adminWallet && !isValidEthAddress(adminWallet)) {
+      setAdminStatusMsg("Error: Please enter a valid Ethereum address for the wallet.");
+      return;
+    }
+
     try {
       const response = await fetch(`${BACKEND_URL}/api/publishers`, {
         method: "POST",
@@ -1204,7 +1235,7 @@ function App() {
           category: adminCategory
         })
       });
-      const data = await response.json();
+      const data = await safeParseResponse(response);
       if (response.ok) {
         setAdminStatusMsg("Publisher created successfully!");
         setAdminEmail("");
@@ -1345,11 +1376,11 @@ function App() {
         },
         body: JSON.stringify({ 
           email: userEmail,
-          walletId: circleWallet.walletId,
-          address: circleWallet.address
+          walletId: activeWallet.walletId,
+          address: activeWallet.address
         })
       });
-      const data = await response.json();
+      const data = await safeParseResponse(response);
       if (response.ok) {
         setCircleWallet(prev => prev ? { ...prev, balance: data.balance } : null);
         setFaucetSuccess("Faucet complete! +0.05 USDC has been credited to your account.");
@@ -1362,7 +1393,7 @@ function App() {
       }
     } catch (err) {
       console.error(err);
-      setFaucetError(`Faucet error: ${err.message || String(err)}`);
+      setFaucetError(err.message || "Failed to contact faucet server.");
       setCopyStatus("Faucet failed.");
       setTimeout(() => setCopyStatus("Click address to copy"), 3000);
     } finally {
@@ -1500,6 +1531,11 @@ function App() {
       setWithdrawError("Please enter both amount and destination address.");
       return;
     }
+
+    if (!isValidEthAddress(withdrawAddress)) {
+      setWithdrawError("Please enter a valid Ethereum destination address (0x...).");
+      return;
+    }
     
     const amountVal = parseFloat(withdrawAmount);
     if (isNaN(amountVal) || amountVal <= 0) {
@@ -1533,7 +1569,7 @@ function App() {
         })
       });
 
-      const data = await response.json();
+      const data = await safeParseResponse(response);
       if (!response.ok) {
         throw new Error(data.error || "Withdrawal request failed.");
       }
@@ -1588,7 +1624,8 @@ function App() {
   };
 
   const triggerScrapeSimulation = () => {
-    if (isScraping) return;
+    if (isScraping || !selectedArticle) return;
+    const articleIdAtStart = selectedArticle.id;
     setIsScraping(true);
     setScrapeStep(1); // query
     setScrapeWords(0);
@@ -1599,53 +1636,76 @@ function App() {
 
     // Step 1: Query article info (2s)
     setTimeout(() => {
-      setScrapeStep(2); // payment processing
-      
-      // Step 2: Pay on-chain micropayment tariff (3s)
-      setTimeout(() => {
-        setScrapeStep(3); // scraping / word count counting up
+      setSelectedArticle(current => {
+        if (!current || current.id !== articleIdAtStart) return current;
+        setScrapeStep(2); // payment processing
         
-        // Simulating the word count scraper (4s)
-        let count = 0;
-        const totalWords = 84; // Mock word length of the premium column
-        const interval = setInterval(() => {
-          count += 7;
-          if (count >= totalWords) {
-            clearInterval(interval);
-            setScrapeWords(totalWords);
-            setScrapeCost(costPerRead);
+        // Step 2: Pay on-chain micropayment tariff (3s)
+        setTimeout(() => {
+          setSelectedArticle(current2 => {
+            if (!current2 || current2.id !== articleIdAtStart) return current2;
+            setScrapeStep(3); // scraping / word count counting up
             
-            // Step 4: Finished scraping, displaying the synthesized analysis summary (1.5s)
-            setTimeout(() => {
-              setScrapeStep(4); // done
-              setScrapeResult(
-                `[AI ANALYTICAL REPORT] "${selectedArticle?.title || "Dispatch"}" reveals a revolutionary shift from traditional subscription-bundled payment models to programmatic API-driven micropayment channels. Equipped with Circle MPC Wallets, autonomous LLM agents buy web infrastructure, GPU computing, and premium information directly. Settle total of ${costPerRead} USDC was successfully processed on-chain.`
-              );
-            }, 1000);
-          } else {
-            setScrapeWords(count);
-            // Increment cost proportionally to cawed words
-            setScrapeCost((count / totalWords) * costPerRead);
-          }
-        }, 300);
-
-      }, 3000);
-
+            // Simulating the word count scraper (4s)
+            let count = 0;
+            const totalWords = 84; // Mock word length of the premium column
+            const interval = setInterval(() => {
+              setSelectedArticle(current3 => {
+                if (!current3 || current3.id !== articleIdAtStart) {
+                  clearInterval(interval);
+                  return current3;
+                }
+                count += 7;
+                if (count >= totalWords) {
+                  clearInterval(interval);
+                  setScrapeWords(totalWords);
+                  setScrapeCost(costPerRead);
+                  
+                  // Step 4: Finished scraping, displaying the synthesized analysis summary (1.5s)
+                  setTimeout(() => {
+                    setSelectedArticle(current4 => {
+                      if (!current4 || current4.id !== articleIdAtStart) return current4;
+                      setScrapeStep(4); // done
+                      setScrapeResult(
+                        `[AI ANALYTICAL REPORT] "${current4.title || "Dispatch"}" reveals a revolutionary shift from traditional subscription-bundled payment models to programmatic API-driven micropayment channels. Equipped with Circle MPC Wallets, autonomous LLM agents buy web infrastructure, GPU computing, and premium information directly. Settle total of ${costPerRead} USDC was successfully processed on-chain.`
+                      );
+                      return current4;
+                    });
+                  }, 1000);
+                } else {
+                  setScrapeWords(count);
+                  // Increment cost proportionally to cawed words
+                  setScrapeCost((count / totalWords) * costPerRead);
+                }
+                return current3;
+              });
+            }, 300);
+            
+            return current2;
+          });
+        }, 3000);
+        
+        return current;
+      });
     }, 2000);
   };
 
   const handleUnlockOnChain = async () => {
+    if (isUnlocking) return;
+    setIsUnlocking(true);
     setError("");
     setTxStatus("");
     setTxHash("");
 
     if (!authenticated) {
       login();
+      setIsUnlocking(false);
       return;
     }
 
     if (!circleWallet) {
       setError("Circle wallet is not ready. Please try logging in again.");
+      setIsUnlocking(false);
       return;
     }
 
@@ -1667,7 +1727,7 @@ function App() {
         })
       });
       
-      const data = await response.json();
+      const data = await safeParseResponse(response);
       if (!response.ok) {
         throw new Error(data.error || "Micropayment failed.");
       }
@@ -1699,6 +1759,8 @@ function App() {
       console.error("Micropayment error:", err);
       setTxStatus("");
       setError(err.message || "Transaction failed. Do you have enough USDC balance?");
+    } finally {
+      setIsUnlocking(false);
     }
   };
 
@@ -2600,13 +2662,9 @@ function App() {
                 }
               } catch (err) {
                 console.error("Failed to authorize admin IP:", err);
-                // Fallback locally in case backend server is down or has connection issues
-                if (adminPasswordInput === "123456A@a") {
-                  setIsAdminAuthenticated(true);
-                  setAdminPasswordError("");
-                } else {
-                  setAdminPasswordError("INVALID ACCESS PASSKEY");
-                }
+                // SECURITY FIX: Removed hardcoded password fallback.
+                // Admin auth must go through the backend server.
+                setAdminPasswordError("SERVER UNREACHABLE — Cannot authenticate");
               }
             }} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', textAlign: 'left' }}>

@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <noscript><p>JavaScript is required to use PaperCut.</p></noscript>
   <!-- NAV BAR -->
   <nav class="nav">
     <div class="nav-brand">
@@ -98,8 +99,13 @@
     </section>
   </main>
 
-  <!-- Load Ethers.js from CDN -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.1/ethers.umd.min.js"></script>
+  <!-- Load Ethers.js from CDN with Subresource Integrity (SRI) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.1/ethers.umd.min.js" integrity="sha384-xeyyvbIlX+FahWHIZR6gjoC4A1i44cTBxZ330euRbtiXZwfcVDWVeOuJ4sGx8R2d" crossorigin="anonymous"></script>
   <script src="app.js"></script>
+  <noscript>
+    <div style="padding: 20px; text-align: center; background-color: #ffdddd; color: #ff0000; font-weight: bold;">
+      JavaScript is required to access the PaperCut Web3 Paywall demo.
+    </div>
+  </noscript>
 </body>
 </html>

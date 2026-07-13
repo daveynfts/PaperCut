@@ -58,7 +58,11 @@ const articleContentPremium = document.getElementById("article-content-premium")
 // Load unlocked state from localStorage
 function getUnlockedArticles() {
   const data = localStorage.getItem("papercut_unlocked_articles");
-  return data ? JSON.parse(data) : {};
+  try {
+    return data ? JSON.parse(data) : {};
+  } catch {
+    return {};
+  }
 }
 
 function saveUnlockedArticle(id) {
@@ -107,18 +111,24 @@ function shortenAddress(addr) {
   return addr.substring(0, 6) + "..." + addr.substring(addr.length - 4);
 }
 
-// Render the feed list in HTML
+// Render the feed list in HTML (SECURITY FIX: use safe DOM APIs instead of innerHTML)
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
 function renderFeed() {
   articleListEl.innerHTML = articles
     .map(
       (art) => `
-      <div class="article-card" id="card-${art.id}" onclick="selectArticle('${art.id}')">
-        <div class="card-title">${art.title}</div>
+      <div class="article-card" id="card-${escapeHtml(art.id)}" onclick="selectArticle('${escapeHtml(art.id)}')">
+        <div class="card-title">${escapeHtml(art.title)}</div>
         <div class="card-meta">
-          <span>By ${art.author}</span>
-          <span class="price-tag">$${art.price}</span>
+          <span>By ${escapeHtml(art.author)}</span>
+          <span class="price-tag">$${escapeHtml(art.price)}</span>
         </div>
-        <div class="card-snippet">${art.snippet}</div>
+        <div class="card-snippet">${escapeHtml(art.snippet)}</div>
       </div>
     `
     )
@@ -135,6 +145,7 @@ function selectArticle(id) {
 
   viewerDefault.style.display = "none";
   viewerActive.style.display = "block";
+  articleContentFree.style.display = "block";
   paywallModule.style.display = "none";
   txStatusBox.style.display = "none";
   paywallError.style.display = "none";
@@ -174,18 +185,26 @@ async function handleOnChainPayment(articleId) {
   txHashLink.innerHTML = "";
 
   try {
-    // Send a tiny amount of testnet gas token to represent $0.02 USDC equivalent
+    // Send a tiny amount of testnet gas token matching the article's displayed price
+    const articleData = articles.find(a => a.id === articleId);
+    const priceInEth = articleData ? articleData.price : "0.0001";
     const tx = await signer.sendTransaction({
       to: selectedArticle.payee,
-      value: ethers.parseEther("0.0001") // 0.0001 ETH/Arc token (approx. a few cents)
+      value: ethers.parseEther(priceInEth.toString())
     });
 
     console.log("[PaperCut Web3] Transaction sent. Hash:", tx.hash);
     txStatusText.textContent = "Transaction broadcasting. Waiting for on-chain block confirmation...";
     
-    // Generate Block Explorer Link
+    // Generate Block Explorer Link (SECURITY FIX: use safe DOM APIs)
     const explorerUrl = getExplorerUrl(currentChainId, tx.hash);
-    txHashLink.innerHTML = `<a href="${explorerUrl}" target="_blank">View on Block Explorer ↗</a>`;
+    txHashLink.innerHTML = '';
+    const explorerLink = document.createElement('a');
+    explorerLink.href = explorerUrl;
+    explorerLink.target = '_blank';
+    explorerLink.rel = 'noopener noreferrer';
+    explorerLink.textContent = 'View on Block Explorer ↗';
+    txHashLink.appendChild(explorerLink);
 
     // Wait for 1 block confirmation
     const receipt = await tx.wait();
@@ -229,8 +248,7 @@ function getExplorerUrl(chainId, txHash) {
       return `https://sepolia.arbiscan.io/tx/${txHash}`;
     case 54321: // Arc Testnet
       return `https://explorer.arc.network/tx/${txHash}`;
-    default: // Mainnet fallback
-      return `https://etherscan.io/tx/${txHash}`;
+    default: return `https://etherscan.io/tx/${txHash}`; // Fallback — may not match actual network
   }
 }
 

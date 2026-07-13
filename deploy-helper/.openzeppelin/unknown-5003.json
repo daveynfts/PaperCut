@@ -1,0 +1,271 @@
+{
+  "manifestVersion": "3.2",
+  "proxies": [
+    {
+      "address": "0x2dEE66b5638f2a92E6bBb3ceB45047e67DFfCAE7",
+      "txHash": "0x26c9d006b08bbd9d19437818efda3132092405c710518292124aed3d113971c9",
+      "kind": "transparent"
+    }
+  ],
+  "impls": {
+    "d8dceb37e06d6671125b228fc1510d5d1adee1dc80a72a8be4d0707377056617": {
+      "address": "0x8632cd0beb72EA549e5f1FA6ae006d4560963416",
+      "txHash": "0x203e5a05a50daf3a7694380689bf229448710ac791d5bae7f7cd2fd91b5bbd63",
+      "layout": {
+        "solcVersion": "0.8.20",
+        "storage": [
+          {
+            "label": "nextAgentId",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint256",
+            "contract": "SwipeAlphaRegistry",
+            "src": "contracts\\SwipeAlphaRegistry.sol:33"
+          },
+          {
+            "label": "agents",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_mapping(t_uint256,t_struct(Agent)1773_storage)",
+            "contract": "SwipeAlphaRegistry",
+            "src": "contracts\\SwipeAlphaRegistry.sol:36"
+          },
+          {
+            "label": "agentRatings",
+            "offset": 0,
+            "slot": "2",
+            "type": "t_mapping(t_uint256,t_array(t_struct(Rating)1795_storage)dyn_storage)",
+            "contract": "SwipeAlphaRegistry",
+            "src": "contracts\\SwipeAlphaRegistry.sol:37"
+          },
+          {
+            "label": "agentSignals",
+            "offset": 0,
+            "slot": "3",
+            "type": "t_mapping(t_uint256,t_array(t_struct(Signal)1786_storage)dyn_storage)",
+            "contract": "SwipeAlphaRegistry",
+            "src": "contracts\\SwipeAlphaRegistry.sol:38"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_struct(InitializableStorage)192_storage": {
+            "label": "struct Initializable.InitializableStorage",
+            "members": [
+              {
+                "label": "_initialized",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_initializing",
+                "type": "t_bool",
+                "offset": 8,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(OwnableStorage)13_storage": {
+            "label": "struct OwnableUpgradeable.OwnableStorage",
+            "members": [
+              {
+                "label": "_owner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          },
+          "t_array(t_struct(Rating)1795_storage)dyn_storage": {
+            "label": "struct SwipeAlphaRegistry.Rating[]",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_struct(Signal)1786_storage)dyn_storage": {
+            "label": "struct SwipeAlphaRegistry.Signal[]",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_array(t_struct(Rating)1795_storage)dyn_storage)": {
+            "label": "mapping(uint256 => struct SwipeAlphaRegistry.Rating[])",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_array(t_struct(Signal)1786_storage)dyn_storage)": {
+            "label": "mapping(uint256 => struct SwipeAlphaRegistry.Signal[])",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(Agent)1773_storage)": {
+            "label": "mapping(uint256 => struct SwipeAlphaRegistry.Agent)",
+            "numberOfBytes": "32"
+          },
+          "t_string_storage": {
+            "label": "string",
+            "numberOfBytes": "32"
+          },
+          "t_struct(Agent)1773_storage": {
+            "label": "struct SwipeAlphaRegistry.Agent",
+            "members": [
+              {
+                "label": "name",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "metadataURI",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "totalRating",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "ratingCount",
+                "type": "t_uint32",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "active",
+                "type": "t_bool",
+                "offset": 4,
+                "slot": "3"
+              }
+            ],
+            "numberOfBytes": "128"
+          },
+          "t_struct(Rating)1795_storage": {
+            "label": "struct SwipeAlphaRegistry.Rating",
+            "members": [
+              {
+                "label": "user",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "score",
+                "type": "t_uint8",
+                "offset": 20,
+                "slot": "0"
+              },
+              {
+                "label": "comment",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "timestamp",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              }
+            ],
+            "numberOfBytes": "96"
+          },
+          "t_struct(Signal)1786_storage": {
+            "label": "struct SwipeAlphaRegistry.Signal",
+            "members": [
+              {
+                "label": "agentId",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "tokenSymbol",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "signalType",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "targetPrice",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "reasoning",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "timestamp",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "5"
+              }
+            ],
+            "numberOfBytes": "192"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint32": {
+            "label": "uint32",
+            "numberOfBytes": "4"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          }
+        },
+        "namespaces": {
+          "erc7201:openzeppelin.storage.Ownable": [
+            {
+              "contract": "OwnableUpgradeable",
+              "label": "_owner",
+              "type": "t_address",
+              "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:24",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Initializable": [
+            {
+              "contract": "Initializable",
+              "label": "_initialized",
+              "type": "t_uint64",
+              "src": "@openzeppelin\\contracts\\proxy\\utils\\Initializable.sol:69",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "Initializable",
+              "label": "_initializing",
+              "type": "t_bool",
+              "src": "@openzeppelin\\contracts\\proxy\\utils\\Initializable.sol:73",
+              "offset": 8,
+              "slot": "0"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
