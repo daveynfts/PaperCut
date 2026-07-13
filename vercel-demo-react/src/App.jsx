@@ -305,6 +305,11 @@ function App() {
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [error, setError] = useState("");
   const [chainId, setChainId] = useState(null);
+  
+  // SurfAI PDF simulation states
+  const [pdfSimulating, setPdfSimulating] = useState(false);
+  const [pdfReady, setPdfReady] = useState(false);
+  const [pdfSimStep, setPdfSimStep] = useState(0);
 
   // Publisher Admin Portal States
   const [articles, setArticles] = useState(INITIAL_ARTICLES);
@@ -1622,6 +1627,11 @@ function App() {
     setScrapeWords(0);
     setScrapeCost(0);
     setScrapeResult("");
+    
+    // Reset PDF simulation
+    setPdfSimulating(false);
+    setPdfReady(false);
+    setPdfSimStep(0);
   };
 
   const triggerScrapeSimulation = () => {
@@ -1689,6 +1699,66 @@ function App() {
         return current;
       });
     }, 2000);
+  };
+
+  const getDailyAISurfArticle = () => {
+    const days = [
+      "Sunday: Sovereign Oracle Networks and Autonomous Agent Data Markets",
+      "Monday: Cross-Chain Liquidity Migration on L2 Rollup Sequencers",
+      "Tuesday: Tokenomics Equilibrium Models for Sovereign LLM Swarms",
+      "Wednesday: Programmatic Micro-Tariffs and Decentralized GPU Compute Networks",
+      "Thursday: MEV Mitigation Frameworks in Concentrated Liquidity Pools",
+      "Friday: AI Surf: Capital Allocation Flywheels of Autonomous LLM Swarms",
+      "Saturday: Zero-Knowledge Proofs for Private On-Chain Capital Allocation"
+    ];
+    const dayIndex = new Date().getDay();
+    const fullTitle = days[dayIndex];
+    
+    return {
+      id: "surfai-daily",
+      title: fullTitle,
+      author: "SurfAI",
+      category: "AI-Agent Autonomous Economics",
+      price: "0.15",
+      payee: "0x1746978f956142e0482f0aff320d917ace450bcf",
+      verified: true,
+      snippet: "An advanced programmatic intelligence report compiled automatically by the SurfAI pipeline on daily capital flows, sovereign resource allocations, and micro-tariffs.",
+      content: `## SurfAI Daily Intelligence Dispatch
+
+### Overview
+This document was compiled programmatically by the **SurfAI autonomous agent network** to report on the state of decentralized resource allocation.
+
+* **Asset Inspected**: USDC / ARC Token
+* **Analysis Beat**: ${fullTitle.split(': ')[0]}
+* **Network Target**: Arc L1 Testnet
+* **Report Hash**: sha256-4cf8e3c1a9d023bf9a13b0c95e0c52d4aa182035e08f3c80
+
+### Cryptographic Receipt Verification
+Once payment is finalized on-chain via the **Lepton x402** protocol, the smart contract settles the 0.15 USDC tariff directly to the publisher.
+
+[The full PDF analysis briefing is compiled, signed, and hosted securely on Cloudflare R2 Decentralized Storage Container.]`
+    };
+  };
+
+  const triggerPdfSimulation = () => {
+    if (pdfSimulating) return;
+    setPdfSimulating(true);
+    setPdfReady(false);
+    setPdfSimStep(1);
+
+    setTimeout(() => {
+      setPdfSimStep(2);
+      setTimeout(() => {
+        setPdfSimStep(3);
+        setTimeout(() => {
+          setPdfSimStep(4);
+          setTimeout(() => {
+            setPdfSimulating(false);
+            setPdfReady(true);
+          }, 800);
+        }, 1000);
+      }, 1000);
+    }, 1000);
   };
 
   const handleUnlockOnChain = async () => {
@@ -1877,6 +1947,90 @@ function App() {
           </div>
         </div>
       </nav>
+      
+      {/* SURFAI DAILY INTELLIGENCE TICKER HEADER */}
+      {!isPublisherView && !isAdminView && (
+        <div className="surfai-ticker-bar" style={{
+          background: 'var(--ink-black)',
+          color: 'var(--paper-bg)',
+          borderBottom: '2px solid var(--ink-black)',
+          display: 'flex',
+          alignItems: 'center',
+          padding: '8px 24px',
+          fontFamily: 'var(--font-mono)',
+          fontSize: '11px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.05em',
+          gap: '12px',
+          overflow: 'hidden',
+          minHeight: '38px',
+          flexWrap: 'wrap'
+        }}>
+          {/* Logo/Badge */}
+          <div style={{
+            background: 'var(--ink-red)',
+            color: '#fff',
+            padding: '2px 8px',
+            fontSize: '10px',
+            fontWeight: 'bold',
+            borderRadius: '2px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            boxShadow: '1px 1px 0px rgba(255,255,255,0.2)',
+            cursor: 'pointer',
+            userSelect: 'none'
+          }}
+          onClick={() => handleToggleAdminView(true)}
+          title="Click to Open Admin Console"
+          >
+            <span>🌊</span>
+            <span>SurfAI</span>
+          </div>
+
+          {/* Ticker Info */}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1, minWidth: '240px' }}>
+            <span style={{ color: 'var(--ink-light-grey)', flexShrink: 0 }}>[DAILY AI DISPATCH]</span>
+            <span 
+              className="surfai-ticker-link" 
+              style={{
+                color: 'var(--paper-bg)',
+                textDecoration: 'none',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+                borderBottom: '1px dashed var(--paper-bg)'
+              }}
+              onClick={() => {
+                const dailyArticle = getDailyAISurfArticle();
+                setSelectedArticle(dailyArticle);
+                setShowApplyForm(false);
+                setIsPublisherView(false);
+                handleToggleAdminView(false);
+              }}
+              title="Click to Read and Unlock AI Report"
+            >
+              {getDailyAISurfArticle().title}
+            </span>
+          </div>
+
+          {/* Link to Admin */}
+          <div 
+            onClick={() => handleToggleAdminView(true)}
+            style={{
+              color: 'var(--ink-light-grey)',
+              textDecoration: 'none',
+              cursor: 'pointer',
+              fontSize: '10px',
+              borderLeft: '1px solid var(--ink-grey)',
+              paddingLeft: '12px',
+              flexShrink: 0
+            }}
+            title="Open Administration Portal"
+          >
+            ⚙️ ADMIN CONSOLE
+          </div>
+        </div>
+      )}
             {/* MAIN CONTAINER */}
       {isPublisherView ? (
         <div className="portal-scroll-container" style={{ flex: '1', overflowY: 'auto', width: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -3109,10 +3263,124 @@ function App() {
 
                 <div className="article-body">
                   {unlockedArticles[selectedArticle.id] ? (
-                    <div 
-                      className="content-text premium-unlocked"
-                      dangerouslySetInnerHTML={{ __html: parseMarkdownToHtml(selectedArticle.content) }}
-                    />
+                    <div>
+                      <div 
+                        className="content-text premium-unlocked"
+                        dangerouslySetInnerHTML={{ __html: parseMarkdownToHtml(selectedArticle.content) }}
+                      />
+                      
+                      {selectedArticle.id === "surfai-daily" && (
+                        <div className="surfai-pdf-container" style={{
+                          border: '2px solid var(--ink-black)',
+                          marginTop: '28px',
+                          padding: '24px',
+                          backgroundColor: 'var(--paper-accent)',
+                          boxShadow: '4px 4px 0 var(--ink-black)',
+                          fontFamily: 'var(--font-mono)'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--ink-black)', paddingBottom: '8px', marginBottom: '16px' }}>
+                            <span style={{ fontSize: '20px' }}>🌊</span>
+                            <strong style={{ fontSize: '14px', textTransform: 'uppercase', color: 'var(--ink-red)' }}>SurfAI Secure Report Compiler</strong>
+                          </div>
+                          
+                          {/* Case 1: Idle state */}
+                          {!pdfSimulating && !pdfReady && (
+                            <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                              <p className="serif-body" style={{ fontSize: '13px', marginBottom: '16px', fontStyle: 'italic' }}>
+                                This premium intelligence briefing has been unlocked. You can now compile and download the full analysis report as a signed PDF document.
+                              </p>
+                              <button 
+                                className="btn" 
+                                onClick={triggerPdfSimulation}
+                                style={{ padding: '10px 24px', fontSize: '12px' }}
+                              >
+                                ⚙️ COMPILE PDF REPORT FROM R2 CLOUD
+                              </button>
+                            </div>
+                          )}
+                          
+                          {/* Case 2: Simulating compilation */}
+                          {pdfSimulating && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 'bold' }}>
+                                <span>STATUS: COMPILING CRYPTOGRAPHIC PDF REPORT...</span>
+                                <span className="blink-text" style={{ animation: 'blink 1s infinite' }}>LOADING...</span>
+                              </div>
+                              
+                              {/* Progress bar */}
+                              <div style={{ border: '1px solid var(--ink-black)', height: '14px', background: '#eadeca', position: 'relative', overflow: 'hidden' }}>
+                                <div style={{
+                                  background: 'var(--ink-red)',
+                                  height: '100%',
+                                  width: pdfSimStep === 1 ? '25%' : pdfSimStep === 2 ? '55%' : pdfSimStep === 3 ? '85%' : '100%',
+                                  transition: 'width 0.8s ease-in-out'
+                                }}></div>
+                              </div>
+                              
+                              {/* Loading Steps */}
+                              <div style={{ fontSize: '11px', color: 'var(--ink-grey)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <div style={{ display: 'flex', gap: '8px', color: pdfSimStep >= 1 ? 'var(--ink-black)' : 'var(--ink-light-grey)' }}>
+                                  <span>{pdfSimStep >= 1 ? '✔' : '☐'}</span>
+                                  <span>1. Verify transaction hash & credentials status on Arc Testnet</span>
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px', color: pdfSimStep >= 2 ? 'var(--ink-black)' : 'var(--ink-light-grey)' }}>
+                                  <span>{pdfSimStep >= 2 ? '✔' : '☐'}</span>
+                                  <span>2. Pull daily SurfAI analysis matrix and structure layout</span>
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px', color: pdfSimStep >= 3 ? 'var(--ink-black)' : 'var(--ink-light-grey)' }}>
+                                  <span>{pdfSimStep >= 3 ? '✔' : '☐'}</span>
+                                  <span>3. Anchor document hash & upload signed PDF to Cloudflare R2 container</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Case 3: PDF is compiled & ready for download */}
+                          {pdfReady && (
+                            <div style={{ textAlign: 'center', padding: '8px 0' }}>
+                              <div style={{ color: 'green', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginBottom: '12px' }}>
+                                <span>✔</span>
+                                <span>REPORT COMPILED & ANCHORED SUCCESSFULLY</span>
+                              </div>
+                              <p className="serif-body" style={{ fontSize: '12.5px', marginBottom: '16px', color: 'var(--ink-grey)' }}>
+                                PDF Report Hash: <span style={{ fontFamily: 'monospace', fontSize: '11px', background: 'var(--paper-bg-darker)', padding: '2px 4px' }}>sha256-4cf8e3c1a9d023bf9a13b0c95e0c52d4aa182035e08f3c80</span>
+                              </p>
+                              <a 
+                                className="btn"
+                                href="https://pub-2d45fad316624c53.r2.dev/reports/surfai-daily-briefing.pdf" 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                style={{ 
+                                  padding: '10px 24px', 
+                                  fontSize: '12px', 
+                                  textDecoration: 'none', 
+                                  display: 'inline-block',
+                                  background: 'var(--ink-red)',
+                                  color: '#fff',
+                                  boxShadow: '4px 4px 0 var(--ink-black)'
+                                }}
+                              >
+                                📥 DOWNLOAD REPORT FROM CLOUDFLARE R2
+                              </a>
+                              <button 
+                                className="btn btn-secondary"
+                                onClick={() => {
+                                  setPdfReady(false);
+                                  setPdfSimStep(0);
+                                }}
+                                style={{ 
+                                  padding: '10px 16px', 
+                                  fontSize: '12px', 
+                                  marginLeft: '12px'
+                                }}
+                              >
+                                ⟳ RE-COMPILE
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     <>
                       <div className="content-text-preview" style={{ fontStyle: 'italic', color: 'var(--ink-grey)', marginBottom: '24px', fontSize: '15px', lineHeight: '1.7', whiteSpace: 'pre-line' }}>
