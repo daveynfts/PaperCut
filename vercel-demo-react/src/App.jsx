@@ -310,6 +310,21 @@ function App() {
   const [pdfSimulating, setPdfSimulating] = useState(false);
   const [pdfReady, setPdfReady] = useState(false);
   const [pdfSimStep, setPdfSimStep] = useState(0);
+  
+  // SurfAI Admin Configuration States
+  const [surfTitleOverride, setSurfTitleOverride] = useState(() => {
+    return localStorage.getItem("papercut_surf_title_override") || "";
+  });
+  const [surfPriceOverride, setSurfPriceOverride] = useState(() => {
+    return localStorage.getItem("papercut_surf_price_override") || "0.15";
+  });
+  const [surfPdfUrlOverride, setSurfPdfUrlOverride] = useState(() => {
+    return localStorage.getItem("papercut_surf_pdf_url_override") || "https://pub-2d45fad316624c53.r2.dev/reports/surfai-daily-briefing.pdf";
+  });
+  const [surfContentOverride, setSurfContentOverride] = useState(() => {
+    return localStorage.getItem("papercut_surf_content_override") || "";
+  });
+  const [surfConfigStatusMsg, setSurfConfigStatusMsg] = useState("");
 
   // Publisher Admin Portal States
   const [articles, setArticles] = useState(INITIAL_ARTICLES);
@@ -1712,31 +1727,39 @@ function App() {
       "Saturday: Zero-Knowledge Proofs for Private On-Chain Capital Allocation"
     ];
     const dayIndex = new Date().getDay();
-    const fullTitle = days[dayIndex];
+    const defaultTitle = days[dayIndex];
     
-    return {
-      id: "surfai-daily",
-      title: fullTitle,
-      author: "SurfAI",
-      category: "AI-Agent Autonomous Economics",
-      price: "0.15",
-      payee: "0x1746978f956142e0482f0aff320d917ace450bcf",
-      verified: true,
-      snippet: "An advanced programmatic intelligence report compiled automatically by the SurfAI pipeline on daily capital flows, sovereign resource allocations, and micro-tariffs.",
-      content: `## SurfAI Daily Intelligence Dispatch
+    const activeTitle = surfTitleOverride || defaultTitle;
+    const activePrice = surfPriceOverride || "0.15";
+    const activePdfUrl = surfPdfUrlOverride || "https://pub-2d45fad316624c53.r2.dev/reports/surfai-daily-briefing.pdf";
+    const defaultContent = `## SurfAI Daily Intelligence Dispatch
 
 ### Overview
 This document was compiled programmatically by the **SurfAI autonomous agent network** to report on the state of decentralized resource allocation.
 
 * **Asset Inspected**: USDC / ARC Token
-* **Analysis Beat**: ${fullTitle.split(': ')[0]}
+* **Analysis Beat**: ${activeTitle.includes(': ') ? activeTitle.split(': ')[0] : 'AI-Agent Autonomous Economics'}
 * **Network Target**: Arc L1 Testnet
 * **Report Hash**: sha256-4cf8e3c1a9d023bf9a13b0c95e0c52d4aa182035e08f3c80
 
 ### Cryptographic Receipt Verification
-Once payment is finalized on-chain via the **Lepton x402** protocol, the smart contract settles the 0.15 USDC tariff directly to the publisher.
+Once payment is finalized on-chain via the **Lepton x402** protocol, the smart contract settles the ${activePrice} USDC tariff directly to the publisher.
 
-[The full PDF analysis briefing is compiled, signed, and hosted securely on Cloudflare R2 Decentralized Storage Container.]`
+[The full PDF analysis briefing is compiled, signed, and hosted securely on Cloudflare R2 Decentralized Storage Container.]`;
+
+    const activeContent = surfContentOverride || defaultContent;
+
+    return {
+      id: "surfai-daily",
+      title: activeTitle,
+      author: "SurfAI",
+      category: "AI-Agent Autonomous Economics",
+      price: activePrice,
+      payee: "0x1746978f956142e0482f0aff320d917ace450bcf",
+      verified: true,
+      snippet: "An advanced programmatic intelligence report compiled automatically by the SurfAI pipeline on daily capital flows, sovereign resource allocations, and micro-tariffs.",
+      content: activeContent,
+      pdfUrl: activePdfUrl
     };
   };
 
@@ -1759,6 +1782,23 @@ Once payment is finalized on-chain via the **Lepton x402** protocol, the smart c
         }, 1000);
       }, 1000);
     }, 1000);
+  };
+
+  const handleSaveSurfConfig = (e) => {
+    e.preventDefault();
+    localStorage.setItem("papercut_surf_title_override", surfTitleOverride);
+    localStorage.setItem("papercut_surf_price_override", surfPriceOverride);
+    localStorage.setItem("papercut_surf_pdf_url_override", surfPdfUrlOverride);
+    localStorage.setItem("papercut_surf_content_override", surfContentOverride);
+    
+    setSurfConfigStatusMsg("SurfAI Configuration Saved Successfully!");
+    
+    // Refresh the article if it is the currently selected SurfAI article
+    if (selectedArticle && selectedArticle.id === "surfai-daily") {
+      setSelectedArticle(getDailyAISurfArticle());
+    }
+    
+    setTimeout(() => setSurfConfigStatusMsg(""), 3000);
   };
 
   const handleUnlockOnChain = async () => {
@@ -2861,79 +2901,145 @@ Once payment is finalized on-chain via the **Lepton x402** protocol, the smart c
             REGISTRY & CRYPTOGRAPHIC VERIFICATION CONSOLE
           </p>
 
-          <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'center' }}>
-            {/* Left pane: Add Publisher Form */}
-            <div className="vintage-form-card" style={{ flex: '1 1 350px', border: '2px solid var(--ink-black)', padding: '24px', backgroundColor: 'var(--paper-accent)', boxShadow: '4px 4px 0 var(--ink-black)', maxWidth: '420px' }}>
-              <div style={{ fontFamily: 'var(--font-headline)', fontWeight: 'bold', fontSize: '15px', color: 'var(--ink-red)', borderBottom: '1px solid var(--ink-black)', paddingBottom: '6px', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Register New Publisher
+          <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'center', width: '100%' }}>
+            {/* Left pane: Combined column for forms */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', flex: '1 1 350px', maxWidth: '420px', width: '100%' }}>
+              {/* Card 1: Register New Publisher */}
+              <div className="vintage-form-card" style={{ border: '2px solid var(--ink-black)', padding: '24px', backgroundColor: 'var(--paper-accent)', boxShadow: '4px 4px 0 var(--ink-black)', width: '100%' }}>
+                <div style={{ fontFamily: 'var(--font-headline)', fontWeight: 'bold', fontSize: '15px', color: 'var(--ink-red)', borderBottom: '1px solid var(--ink-black)', paddingBottom: '6px', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Register New Publisher
+                </div>
+                <form onSubmit={handleCreatePublisher} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>1. PUBLISHER PSEUDONYM / NAME</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={adminName}
+                      onChange={(e) => setAdminName(e.target.value)}
+                      placeholder="e.g. Satoshi Nakamoto" 
+                      style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>2. REGISTRATION EMAIL</label>
+                    <input 
+                      type="email" 
+                      required 
+                      value={adminEmail}
+                      onChange={(e) => setAdminEmail(e.target.value)}
+                      placeholder="e.g. satoshi@bitcoin.org" 
+                      style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>3. VERIFIED DOMAIN</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={adminDomain}
+                      onChange={(e) => setAdminDomain(e.target.value)}
+                      placeholder="e.g. bitcoin.org" 
+                      style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>4. RECIPIENT WALLET ADDRESS (EVM)</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={adminWallet}
+                      onChange={(e) => setAdminWallet(e.target.value)}
+                      placeholder="e.g. 0xf39Fd..." 
+                      style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-mono)', fontSize: '11px' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>5. EDITORIAL CATEGORY</label>
+                    <select 
+                      value={adminCategory}
+                      onChange={(e) => setAdminCategory(e.target.value)}
+                      style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px' }}
+                    >
+                      <option>Web3 Infrastructures & Protocols</option>
+                      <option>AI-Agent Autonomous Economics</option>
+                      <option>Decentralized High-Performance Compute</option>
+                      <option>On-Chain Micropayments & L2 Scaling</option>
+                    </select>
+                  </div>
+                  <button type="submit" className="btn btn-sm" style={{ padding: '10px 0', marginTop: '8px', letterSpacing: '0.06em', fontSize: '12px' }}>
+                    INDUCT PUBLISHER
+                  </button>
+                </form>
+                {adminStatusMsg && (
+                  <div className="mono-text" style={{ marginTop: '12px', fontSize: '11px', color: 'var(--ink-red)', textAlign: 'center', border: '1px dashed var(--ink-red)', padding: '6px', background: 'rgba(186,45,45,0.05)' }}>
+                    {adminStatusMsg}
+                  </div>
+                )}
               </div>
-              <form onSubmit={handleCreatePublisher} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>1. PUBLISHER PSEUDONYM / NAME</label>
-                  <input 
-                    type="text" 
-                    required 
-                    value={adminName}
-                    onChange={(e) => setAdminName(e.target.value)}
-                    placeholder="e.g. Satoshi Nakamoto" 
-                    style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px' }}
-                  />
+
+              {/* Card 2: SurfAI Config Form */}
+              <div className="vintage-form-card" style={{ border: '2px solid var(--ink-black)', padding: '24px', backgroundColor: 'var(--paper-accent)', boxShadow: '4px 4px 0 var(--ink-black)', width: '100%' }}>
+                <div style={{ fontFamily: 'var(--font-headline)', fontWeight: 'bold', fontSize: '15px', color: 'var(--ink-red)', borderBottom: '1px solid var(--ink-black)', paddingBottom: '6px', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  🌊 SurfAI Daily Post Config
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>2. REGISTRATION EMAIL</label>
-                  <input 
-                    type="email" 
-                    required 
-                    value={adminEmail}
-                    onChange={(e) => setAdminEmail(e.target.value)}
-                    placeholder="e.g. satoshi@bitcoin.org" 
-                    style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>3. VERIFIED DOMAIN</label>
-                  <input 
-                    type="text" 
-                    required 
-                    value={adminDomain}
-                    onChange={(e) => setAdminDomain(e.target.value)}
-                    placeholder="e.g. bitcoin.org" 
-                    style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>4. RECIPIENT WALLET ADDRESS (EVM)</label>
-                  <input 
-                    type="text" 
-                    required 
-                    value={adminWallet}
-                    onChange={(e) => setAdminWallet(e.target.value)}
-                    placeholder="e.g. 0xf39Fd..." 
-                    style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-mono)', fontSize: '11px' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>5. EDITORIAL CATEGORY</label>
-                  <select 
-                    value={adminCategory}
-                    onChange={(e) => setAdminCategory(e.target.value)}
-                    style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '13px' }}
-                  >
-                    <option>Web3 Infrastructures & Protocols</option>
-                    <option>AI-Agent Autonomous Economics</option>
-                    <option>Decentralized High-Performance Compute</option>
-                    <option>On-Chain Micropayments & L2 Scaling</option>
-                  </select>
-                </div>
-                <button type="submit" className="btn btn-sm" style={{ padding: '10px 0', marginTop: '8px', letterSpacing: '0.06em', fontSize: '12px' }}>
-                  INDUCT PUBLISHER
-                </button>
-              </form>
-              {adminStatusMsg && (
-                <div className="mono-text" style={{ marginTop: '12px', fontSize: '11px', color: 'var(--ink-red)', textAlign: 'center', border: '1px dashed var(--ink-red)', padding: '6px', background: 'rgba(186,45,45,0.05)' }}>
-                  {adminStatusMsg}
-                </div>
-              )}
+                <form onSubmit={handleSaveSurfConfig} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>ACTIVE REPORT TITLE (OVERRIDE)</label>
+                    <input 
+                      type="text" 
+                      value={surfTitleOverride}
+                      onChange={(e) => setSurfTitleOverride(e.target.value)}
+                      placeholder="Leave blank for day-of-week title" 
+                      style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '12px' }}
+                    />
+                  </div>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>TARIFF FEE (USDC)</label>
+                    <input 
+                      type="text" 
+                      required
+                      value={surfPriceOverride}
+                      onChange={(e) => setSurfPriceOverride(e.target.value)}
+                      placeholder="0.15" 
+                      style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-mono)', fontSize: '12px' }}
+                    />
+                  </div>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>CLOUDFLARE R2 PDF URL</label>
+                    <input 
+                      type="text" 
+                      required
+                      value={surfPdfUrlOverride}
+                      onChange={(e) => setSurfPdfUrlOverride(e.target.value)}
+                      placeholder="https://pub-..." 
+                      style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-mono)', fontSize: '11px' }}
+                    />
+                  </div>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>REPORT CONTENT (MARKDOWN)</label>
+                    <textarea 
+                      rows="6"
+                      value={surfContentOverride}
+                      onChange={(e) => setSurfContentOverride(e.target.value)}
+                      placeholder="Enter custom analysis report content in Markdown..." 
+                      style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '12px', resize: 'vertical' }}
+                    />
+                  </div>
+                  
+                  <button type="submit" className="btn btn-sm" style={{ padding: '10px 0', marginTop: '8px', letterSpacing: '0.06em', fontSize: '12px' }}>
+                    SAVE SURFAI CONFIG
+                  </button>
+                </form>
+                {surfConfigStatusMsg && (
+                  <div className="mono-text" style={{ marginTop: '12px', fontSize: '11px', color: 'green', textAlign: 'center', border: '1px dashed green', padding: '6px', background: 'rgba(0,128,0,0.05)' }}>
+                    {surfConfigStatusMsg}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Right pane: Publishers List */}
