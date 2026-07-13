@@ -1086,7 +1086,15 @@ app.post("/api/articles/unlock", async (req, res) => {
   const normalizedEmail = email.toLowerCase();
 
   const articles = readArticlesDb();
-  const article = articles.find(a => a.id === articleId);
+  let article = articles.find(a => a.id === articleId);
+  if (!article && articleId === "surfai-daily") {
+    article = {
+      id: "surfai-daily",
+      title: "SurfAI Daily Intelligence Dispatch",
+      price: "0.15",
+      payee: "0x1746978f956142e0482f0aff320d917ace450bcf"
+    };
+  }
   if (!article) {
     return res.status(404).json({ error: "Article not found" });
   }

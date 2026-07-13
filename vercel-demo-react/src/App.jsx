@@ -405,6 +405,29 @@ function App() {
     html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
     html = html.replace(/\*(.*?)\*/g, "<em>$1</em>");
     
+    // Parse Markdown Images & Videos: ![alt](url)
+    html = html.replace(/!\[(.*?)\]\((.*?)\)/g, (match, alt, url) => {
+      const sanitizedUrl = url.trim();
+      const isVideo = sanitizedUrl.match(/\.(mp4|webm|mov|ogg|m4v)($|\?)/i) || alt.toLowerCase().includes('video');
+      
+      if (isVideo) {
+        return `<video controls class="preview-video" style="max-width:100%; width:100%; border:2px solid var(--ink-black); box-shadow:4px 4px 0 var(--ink-black); margin: 16px 0; background: #000; display: block;">
+                  <source src="${sanitizedUrl}" />
+                  Your browser does not support the video tag.
+                </video>`;
+      } else {
+        return `<img src="${sanitizedUrl}" alt="${alt}" class="preview-img" style="max-width:100%; height:auto; border:2px solid var(--ink-black); box-shadow:4px 4px 0 var(--ink-black); margin: 16px 0; display: block;" />`;
+      }
+    });
+
+    // Parse raw R2 video links on their own line
+    html = html.replace(/^(https?:\/\/.*?(?:r2\.dev|r2\.cloudflare\.com|daveynfts\.com).*?\.(?:mp4|webm|mov|ogg|m4v))$/gim, (match, url) => {
+      return `<video controls class="preview-video" style="max-width:100%; width:100%; border:2px solid var(--ink-black); box-shadow:4px 4px 0 var(--ink-black); margin: 16px 0; background: #000; display: block;">
+                <source src="${url.trim()}" />
+                Your browser does not support the video tag.
+              </video>`;
+    });
+    
     // Parse links [text](url) — SECURITY FIX: sanitize href to prevent javascript: XSS
     html = html.replace(/\[(.*?)\]\((.*?)\)/g, (match, text, url) => {
       const sanitizedUrl = url.trim().toLowerCase();
@@ -435,6 +458,8 @@ function App() {
         trimmed.startsWith("<hr") || 
         trimmed.startsWith("<blockquote") || 
         trimmed.startsWith("<li") ||
+        trimmed.startsWith("<video") ||
+        trimmed.startsWith("<img") ||
         trimmed === ""
       ) {
         return line;
