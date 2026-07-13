@@ -76,9 +76,10 @@ const getInferredBackendUrl = () => {
     return url.replace(/\/+$/, ""); // strip trailing slashes
   }
   
-  // On Vercel deployment, use the production backend URL
+  // On Vercel deployment, use relative path so Vercel rewrites handles requests server-to-server
+  // This avoids CORS issues completely.
   if (typeof window !== "undefined" && !window.location.hostname.includes("localhost") && !window.location.hostname.includes("127.0.0.1")) {
-    return "https://paper-cut-apce.vercel.app";
+    return "";
   }
   
   // Fallback: local dev without VITE_API_URL still uses live backend
