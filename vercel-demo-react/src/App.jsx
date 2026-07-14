@@ -325,6 +325,12 @@ function App() {
     return localStorage.getItem("papercut_surf_content_override") || "";
   });
   const [surfConfigStatusMsg, setSurfConfigStatusMsg] = useState("");
+  
+  // SurfAI Video Mockup States
+  const [showSurfVideoMockup, setShowSurfVideoMockup] = useState(false);
+  const [videoSimulating, setVideoSimulating] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
+  const [videoSimStep, setVideoSimStep] = useState(0);
 
   // Publisher Admin Portal States
   const [articles, setArticles] = useState(INITIAL_ARTICLES);
@@ -1681,6 +1687,12 @@ function App() {
     setPdfSimulating(false);
     setPdfReady(false);
     setPdfSimStep(0);
+    
+    // Reset Video simulation
+    setShowSurfVideoMockup(false);
+    setVideoSimulating(false);
+    setVideoReady(false);
+    setVideoSimStep(0);
   };
 
   const triggerScrapeSimulation = () => {
@@ -1833,6 +1845,35 @@ Once payment is finalized on-chain via the **Lepton x402** protocol, the smart c
     }
     
     setTimeout(() => setSurfConfigStatusMsg(""), 3000);
+  };
+
+  const triggerVideoSimulation = () => {
+    setVideoSimulating(true);
+    setVideoReady(false);
+    setVideoSimStep(1);
+    
+    setTimeout(() => {
+      setVideoSimStep(2);
+      setTimeout(() => {
+        setVideoSimStep(3);
+        setTimeout(() => {
+          setVideoSimulating(false);
+          setVideoReady(true);
+        }, 800);
+      }, 1000);
+    }, 1000);
+  };
+
+  const handleSurfLogoClick = () => {
+    // Reset all other views
+    setSelectedArticle(null);
+    setShowApplyForm(false);
+    setIsPublisherView(false);
+    handleToggleAdminView(false);
+    
+    // Show video mockup panel and start simulation
+    setShowSurfVideoMockup(true);
+    triggerVideoSimulation();
   };
 
   const handleUnlockOnChain = async () => {
@@ -2021,90 +2062,6 @@ Once payment is finalized on-chain via the **Lepton x402** protocol, the smart c
           </div>
         </div>
       </nav>
-      
-      {/* SURFAI DAILY INTELLIGENCE TICKER HEADER */}
-      {!isPublisherView && !isAdminView && (
-        <div className="surfai-ticker-bar" style={{
-          background: 'var(--ink-black)',
-          color: 'var(--paper-bg)',
-          borderBottom: '2px solid var(--ink-black)',
-          display: 'flex',
-          alignItems: 'center',
-          padding: '8px 24px',
-          fontFamily: 'var(--font-mono)',
-          fontSize: '11px',
-          textTransform: 'uppercase',
-          letterSpacing: '0.05em',
-          gap: '12px',
-          overflow: 'hidden',
-          minHeight: '38px',
-          flexWrap: 'wrap'
-        }}>
-          {/* Logo/Badge */}
-          <div style={{
-            background: 'var(--ink-red)',
-            color: '#fff',
-            padding: '2px 8px',
-            fontSize: '10px',
-            fontWeight: 'bold',
-            borderRadius: '2px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            boxShadow: '1px 1px 0px rgba(255,255,255,0.2)',
-            cursor: 'pointer',
-            userSelect: 'none'
-          }}
-          onClick={() => handleToggleAdminView(true)}
-          title="Click to Open Admin Console"
-          >
-            <span>🌊</span>
-            <span>SurfAI</span>
-          </div>
-
-          {/* Ticker Info */}
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1, minWidth: '240px' }}>
-            <span style={{ color: 'var(--ink-light-grey)', flexShrink: 0 }}>[DAILY AI DISPATCH]</span>
-            <span 
-              className="surfai-ticker-link" 
-              style={{
-                color: 'var(--paper-bg)',
-                textDecoration: 'none',
-                cursor: 'pointer',
-                fontWeight: 'bold',
-                borderBottom: '1px dashed var(--paper-bg)'
-              }}
-              onClick={() => {
-                const dailyArticle = getDailyAISurfArticle();
-                setSelectedArticle(dailyArticle);
-                setShowApplyForm(false);
-                setIsPublisherView(false);
-                handleToggleAdminView(false);
-              }}
-              title="Click to Read and Unlock AI Report"
-            >
-              {getDailyAISurfArticle().title}
-            </span>
-          </div>
-
-          {/* Link to Admin */}
-          <div 
-            onClick={() => handleToggleAdminView(true)}
-            style={{
-              color: 'var(--ink-light-grey)',
-              textDecoration: 'none',
-              cursor: 'pointer',
-              fontSize: '10px',
-              borderLeft: '1px solid var(--ink-grey)',
-              paddingLeft: '12px',
-              flexShrink: 0
-            }}
-            title="Open Administration Portal"
-          >
-            ⚙️ ADMIN CONSOLE
-          </div>
-        </div>
-      )}
             {/* MAIN CONTAINER */}
       {isPublisherView ? (
         <div className="portal-scroll-container" style={{ flex: '1', overflowY: 'auto', width: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -3199,7 +3156,108 @@ Once payment is finalized on-chain via the **Lepton x402** protocol, the smart c
           </section>
 
           {/* RIGHT CONTENT */}
-          <section className="viewer">
+          <section className="viewer" style={{ position: 'relative' }}>
+            {/* SURFAI DAILY INTELLIGENCE TICKER HEADER */}
+            {!isPublisherView && !isAdminView && (
+              <div className="surfai-ticker-bar" style={{
+                background: 'var(--ink-black)',
+                color: 'var(--paper-bg)',
+                borderBottom: '2px solid var(--ink-black)',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '8px 20px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '11px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                gap: '12px',
+                overflow: 'hidden',
+                minHeight: '38px',
+                flexWrap: 'wrap',
+                position: 'sticky',
+                top: 0,
+                zIndex: 100,
+                width: '100%'
+              }}>
+                {/* Logo/Badge */}
+                <div style={{
+                  background: 'transparent',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+                onClick={handleSurfLogoClick}
+                title="Click to Generate AI Video Briefing"
+                >
+                  {/* SVG SurfAI Logo using the user's custom teal wavy icon logo */}
+                  <div style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '5px',
+                    background: 'linear-gradient(135deg, #0b3c4d 0%, #051d26 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+                    marginRight: '6px'
+                  }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M2 7C4.5 5 7.5 5 10 7C12.5 9 15.5 9 18 7C19.5 5.8 21 6.2 22 7" stroke="#ffffff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M2 12C4.5 10 7.5 10 10 12C12.5 14 15.5 14 18 12C19.5 10.8 21 11.2 22 12" stroke="#ffffff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M2 17C4.5 15 7.5 15 10 17C12.5 19 15.5 19 18 17C19.5 15.8 21 16.2 22 17" stroke="#ffffff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                  <span style={{ fontWeight: 'bold', color: '#fff', fontSize: '11px', letterSpacing: '0.06em' }}>SurfAI</span>
+                </div>
+
+                {/* Ticker Info */}
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1, minWidth: '180px' }}>
+                  <span style={{ color: 'var(--ink-light-grey)', flexShrink: 0 }}>[DAILY AI DISPATCH]</span>
+                  <span 
+                    className="surfai-ticker-link" 
+                    style={{
+                      color: 'var(--paper-bg)',
+                      textDecoration: 'none',
+                      cursor: 'pointer',
+                      fontWeight: 'bold',
+                      borderBottom: '1px dashed var(--paper-bg)'
+                    }}
+                    onClick={() => {
+                      const dailyArticle = getDailyAISurfArticle();
+                      setSelectedArticle(dailyArticle);
+                      setShowApplyForm(false);
+                      setIsPublisherView(false);
+                      handleToggleAdminView(false);
+                    }}
+                    title="Click to Read and Unlock AI Report"
+                  >
+                    {getDailyAISurfArticle().title}
+                  </span>
+                </div>
+
+                {/* Link to Admin */}
+                <div 
+                  onClick={() => handleToggleAdminView(true)}
+                  style={{
+                    color: 'var(--ink-light-grey)',
+                    textDecoration: 'none',
+                    cursor: 'pointer',
+                    fontSize: '10px',
+                    borderLeft: '1px solid var(--ink-grey)',
+                    paddingLeft: '12px',
+                    flexShrink: 0
+                  }}
+                  title="Open Administration Portal"
+                >
+                  ⚙️ ADMIN CONSOLE
+                </div>
+              </div>
+            )}
+
             {showApplyForm ? (
               <div className="viewer-state apply-author-container" style={{ padding: '32px', display: 'flex', flexDirection: 'column' }}>
                 <div className="greek-key"></div>
@@ -3283,6 +3341,112 @@ Once payment is finalized on-chain via the **Lepton x402** protocol, the smart c
                   )}
                 </div>
                 <div className="greek-key" style={{ marginTop: '32px' }}></div>
+              </div>
+            ) : showSurfVideoMockup ? (
+              <div className="viewer-state surfai-video-mockup-container" style={{ padding: '40px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center', minHeight: '100%', fontFamily: 'var(--font-mono)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '2px solid var(--ink-black)', paddingBottom: '12px', width: '100%', marginBottom: '24px' }}>
+                  {/* SVG SurfAI Logo with waves */}
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '8px',
+                    background: 'linear-gradient(135deg, #0b3c4d 0%, #051d26 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 2px 5px rgba(0,0,0,0.4)',
+                    flexShrink: 0
+                  }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M2 7C4.5 5 7.5 5 10 7C12.5 9 15.5 9 18 7C19.5 5.8 21 6.2 22 7" stroke="#ffffff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M2 12C4.5 10 7.5 10 10 12C12.5 14 15.5 14 18 12C19.5 10.8 21 11.2 22 12" stroke="#ffffff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M2 17C4.5 15 7.5 15 10 17C12.5 19 15.5 19 18 17C19.5 15.8 21 16.2 22 17" stroke="#ffffff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="serif-title font-italic" style={{ margin: 0, fontSize: '24px', color: 'var(--ink-red)' }}>SurfAI Video Intelligence Generator</h2>
+                    <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--ink-grey)' }}>Autonomous Media Briefing Pipeline</span>
+                  </div>
+                </div>
+
+                {videoSimulating && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', maxWidth: '600px', margin: '40px auto' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 'bold' }}>
+                      <span>STATUS: SYNTHESIZING GENERATIVE AI VIDEO BRIEFING...</span>
+                      <span className="blink-text" style={{ animation: 'blink 1s infinite' }}>PROCESSING...</span>
+                    </div>
+                    
+                    {/* Progress bar */}
+                    <div style={{ border: '2px solid var(--ink-black)', height: '18px', background: '#eadeca', position: 'relative', overflow: 'hidden', boxShadow: '3px 3px 0 var(--ink-black)' }}>
+                      <div style={{
+                        background: 'var(--ink-red)',
+                        height: '100%',
+                        width: videoSimStep === 1 ? '33%' : videoSimStep === 2 ? '66%' : '100%',
+                        transition: 'width 0.8s ease-in-out'
+                      }}></div>
+                    </div>
+                    
+                    {/* Console log outputs */}
+                    <div style={{ border: '1px solid var(--ink-light-grey)', padding: '16px', background: 'var(--paper-bg-darker)', fontSize: '11px', lineHeight: '1.6', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ display: 'flex', gap: '8px', color: videoSimStep >= 1 ? 'var(--ink-black)' : 'var(--ink-light-grey)' }}>
+                        <span>{videoSimStep >= 1 ? '▶' : '▷'}</span>
+                        <span>[1/3] Loading daily market flow intelligence and SurfAI weights...</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', color: videoSimStep >= 2 ? 'var(--ink-black)' : 'var(--ink-light-grey)' }}>
+                        <span>{videoSimStep >= 2 ? '▶' : '▷'}</span>
+                        <span>[2/3] Rendering timeline frames and embedding voiceover synthesis...</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', color: videoSimStep >= 3 ? 'var(--ink-black)' : 'var(--ink-light-grey)' }}>
+                        <span>{videoSimStep >= 3 ? '▶' : '▷'}</span>
+                        <span>[3/3] Compiling MP4 container and uploading payload to Cloudflare R2 node...</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {videoReady && (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '720px' }}>
+                    <div style={{ color: 'green', fontWeight: 'bold', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px' }}>
+                      <span>✔</span>
+                      <span>AI VIDEO BRIEFING GENERATED SUCCESSFULLY</span>
+                    </div>
+
+                    <video 
+                      controls 
+                      autoPlay
+                      className="preview-video" 
+                      style={{ 
+                        maxWidth: '100%', 
+                        width: '100%', 
+                        border: '2px solid var(--ink-black)', 
+                        boxShadow: '6px 6px 0 var(--ink-black)', 
+                        marginBottom: '24px', 
+                        background: '#000', 
+                        display: 'block' 
+                      }}
+                    >
+                      <source src="https://pub-8288264395e64bebab09946b5bc0b740.r2.dev/SurfPaperCut/Th%E1%BB%8B_Tr%C6%B0%E1%BB%9Dng_Crypto_13_07_26.mp4" type="video/mp4" />
+                      Your browser does not support the video tag.
+                    </video>
+
+                    <div style={{ display: 'flex', gap: '16px' }}>
+                      <button 
+                        className="btn"
+                        onClick={triggerVideoSimulation}
+                        style={{ padding: '10px 24px', fontSize: '12px' }}
+                      >
+                        ⟳ RE-GENERATE VIDEO
+                      </button>
+                      <button 
+                        className="btn btn-secondary"
+                        onClick={() => setShowSurfVideoMockup(false)}
+                        style={{ padding: '10px 24px', fontSize: '12px' }}
+                      >
+                        RETURN TO HOME
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : !selectedArticle ? (
               <div id="viewer-default" className="viewer-state">
