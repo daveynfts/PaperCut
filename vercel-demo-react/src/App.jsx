@@ -319,7 +319,7 @@ function App() {
     return localStorage.getItem("papercut_surf_price_override") || "0.15";
   });
   const [surfPdfUrlOverride, setSurfPdfUrlOverride] = useState(() => {
-    return localStorage.getItem("papercut_surf_pdf_url_override") || "https://pub-2d45fad316624c53.r2.dev/reports/surfai-daily-briefing.pdf";
+    return localStorage.getItem("papercut_surf_pdf_url_override") || "https://pub-8288264395e64bebab09946b5bc0b740.r2.dev/SurfPaperCut/surfai-daily-briefing.pdf";
   });
   const [surfContentOverride, setSurfContentOverride] = useState(() => {
     return localStorage.getItem("papercut_surf_content_override") || "";
@@ -1765,7 +1765,7 @@ function App() {
     
     const activeTitle = surfTitleOverride || defaultTitle;
     const activePrice = surfPriceOverride || "0.15";
-    const activePdfUrl = surfPdfUrlOverride || "https://pub-2d45fad316624c53.r2.dev/reports/surfai-daily-briefing.pdf";
+    const activePdfUrl = surfPdfUrlOverride || "https://pub-8288264395e64bebab09946b5bc0b740.r2.dev/SurfPaperCut/surfai-daily-briefing.pdf";
     const defaultContent = `## SurfAI Daily Intelligence Dispatch
 
 ### Overview
@@ -3487,7 +3487,7 @@ Once payment is finalized on-chain via the **Lepton x402** protocol, the smart c
                               </p>
                               <a 
                                 className="btn"
-                                href="https://pub-2d45fad316624c53.r2.dev/reports/surfai-daily-briefing.pdf" 
+                                href={selectedArticle.pdfUrl || "https://pub-8288264395e64bebab09946b5bc0b740.r2.dev/SurfPaperCut/surfai-daily-briefing.pdf"} 
                                 target="_blank" 
                                 rel="noopener noreferrer"
                                 style={{ 
