@@ -3238,23 +3238,6 @@ Once payment is finalized on-chain via the **Lepton x402** protocol, the smart c
                     {getDailyAISurfArticle().title}
                   </span>
                 </div>
-
-                {/* Link to Admin */}
-                <div 
-                  onClick={() => handleToggleAdminView(true)}
-                  style={{
-                    color: 'var(--ink-light-grey)',
-                    textDecoration: 'none',
-                    cursor: 'pointer',
-                    fontSize: '10px',
-                    borderLeft: '1px solid var(--ink-grey)',
-                    paddingLeft: '12px',
-                    flexShrink: 0
-                  }}
-                  title="Open Administration Portal"
-                >
-                  ⚙️ ADMIN CONSOLE
-                </div>
               </div>
             )}
 
