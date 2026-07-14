@@ -3563,7 +3563,9 @@ Once payment is finalized on-chain via the **Lepton x402** protocol, the smart c
                           padding: '24px',
                           backgroundColor: 'var(--paper-accent)',
                           boxShadow: '4px 4px 0 var(--ink-black)',
-                          fontFamily: 'var(--font-mono)'
+                          fontFamily: 'var(--font-mono)',
+                          columnSpan: 'all',
+                          breakInside: 'avoid'
                         }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--ink-black)', paddingBottom: '8px', marginBottom: '16px' }}>
                             <span style={{ fontSize: '20px' }}>🌊</span>
