@@ -386,6 +386,7 @@ function App() {
   const parseMarkdownToHtml = (text) => {
     if (!text) return "";
     let html = text
+      .replace(/\r/g, "") // Strip all carriage returns to prevent breaking regexes with trailing \r
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
@@ -420,8 +421,8 @@ function App() {
       }
     });
 
-    // Parse raw R2 video links on their own line
-    html = html.replace(/^(https?:\/\/.*?(?:r2\.dev|r2\.cloudflare\.com|daveynfts\.com).*?\.(?:mp4|webm|mov|ogg|m4v))$/gim, (match, url) => {
+    // Parse raw video links on their own line (any HTTP/HTTPS link ending in video extension)
+    html = html.replace(/^(https?:\/\/[^\s]+?\.(?:mp4|webm|mov|ogg|m4v)(?:\?[^\s]*)?)$/gim, (match, url) => {
       return `<video controls class="preview-video" style="max-width:100%; width:100%; border:2px solid var(--ink-black); box-shadow:4px 4px 0 var(--ink-black); margin: 16px 0; background: #000; display: block;">
                 <source src="${url.trim()}" />
                 Your browser does not support the video tag.
@@ -432,6 +433,14 @@ function App() {
     html = html.replace(/\[(.*?)\]\((.*?)\)/g, (match, text, url) => {
       const sanitizedUrl = url.trim().toLowerCase();
       if (sanitizedUrl.startsWith('http://') || sanitizedUrl.startsWith('https://') || sanitizedUrl.startsWith('mailto:')) {
+        // If the URL matches a video format, or if text is video, render as video player!
+        const isVideo = url.trim().match(/\.(mp4|webm|mov|ogg|m4v)($|\?)/i) || text.toLowerCase().includes('video');
+        if (isVideo) {
+          return `<video controls class="preview-video" style="max-width:100%; width:100%; border:2px solid var(--ink-black); box-shadow:4px 4px 0 var(--ink-black); margin: 16px 0; background: #000; display: block;">
+                    <source src="${url.trim()}" />
+                    Your browser does not support the video tag.
+                  </video>`;
+        }
         return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="preview-link">${text}</a>`;
       }
       return text; // Strip dangerous protocol links, keep only the text
