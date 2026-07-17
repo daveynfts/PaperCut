@@ -2,6 +2,7 @@ node_modules/
 .env
 .env.*
 !.env.example
+!vercel-demo-react/.env.production
 .DS_Store
 *.log
 users.json

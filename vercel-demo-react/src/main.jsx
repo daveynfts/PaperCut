@@ -33,33 +33,55 @@ const arcTestnet = {
 import logoImg from './assets/logo.png'
 
 const PRIVY_APP_ID = import.meta.env.VITE_PRIVY_APP_ID;
-if (!PRIVY_APP_ID) {
-  throw new Error('VITE_PRIVY_APP_ID is required');
-}
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <PrivyProvider
-      appId={PRIVY_APP_ID}
-      config={{
-        // 1. Lock Privy strictly to Arc Testnet
-        supportedChains: [arcTestnet],
-        defaultChain: arcTestnet,
-        loginMethods: ['email', 'wallet'],
-        appearance: {
-          theme: 'light',
-          accentColor: '#8f2d1b',
-          logo: logoImg,
-          showWalletLoginFirst: false,
-          landingHeader: 'Sign the Guest Register',
-          loginMessage: 'Log in with your cryptographic wallet or electronic mail to unlock dispatch files.',
-        },
-        embeddedWallets: {
-          createOnLogin: 'users-without-wallets',
-        }
+const root = ReactDOM.createRoot(document.getElementById('root'));
+
+if (!PRIVY_APP_ID) {
+  root.render(
+    <main
+      role="alert"
+      style={{
+        minHeight: '100vh',
+        display: 'grid',
+        placeItems: 'center',
+        padding: '2rem',
+        background: '#f5eed3',
+        color: '#1a1713',
+        fontFamily: "Georgia, 'Times New Roman', serif",
+        textAlign: 'center',
       }}
     >
-      <App />
-    </PrivyProvider>
-  </React.StrictMode>,
-)
+      <div>
+        <h1 style={{ marginBottom: '0.75rem' }}>Paper Cut is temporarily unavailable</h1>
+        <p style={{ margin: 0 }}>The sign-in service is not configured for this deployment.</p>
+      </div>
+    </main>,
+  );
+} else {
+  root.render(
+    <React.StrictMode>
+      <PrivyProvider
+        appId={PRIVY_APP_ID}
+        config={{
+          // 1. Lock Privy strictly to Arc Testnet
+          supportedChains: [arcTestnet],
+          defaultChain: arcTestnet,
+          loginMethods: ['email', 'wallet'],
+          appearance: {
+            theme: 'light',
+            accentColor: '#8f2d1b',
+            logo: logoImg,
+            showWalletLoginFirst: false,
+            landingHeader: 'Sign the Guest Register',
+            loginMessage: 'Log in with your cryptographic wallet or electronic mail to unlock dispatch files.',
+          },
+          embeddedWallets: {
+            createOnLogin: 'users-without-wallets',
+          }
+        }}
+      >
+        <App />
+      </PrivyProvider>
+    </React.StrictMode>,
+  );
+}
