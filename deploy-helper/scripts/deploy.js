@@ -1,5 +1,4 @@
-import pkg from "hardhat";
-const { ethers } = pkg;
+import hre from "hardhat";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from 'url';
@@ -8,6 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function main() {
+  const { ethers } = await hre.network.create();
   console.log("Starting deployment on Mantle Sepolia Testnet...");
 
   // 1. Deploy DaveyTestToken

@@ -2,11 +2,26 @@
   "name": "papercut-backend",
   "version": "1.0.0",
   "main": "server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test tests/*.test.js",
+    "check": "node --check server.js && node --check auth.js && node --check store.js && node --check validation.js && node --check check_tx.js && node --check test_faucet_integration.js"
+  },
   "dependencies": {
+    "@privy-io/node": "^0.26.0",
     "@upstash/redis": "^1.38.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "ethers": "^6.13.1",
-    "express": "^4.19.2"
+    "ethers": "^6.17.0",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.1.0",
+    "helmet": "^8.1.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "supertest": "^7.2.2"
   }
 }

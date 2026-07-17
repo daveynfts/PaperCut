@@ -1,111 +1,18 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PaperCut · Web3 Micropayment Demo</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Outfit:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <noscript><p>JavaScript is required to use PaperCut.</p></noscript>
-  <!-- NAV BAR -->
-  <nav class="nav">
-    <div class="nav-brand">
-      <span class="logo-symbol">Λ</span>
-      <span class="logo-text">PaperCut Demo</span>
-    </div>
-    <div class="nav-controls">
-      <button class="btn btn-sm" id="btn-connect">Connect Wallet</button>
-      <div class="wallet-info" id="wallet-info" style="display: none;">
-        <span class="status-dot"></span>
-        <span id="wallet-address">0x000...0000</span>
-      </div>
-    </div>
-  </nav>
-
-  <!-- MAIN CONTAINER -->
-  <main class="main-container">
-    <!-- LEFT SIDEBAR: Feed list -->
-    <section class="sidebar">
-      <div class="section-title">
-        <h2>PREMIUM ARTICLES</h2>
-        <span class="item-count">3 articles</span>
-      </div>
-      <div class="article-list" id="article-list">
-        <!-- JS populated -->
-      </div>
-    </section>
-
-    <!-- RIGHT CONTENT: Article viewer -->
-    <section class="viewer">
-      <div id="viewer-default" class="viewer-state">
-        <div class="greek-key"></div>
-        <h1 class="serif-title font-italic">Select an article</h1>
-        <p class="mono-text text-muted">Web3 Pay-Per-Read Micropayment simulation with live on-chain transactions.</p>
-        <div class="badge-row">
-          <span class="chain-badge">Sepolia</span>
-          <span class="chain-badge">Arc Testnet</span>
-          <span class="chain-badge">Arbitrum Sepolia</span>
-        </div>
-      </div>
-
-      <div id="viewer-active" class="viewer-state" style="display: none;">
-        <!-- Header -->
-        <div class="article-header">
-          <h1 id="active-title" class="serif-title">Article Title</h1>
-          <div class="article-meta">
-            <span>By <strong id="active-author" style="color: var(--white);">Author</strong></span>
-            <span class="divider">•</span>
-            <span id="active-price-tag" class="price-badge">$0.02 USDC Equiv</span>
-          </div>
-        </div>
-
-        <div class="greek-key tight"></div>
-
-        <!-- Body -->
-        <div class="article-body">
-          <div id="article-content-free" class="content-text">
-            <!-- Free snippet -->
-          </div>
-
-          <!-- Web3 LIVE PAYWALL MODULE -->
-          <div id="paywall-module" class="paywall-card" style="display: none;">
-            <div class="paywall-title">Web3 Paywall Required</div>
-            <p class="paywall-desc">
-              Unlock this article on-chain by sending a micro-transaction of <strong style="color: var(--accent);">0.0001 Testnet Gas Token</strong> (approx. $0.02) to the publisher.
-            </p>
-            <div id="paywall-actions">
-              <button class="btn btn-lg" id="btn-unlock">Unlock on-chain</button>
-            </div>
-            
-            <!-- Live Transaction Status -->
-            <div id="tx-status-box" class="tx-status-box" style="display: none;">
-              <span class="spinner"></span>
-              <span id="tx-status-text">Waiting for transaction approval...</span>
-              <div id="tx-hash-link" class="tx-hash-link"></div>
-            </div>
-
-            <div id="paywall-error" class="paywall-error" style="display: none;"></div>
-          </div>
-
-          <div id="article-content-premium" class="content-text premium-unlocked" style="display: none;">
-            <!-- Premium fully unlocked content -->
-          </div>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <!-- Load Ethers.js from CDN with Subresource Integrity (SRI) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.1/ethers.umd.min.js" integrity="sha384-xeyyvbIlX+FahWHIZR6gjoC4A1i44cTBxZ330euRbtiXZwfcVDWVeOuJ4sGx8R2d" crossorigin="anonymous"></script>
-  <script src="app.js"></script>
-  <noscript>
-    <div style="padding: 20px; text-align: center; background-color: #ffdddd; color: #ff0000; font-weight: bold;">
-      JavaScript is required to access the PaperCut Web3 Paywall demo.
-    </div>
-  </noscript>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="refresh" content="0; url=/papercut/" />
+    <title>PaperCut has moved</title>
+  </head>
+  <body>
+    <main>
+      <h1>PaperCut has moved</h1>
+      <p>
+        This insecure client-only demo has been retired. Continue to the
+        <a href="/papercut/">authenticated PaperCut application</a>.
+      </p>
+    </main>
+  </body>
 </html>

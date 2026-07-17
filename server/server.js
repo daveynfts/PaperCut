@@ -1,1342 +1,909 @@
+"use strict";
+
+const crypto = require("crypto");
+const path = require("path");
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
+const { rateLimit } = require("express-rate-limit");
+const { Redis } = require("@upstash/redis");
 const { ethers } = require("ethers");
-const fs = require("fs");
-const path = require("path");
-const crypto = require("crypto");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 
+const { isAdminIdentity, normalizeIdentity, optionalAuth, requireAdmin, requireAuth } = require("./auth");
+const { formatUsdc, parseUsdc } = require("./money");
+const { PaperCutStore } = require("./store");
+const { schemas, validate } = require("./validation");
+
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = Number(process.env.PORT || 4000);
+const NODE_ENV = process.env.NODE_ENV || "development";
+const PAYMENT_MODE = process.env.PAYMENT_MODE || (NODE_ENV === "production" ? "disabled" : "mock");
+const isMockMode = PAYMENT_MODE === "mock";
+const isLiveMode = PAYMENT_MODE === "live";
+const CIRCLE_TERMINAL_FAILURES = new Set(["FAILED", "DENIED", "CANCELLED"]);
+const allowedOrigins = new Set(
+  String(process.env.CORS_ORIGIN || (NODE_ENV === "production" ? "" : "http://localhost:5173,http://localhost:3000"))
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+);
 
+app.disable("x-powered-by");
+app.set("trust proxy", 1);
+app.use(helmet());
 app.use(cors({
-  origin: process.env.CORS_ORIGIN 
-    ? process.env.CORS_ORIGIN.split(',')
-    : ['http://localhost:5173', 'http://localhost:3000', 'https://paper-cut-apce.vercel.app', 'https://daveynfts.com', 'https://www.daveynfts.com'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  credentials: true
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+    callback(new Error("Origin is not allowed"));
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  credentials: false,
 }));
-app.use(express.json());
+app.use(express.json({ limit: "100kb", strict: true }));
+app.use("/api", rateLimit({
+  windowMs: 60_000,
+  limit: Number(process.env.API_RATE_LIMIT_PER_MINUTE || 120),
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Too many requests; please retry shortly" },
+}));
 
-// Mock Publisher Wallet Address (Recipient of micropayments)
-let PUBLISHER_WALLET = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"; // Hardhat #0
-
-// Mock USDC Contract Address on Arc L1
-const ARC_USDC_ADDRESS = "0x0000000000000000000000000000000000001010"; // Mock USDC
-const ARC_CHAIN_ID = 54321; // Mock Arc ChainID
-
-// Initialize Cloud Database if env vars are present (powered by Upstash Redis / Vercel KV)
-const { Redis } = require("@upstash/redis");
-let redisClient = null;
-if (
-  (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) ||
-  (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN)
-) {
-  try {
-    redisClient = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN,
-    });
-    console.log("[Database] Connected successfully to Cloud Redis/KV Store.");
-  } catch (err) {
-    console.error("[Database] Failed to connect to Redis/KV client:", err);
-  }
-} else {
-  console.log("[Database] Running with local file-based database. Add UPSTASH_REDIS_REST_URL to synchronize across servers.");
+function createRedisClient() {
+  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+  return url && token ? new Redis({ url, token }) : null;
 }
 
-// In-Memory Database Caches (synchronized per request when using Cloud DB)
-global.USERS_DB = null;
-global.PUBLISHERS_DB = null;
-global.ADMIN_IPS_DB = null;
-global.ARTICLES_DB = null;
-
-// Database paths for local fallback
-const USERS_DB_PATH = process.env.VERCEL ? "/tmp/users.json" : path.join(__dirname, "users.json");
-const PUBLISHERS_DB_PATH = process.env.VERCEL ? "/tmp/publishers.json" : path.join(__dirname, "publishers.json");
-const ADMIN_IPS_DB_PATH = process.env.VERCEL ? "/tmp/admin_ips.json" : path.join(__dirname, "admin_ips.json");
-const ARTICLES_DB_PATH = process.env.VERCEL ? "/tmp/articles.json" : path.join(__dirname, "articles.json");
-
-// Helper functions to read directly from local files
-function readUsersDbFromFile() {
-  try {
-    if (!fs.existsSync(USERS_DB_PATH)) {
-      const seedPath = path.join(__dirname, "users.json");
-      if (fs.existsSync(seedPath)) return JSON.parse(fs.readFileSync(seedPath, "utf8"));
-      return {};
-    }
-    return JSON.parse(fs.readFileSync(USERS_DB_PATH, "utf8"));
-  } catch (e) {
-    return {};
-  }
-}
-
-function readPublishersDbFromFile() {
-  try {
-    if (!fs.existsSync(PUBLISHERS_DB_PATH)) {
-      const seedPath = path.join(__dirname, "publishers.json");
-      if (fs.existsSync(seedPath)) return JSON.parse(fs.readFileSync(seedPath, "utf8"));
-      return {};
-    }
-    return JSON.parse(fs.readFileSync(PUBLISHERS_DB_PATH, "utf8"));
-  } catch (e) {
-    return {};
-  }
-}
-
-function readAdminIpsDbFromFile() {
-  try {
-    if (!fs.existsSync(ADMIN_IPS_DB_PATH)) return [];
-    return JSON.parse(fs.readFileSync(ADMIN_IPS_DB_PATH, "utf8"));
-  } catch (e) {
-    return [];
-  }
-}
-
-function readArticlesDbFromFile() {
-  try {
-    if (!fs.existsSync(ARTICLES_DB_PATH)) {
-      const seedPath = path.join(__dirname, "articles.json");
-      if (fs.existsSync(seedPath)) return JSON.parse(fs.readFileSync(seedPath, "utf8"));
-      return [];
-    }
-    return JSON.parse(fs.readFileSync(ARTICLES_DB_PATH, "utf8"));
-  } catch (e) {
-    return [];
-  }
-}
-
-// Synchronous wrapper functions used by endpoints
-function readUsersDb() {
-  if (redisClient) return global.USERS_DB || {};
-  return readUsersDbFromFile();
-}
-
-function writeUsersDb(db) {
-  if (redisClient) {
-    global.USERS_DB = db;
-    redisClient.set("papercut_users", db).catch(err => console.error("Redis set users error:", err));
-  } else {
-    try {
-      fs.writeFileSync(USERS_DB_PATH, JSON.stringify(db, null, 2));
-    } catch (err) {
-      console.error("Failed to write users DB file:", err);
-    }
-  }
-}
-
-// Check for legacy function definitions just in case
-function readPublishersDb() {
-  if (redisClient) return global.PUBLISHERS_DB || {};
-  return readPublishersDbFromFile();
-}
-
-function writePublishersDb(db) {
-  if (redisClient) {
-    global.PUBLISHERS_DB = db;
-    redisClient.set("papercut_publishers", db).catch(err => console.error("Redis set publishers error:", err));
-  } else {
-    try {
-      fs.writeFileSync(PUBLISHERS_DB_PATH, JSON.stringify(db, null, 2));
-    } catch (err) {
-      console.error("Failed to write publishers DB file:", err);
-    }
-  }
-}
-
-function readAdminIpsDb() {
-  if (redisClient) return global.ADMIN_IPS_DB || [];
-  return readAdminIpsDbFromFile();
-}
-
-function writeAdminIpsDb(db) {
-  if (redisClient) {
-    global.ADMIN_IPS_DB = db;
-    redisClient.set("papercut_admin_ips", db).catch(err => console.error("Redis set admin_ips error:", err));
-  } else {
-    try {
-      fs.writeFileSync(ADMIN_IPS_DB_PATH, JSON.stringify(db, null, 2));
-    } catch (err) {
-      console.error("Failed to write admin_ips DB file:", err);
-    }
-  }
-}
-
-function readArticlesDb() {
-  if (redisClient) return global.ARTICLES_DB || [];
-  return readArticlesDbFromFile();
-}
-
-function writeArticlesDb(db) {
-  if (redisClient) {
-    global.ARTICLES_DB = db;
-    redisClient.set("papercut_articles", db).catch(err => console.error("Redis set articles error:", err));
-  } else {
-    try {
-      fs.writeFileSync(ARTICLES_DB_PATH, JSON.stringify(db, null, 2));
-    } catch (err) {
-      console.error("Failed to write articles DB file:", err);
-    }
-  }
-}
-
-// Middleware to sync from Cloud Redis before executing any API route
-app.use("/api", async (req, res, next) => {
-  if (redisClient) {
-    try {
-      const [users, articles, publishers, adminIps] = await Promise.all([
-        redisClient.get("papercut_users"),
-        redisClient.get("papercut_articles"),
-        redisClient.get("papercut_publishers"),
-        redisClient.get("papercut_admin_ips")
-      ]);
-
-      // Seed databases on first launch if empty
-      if (users === null) {
-        const seed = readUsersDbFromFile();
-        global.USERS_DB = seed;
-        redisClient.set("papercut_users", seed).catch(e => console.error(e));
-      } else {
-        global.USERS_DB = users;
-      }
-
-      if (publishers === null) {
-        const seed = readPublishersDbFromFile();
-        global.PUBLISHERS_DB = seed;
-        redisClient.set("papercut_publishers", seed).catch(e => console.error(e));
-      } else {
-        global.PUBLISHERS_DB = publishers;
-      }
-
-      if (adminIps === null) {
-        const seed = readAdminIpsDbFromFile();
-        global.ADMIN_IPS_DB = seed;
-        redisClient.set("papercut_admin_ips", seed).catch(e => console.error(e));
-      } else {
-        global.ADMIN_IPS_DB = adminIps;
-      }
-
-      if (articles === null) {
-        const seed = readArticlesDbFromFile();
-        global.ARTICLES_DB = seed;
-        redisClient.set("papercut_articles", seed).catch(e => console.error(e));
-      } else {
-        global.ARTICLES_DB = articles;
-      }
-    } catch (err) {
-      console.error("[Database] Failed to sync database from Cloud Redis/KV:", err);
-    }
-  }
-  next();
+const redisClient = createRedisClient();
+const store = new PaperCutStore({
+  redisClient,
+  directory: process.env.PAPERCUT_DATA_DIR || (process.env.VERCEL ? "/tmp" : __dirname),
+  seedDirectory: __dirname,
+  requireCloud: NODE_ENV === "production" && process.env.ALLOW_FILE_DB_IN_PRODUCTION !== "true",
 });
 
+let publisherWalletAddress = "";
+let cachedCirclePublicKey = null;
+let cachedCirclePublicKeyAt = 0;
 
-// --- Helper: Fetch with Retry ---
-// Node 18+ undici has a known issue with SocketError: other side closed on keep-alive connections.
-// This wrapper catches those errors and retries the request with a new socket.
-async function fetchWithRetry(url, options, retries = 3) {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const response = await fetch(url, options);
-      return response;
-    } catch (err) {
-      if (i === retries - 1) throw err;
-      console.warn(`[Fetch Retry] Attempt ${i + 1} failed for ${url}: ${err.message}. Retrying...`);
-      await new Promise(res => setTimeout(res, 500)); // wait 500ms before retry
+function assertPaymentConfiguration() {
+  if (NODE_ENV === "production") {
+    const requiredRuntime = ["CORS_ORIGIN", "PRIVY_APP_ID", "PRIVY_APP_SECRET"];
+    const missingRuntime = requiredRuntime.filter((name) => !process.env[name]);
+    if (missingRuntime.length) {
+      throw new Error(`Missing production configuration: ${missingRuntime.join(", ")}`);
     }
   }
-}
-
-// Circle W3S Configuration - Auto-detect mock mode based on environment variables
-const isMockMode = !process.env.CIRCLE_API_KEY || !process.env.CIRCLE_ENTITY_SECRET;
-
-if (isMockMode) {
-  console.log("[Publisher Backend] Running in SIMULATED MOCK MODE because CIRCLE_API_KEY or CIRCLE_ENTITY_SECRET is missing.");
-} else {
-  console.log("[Publisher Backend] Running in LIVE MODE using Circle Web3 Services API.");
-}
-
-async function initPublisherWallet() {
-  if (isMockMode) return;
-  try {
-    const response = await fetchWithRetry(`https://api.circle.com/v1/w3s/wallets/${process.env.PUBLISHER_WALLET_ID}`, {
-      headers: {
-        "Authorization": `Bearer ${process.env.CIRCLE_API_KEY}`
-      }
-    });
-    const json = await response.json();
-    if (json.data?.wallet?.address) {
-      PUBLISHER_WALLET = json.data.wallet.address;
-      console.log(`[Circle W3S] Publisher wallet address initialized dynamically: ${PUBLISHER_WALLET}`);
-    } else {
-      console.warn("[Circle W3S] Could not fetch publisher wallet address, using mock address.", json);
-    }
-  } catch (err) {
-    console.error("Failed to initialize publisher wallet address from Circle:", err);
+  if (!["disabled", "mock", "live"].includes(PAYMENT_MODE)) {
+    throw new Error("PAYMENT_MODE must be disabled, mock, or live");
   }
-}
-initPublisherWallet();
-
-// Helper: RSA Encryption using Node's native crypto module
-async function fetchCirclePublicKey() {
-  try {
-    console.log(`[Circle W3S] Fetching public key using API key (length: ${process.env.CIRCLE_API_KEY?.length || 0})`);
-    const response = await fetchWithRetry("https://api.circle.com/v1/w3s/config/entity/publicKey", {
-      headers: {
-        "Authorization": `Bearer ${process.env.CIRCLE_API_KEY}`
-      }
-    });
-    const json = await response.json();
-    if (!json.data?.publicKey) {
-      console.error("[Circle W3S] Public key fetch returned error:", JSON.stringify(json));
-      throw new Error(`Failed to fetch Circle public key: ${json.message || JSON.stringify(json)}`);
-    }
-    return json.data.publicKey;
-  } catch (error) {
-    console.error("fetchCirclePublicKey error:", error);
-    throw error;
+  if (NODE_ENV === "production" && isMockMode && process.env.ALLOW_MOCK_PAYMENTS !== "true") {
+    throw new Error("Mock payments are disabled in production");
   }
+  if (!isLiveMode) return;
+  const required = [
+    "CIRCLE_API_KEY",
+    "CIRCLE_ENTITY_SECRET",
+    "CIRCLE_WALLET_SET_ID",
+    "PUBLISHER_WALLET_ID",
+  ];
+  const missing = required.filter((name) => !process.env[name]);
+  if (missing.length) throw new Error(`Missing live payment configuration: ${missing.join(", ")}`);
 }
 
-function encryptEntitySecret(entitySecretHex, publicKeyPem) {
-  const entitySecret = Buffer.from(entitySecretHex, "hex");
-  const encrypted = crypto.publicEncrypt(
-    {
-      key: publicKeyPem,
-      padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-      oaepHash: "sha256"
+async function circleRequest(url, options = {}) {
+  const response = await fetch(url, {
+    ...options,
+    signal: AbortSignal.timeout(Number(process.env.CIRCLE_REQUEST_TIMEOUT_MS || 8000)),
+    headers: {
+      Authorization: `Bearer ${process.env.CIRCLE_API_KEY}`,
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.headers || {}),
     },
-    entitySecret
-  );
-  return encrypted.toString("base64");
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.errors) {
+    throw new Error(payload.message || `Circle API request failed with HTTP ${response.status}`);
+  }
+  return payload;
 }
 
-let cachedPublicKey = null;
-let cachedPublicKeyTime = 0;
-const CACHE_TTL = 30 * 60 * 1000; // 30 mins
+async function initializePublisherWallet() {
+  if (isMockMode) {
+    publisherWalletAddress = process.env.MOCK_PUBLISHER_WALLET || "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+    return;
+  }
+  if (!isLiveMode) return;
+  const payload = await circleRequest(`https://api.circle.com/v1/w3s/wallets/${process.env.PUBLISHER_WALLET_ID}`);
+  const address = payload.data?.wallet?.address;
+  if (!address || !ethers.isAddress(address)) throw new Error("Circle publisher wallet has no valid EVM address");
+  publisherWalletAddress = address;
+}
+
+function encryptEntitySecret(secretHex, publicKeyPem) {
+  if (!/^[a-fA-F0-9]{64}$/.test(secretHex || "")) throw new Error("CIRCLE_ENTITY_SECRET must be 32-byte hex");
+  return crypto.publicEncrypt({
+    key: publicKeyPem,
+    padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+    oaepHash: "sha256",
+  }, Buffer.from(secretHex, "hex")).toString("base64");
+}
 
 async function getEntitySecretCiphertext() {
   const now = Date.now();
-  let pubKeyToUse = cachedPublicKey;
-  
-  if (!pubKeyToUse || (now - cachedPublicKeyTime >= CACHE_TTL)) {
-    try {
-      pubKeyToUse = await fetchCirclePublicKey();
-      cachedPublicKey = pubKeyToUse;
-      cachedPublicKeyTime = now;
-    } catch (error) {
-      if (cachedPublicKey) {
-        console.warn("[Circle W3S] fetchCirclePublicKey failed, falling back to expired cached public key.");
-        pubKeyToUse = cachedPublicKey;
-      } else {
-        throw error;
-      }
-    }
+  if (!cachedCirclePublicKey || now - cachedCirclePublicKeyAt > 30 * 60 * 1000) {
+    const payload = await circleRequest("https://api.circle.com/v1/w3s/config/entity/publicKey");
+    if (!payload.data?.publicKey) throw new Error("Circle public key was not returned");
+    cachedCirclePublicKey = payload.data.publicKey;
+    cachedCirclePublicKeyAt = now;
   }
-  
-  // Must re-encrypt every time to prevent "Reusing an entity secret ciphertext is not allowed" error
-  return encryptEntitySecret(process.env.CIRCLE_ENTITY_SECRET, pubKeyToUse);
+  return encryptEntitySecret(process.env.CIRCLE_ENTITY_SECRET, cachedCirclePublicKey);
 }
 
-// Check balance helper
+async function createCircleWallet() {
+  const payload = await circleRequest("https://api.circle.com/v1/w3s/developer/wallets", {
+    method: "POST",
+    body: JSON.stringify({
+      idempotencyKey: crypto.randomUUID(),
+      entitySecretCiphertext: await getEntitySecretCiphertext(),
+      walletSetId: process.env.CIRCLE_WALLET_SET_ID,
+      blockchains: ["ARC-TESTNET"],
+      count: 1,
+    }),
+  });
+  const wallet = payload.data?.wallets?.[0];
+  if (!wallet?.id || !ethers.isAddress(wallet.address)) throw new Error("Circle did not create a valid wallet");
+  return wallet;
+}
+
 async function getWalletUsdcBalance(walletId) {
+  if (isMockMode) return null;
+  const payload = await circleRequest(`https://api.circle.com/v1/w3s/wallets/${walletId}/balances`);
+  const balances = payload.data?.tokenBalances || [];
+  const usdc = balances.find((item) => item.token?.symbol === "USDC");
+  return formatUsdc(parseUsdc(usdc?.amount || "0", { allowZero: true, max: null }));
+}
+
+async function createCircleTransfer({ operationId, sourceWalletId, destinationAddress, amount }) {
+  const payload = await circleRequest("https://api.circle.com/v1/w3s/developer/transactions/transfer", {
+    method: "POST",
+    body: JSON.stringify({
+      idempotencyKey: operationId,
+      entitySecretCiphertext: await getEntitySecretCiphertext(),
+      walletId: sourceWalletId,
+      destinationAddress,
+      amounts: [amount],
+      blockchain: "ARC-TESTNET",
+      feeLevel: "HIGH",
+    }),
+  });
+  if (!payload.data?.id) throw new Error("Circle did not return a transaction ID");
+  return payload.data.id;
+}
+
+async function getCircleTransaction(transactionId) {
+  const payload = await circleRequest(`https://api.circle.com/v1/w3s/transactions/${transactionId}`);
+  const transaction = payload.data?.transaction || {};
+  return { state: transaction.state || "UNKNOWN", txHash: transaction.txHash || "" };
+}
+
+async function pollCircleTransaction(transactionId, attempts = 5) {
+  let result = { state: "INITIATED", txHash: "" };
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    result = await getCircleTransaction(transactionId);
+    if (result.state === "COMPLETE" || CIRCLE_TERMINAL_FAILURES.has(result.state)) return result;
+    if (attempt < attempts - 1) await new Promise((resolve) => setTimeout(resolve, 750));
+  }
+  return result;
+}
+
+const startup = (async () => {
+  assertPaymentConfiguration();
+  await Promise.all([store.init(), initializePublisherWallet()]);
+})();
+
+app.use("/api", async (_req, res, next) => {
+  try {
+    await startup;
+    next();
+  } catch (error) {
+    res.status(503).json({ error: "Service configuration is incomplete", detail: NODE_ENV === "production" ? undefined : error.message });
+  }
+});
+
+function generateSnippet(markdown) {
+  const clean = String(markdown || "")
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^>\s+/gm, "")
+    .replace(/^[\s-*+]+(.*?)$/gm, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/!?\[([^\]]*)\]\([^)]+\)/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (clean.length <= 200) return `${clean}${clean.endsWith("...") ? "" : "..."}`;
+  return `${clean.slice(0, 197).replace(/\s+\S*$/, "")}...`;
+}
+
+function publicPublisherId(key) {
+  return `publisher_${crypto.createHash("sha256").update(key).digest("hex").slice(0, 16)}`;
+}
+
+function getPublisherEntryForAuth(publishers, auth) {
+  if (!auth) return null;
+  if (publishers[auth.accountKey]) return [auth.accountKey, publishers[auth.accountKey]];
+  const entry = Object.entries(publishers).find(([, publisher]) => publisher.privyUserId === auth.userId);
+  return entry || null;
+}
+
+function findPublisherForArticle(publishers, article) {
+  if (article.publisherId && publishers[article.publisherId]) return [article.publisherId, publishers[article.publisherId]];
+  return Object.entries(publishers).find(([, publisher]) =>
+    normalizeIdentity(publisher.name) === normalizeIdentity(article.author)
+  ) || null;
+}
+
+function isArticleOwner(article, publishers, auth) {
+  const publisherEntry = getPublisherEntryForAuth(publishers, auth);
+  if (!publisherEntry) return false;
+  const [publisherKey, publisher] = publisherEntry;
+  return article.publisherId === publisherKey || normalizeIdentity(article.author) === normalizeIdentity(publisher.name);
+}
+
+function getSpecialArticle(articleId) {
+  if (articleId !== "surfai-daily") return null;
+  return {
+    id: "surfai-daily",
+    title: "SurfAI Daily Intelligence Dispatch",
+    author: "DaveyNFTs",
+    snippet: "An autonomous intelligence report on capital flows, resource allocation, and micro-tariffs.",
+    content: process.env.SURFAI_ARTICLE_CONTENT || [
+      "## SurfAI Daily Intelligence Dispatch",
+      "",
+      "This report was compiled by the SurfAI autonomous agent network.",
+      "",
+      "- **Asset inspected:** USDC / ARC",
+      "- **Network:** Arc Testnet",
+      "- **Settlement:** 0.15 USDC",
+      "",
+      "The optional signed PDF is available below when a protected report URL is configured.",
+    ].join("\n"),
+    pdfUrl: process.env.SURFAI_PDF_URL || "",
+    price: "0.15",
+    payee: "0x1746978f956142e0482f0aff320d917ace450bcf",
+  };
+}
+
+async function getArticle(articleId) {
+  const articles = await store.read("articles");
+  return articles.find((item) => item.id === articleId) || getSpecialArticle(articleId);
+}
+
+async function getUserRecord(auth) {
+  const users = await store.read("users");
+  return users[auth.accountKey] || null;
+}
+
+async function getOrCreateUserWallet(auth) {
+  let result;
+  await store.update("users", async (users) => {
+    if (!users[auth.accountKey]) {
+      let wallet;
+      if (isMockMode) {
+        wallet = { id: crypto.randomUUID(), address: `0x${crypto.randomBytes(20).toString("hex")}` };
+      } else if (isLiveMode) {
+        wallet = await createCircleWallet();
+      } else {
+        const error = new Error("Payments are disabled");
+        error.statusCode = 503;
+        throw error;
+      }
+      users[auth.accountKey] = {
+        privyUserId: auth.userId,
+        email: auth.email || null,
+        walletId: wallet.id,
+        address: wallet.address,
+        balance: "0.00",
+        unlockedArticles: {},
+        processedOperations: {},
+      };
+    }
+    result = users[auth.accountKey];
+  });
+
+  if (isLiveMode) {
+    const balance = await getWalletUsdcBalance(result.walletId);
+    await store.update("users", (users) => {
+      users[auth.accountKey].balance = balance;
+      result = users[auth.accountKey];
+    });
+  }
+  return result;
+}
+
+async function createOperation(operation) {
+  await store.update("transactions", (transactions) => {
+    transactions[operation.id] = operation;
+  });
+}
+
+async function updateOperation(operationId, updater) {
+  let result;
+  await store.update("transactions", (transactions) => {
+    const operation = transactions[operationId];
+    if (!operation) throw new Error("Payment operation not found");
+    updater(operation);
+    operation.updatedAt = Date.now();
+    result = operation;
+  });
+  return result;
+}
+
+async function clearReservation(operation) {
+  if (["faucet", "unlock", "withdraw"].includes(operation.type)) {
+    await store.update("users", (users) => {
+      const user = users[operation.accountKey];
+      if (!user) return;
+      const matchesReservation = (value) => value === operation.id || value === "reserved";
+      if (operation.type === "faucet" && matchesReservation(user.pendingFaucet)) delete user.pendingFaucet;
+      if (operation.type === "withdraw" && matchesReservation(user.pendingWithdrawal)) delete user.pendingWithdrawal;
+      if (operation.type === "unlock" && matchesReservation(user.pendingUnlocks?.[operation.articleId])) {
+        delete user.pendingUnlocks[operation.articleId];
+      }
+    });
+  }
+  if (operation.type === "claim") {
+    await store.update("publishers", (publishers) => {
+      const publisher = publishers[operation.publisherKey];
+      if (publisher && (publisher.pendingClaim === operation.id || publisher.pendingClaim === "reserved")) {
+        delete publisher.pendingClaim;
+      }
+    });
+  }
+}
+
+async function finalizeOperation(operationId, circleResult) {
+  let operation = (await store.read("transactions"))[operationId];
+  if (!operation) throw new Error("Payment operation not found");
+  if (operation.status === "COMPLETE" || operation.status === "FAILED") return operation;
+
+  if (CIRCLE_TERMINAL_FAILURES.has(circleResult.state)) {
+    await clearReservation(operation);
+    return updateOperation(operationId, (item) => {
+      item.status = "FAILED";
+      item.circleState = circleResult.state;
+      item.error = `Circle transaction ended in ${circleResult.state}`;
+    });
+  }
+  if (circleResult.state !== "COMPLETE") {
+    return updateOperation(operationId, (item) => {
+      item.status = "PENDING";
+      item.circleState = circleResult.state;
+    });
+  }
+
+  const liveBalance = isLiveMode && operation.userWalletId
+    ? await getWalletUsdcBalance(operation.userWalletId)
+    : null;
+  const txHash = circleResult.txHash || operation.txHash || operation.id;
+
+  if (["faucet", "unlock", "withdraw"].includes(operation.type)) {
+    await store.update("users", (users) => {
+      const user = users[operation.accountKey];
+      if (!user) throw new Error("User wallet disappeared while finalizing payment");
+      user.processedOperations ||= {};
+      if (!user.processedOperations[operation.id]) {
+        const current = parseUsdc(user.balance || "0", { allowZero: true, max: null });
+        const amount = parseUsdc(operation.amount, { max: null });
+        if (operation.type === "faucet") {
+          user.balance = liveBalance || formatUsdc(current + amount);
+          user.lastFaucetTime = operation.createdAt;
+          delete user.pendingFaucet;
+        } else if (operation.type === "unlock") {
+          if (!liveBalance && current < amount) throw new Error("Insufficient mock balance during finalization");
+          user.balance = liveBalance || formatUsdc(current - amount);
+          user.unlockedArticles ||= {};
+          user.unlockedArticles[operation.articleId] = { txHash, confirmedAt: Date.now(), amount: operation.amount };
+          if (user.pendingUnlocks) delete user.pendingUnlocks[operation.articleId];
+        } else {
+          if (!liveBalance && current < amount) throw new Error("Insufficient mock balance during finalization");
+          user.balance = liveBalance || formatUsdc(current - amount);
+          user.withdrawalHistory ||= [];
+          user.withdrawalHistory.unshift({ amount: operation.amount, destinationAddress: operation.destinationAddress, txHash, timestamp: Date.now() });
+          delete user.pendingWithdrawal;
+        }
+        user.processedOperations[operation.id] = Date.now();
+      }
+    });
+  }
+
+  if (operation.type === "unlock" || operation.type === "claim") {
+    await store.update("publishers", (publishers) => {
+      const publisher = publishers[operation.publisherKey];
+      if (!publisher) throw new Error("Publisher disappeared while finalizing payment");
+      publisher.processedOperations ||= {};
+      if (!publisher.processedOperations[operation.id]) {
+        const amount = parseUsdc(operation.amount, { max: null });
+        if (operation.type === "unlock") {
+          const earned = parseUsdc(publisher.totalEarned || "0", { allowZero: true, max: null });
+          publisher.totalEarned = formatUsdc(earned + amount);
+        } else {
+          const claimed = parseUsdc(publisher.totalClaimed || "0", { allowZero: true, max: null });
+          publisher.totalClaimed = formatUsdc(claimed + amount);
+          publisher.claimHistory ||= [];
+          publisher.claimHistory.unshift({ amount: operation.amount, txHash, timestamp: Date.now() });
+          delete publisher.pendingClaim;
+        }
+        publisher.processedOperations[operation.id] = Date.now();
+      }
+    });
+  }
+
+  operation = await updateOperation(operationId, (item) => {
+    item.status = "COMPLETE";
+    item.circleState = "COMPLETE";
+    item.txHash = txHash;
+    item.completedAt = Date.now();
+  });
+  return operation;
+}
+
+async function startTransfer({ operationId, type, auth, sourceWalletId, destinationAddress, amount, details = {} }) {
+  if (PAYMENT_MODE === "disabled") {
+    const error = new Error("Payments are currently disabled");
+    error.statusCode = 503;
+    throw error;
+  }
+  const id = operationId || crypto.randomUUID();
+  const operation = {
+    id,
+    type,
+    accountKey: auth?.accountKey || null,
+    userId: auth?.userId || null,
+    userWalletId: details.userWalletId || null,
+    destinationAddress,
+    amount,
+    status: "INITIATED",
+    createdAt: Date.now(),
+    ...details,
+  };
+  await createOperation(operation);
+
   if (isMockMode) {
-    const db = readUsersDb();
-    const email = Object.keys(db).find(k => db[k].walletId === walletId);
-    return email ? db[email].balance : "0.0";
+    return finalizeOperation(id, { state: "COMPLETE", txHash: `0x${crypto.randomBytes(32).toString("hex")}` });
   }
 
   try {
-    console.log(`[Circle W3S] Fetching balance for wallet ${walletId} using API key (length: ${process.env.CIRCLE_API_KEY?.length || 0})`);
-    const response = await fetchWithRetry(`https://api.circle.com/v1/w3s/wallets/${walletId}/balances`, {
-      headers: {
-        "Authorization": `Bearer ${process.env.CIRCLE_API_KEY}`
-      }
+    const circleTransactionId = await createCircleTransfer({ operationId: id, sourceWalletId, destinationAddress, amount });
+    await updateOperation(id, (item) => {
+      item.circleTransactionId = circleTransactionId;
+      item.status = "PENDING";
     });
-    const json = await response.json();
-    if (json.errors || !json.data) {
-      console.error("[Circle W3S] Balance fetch failed details:", JSON.stringify(json));
-      throw new Error(`Circle API balance fetch failed: ${json.message || JSON.stringify(json)}`);
-    }
-    const tokenBalances = json.data.tokenBalances || [];
-    const usdcBalanceObj = tokenBalances.find(tb => tb.token.symbol === "USDC");
-    return usdcBalanceObj ? usdcBalanceObj.amount : "0.0";
+    return finalizeOperation(id, await pollCircleTransaction(circleTransactionId));
   } catch (error) {
-    console.error("getWalletUsdcBalance error:", error);
+    await clearReservation(operation);
+    await updateOperation(id, (item) => {
+      item.status = "FAILED";
+      item.error = error.message;
+    });
     throw error;
   }
 }
 
-// Create wallet helper
-async function createCircleWallet() {
-  const ciphertext = await getEntitySecretCiphertext();
-  const idempotencyKey = crypto.randomUUID();
-  const response = await fetchWithRetry("https://api.circle.com/v1/w3s/developer/wallets", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${process.env.CIRCLE_API_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      idempotencyKey,
-      entitySecretCiphertext: ciphertext,
-      walletSetId: process.env.CIRCLE_WALLET_SET_ID,
-      blockchains: ["ARC-TESTNET"],
-      count: 1
-    })
-  });
-  const json = await response.json();
-  if (json.errors || !json.data?.wallets?.[0]) {
-    console.error("Circle create wallet error:", json);
-    throw new Error(json.message || "Failed to create wallet");
-  }
-  return json.data.wallets[0];
+function operationResponse(operation) {
+  return {
+    success: operation.status === "COMPLETE",
+    pending: operation.status === "PENDING" || operation.status === "INITIATED",
+    status: operation.status,
+    transactionId: operation.id,
+    txHash: operation.txHash || operation.circleTransactionId || null,
+    amount: operation.amount,
+    isMock: isMockMode,
+  };
 }
 
-// Transfer helper
-async function transferCircleUsdc(sourceWalletId, destAddress, amount) {
-  const ciphertext = await getEntitySecretCiphertext();
-  const idempotencyKey = crypto.randomUUID();
-  const response = await fetchWithRetry("https://api.circle.com/v1/w3s/developer/transactions/transfer", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${process.env.CIRCLE_API_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      idempotencyKey,
-      entitySecretCiphertext: ciphertext,
-      walletId: sourceWalletId,
-      destinationAddress: destAddress,
-      amounts: [amount.toString()],
-      blockchain: "ARC-TESTNET",
-      feeLevel: "HIGH"
-    })
-  });
-  const json = await response.json();
-  if (json.errors || !json.data?.id) {
-    console.error("Circle transfer error:", json);
-    throw new Error(json.message || "Failed to execute transfer");
-  }
-  return json.data.id;
+function ensureOperationAccepted(operation) {
+  if (operation.status !== "FAILED") return;
+  const error = new Error(operation.error || "Payment operation failed");
+  error.statusCode = 502;
+  throw error;
 }
 
-// Poller
-async function pollTransactionStatus(transactionId) {
-  // Poll up to 4 times (4 seconds max) to get the real on-chain txHash without hitting Vercel 10s timeout
-  for (let i = 0; i < 4; i++) {
-    try {
-      const response = await fetchWithRetry(`https://api.circle.com/v1/w3s/transactions/${transactionId}`, {
-        headers: { "Authorization": `Bearer ${process.env.CIRCLE_API_KEY}` }
+app.get("/api/health", (_req, res) => {
+  res.json({ ok: true, paymentMode: PAYMENT_MODE, database: redisClient ? "redis" : "file" });
+});
+
+app.get("/api/articles", async (_req, res, next) => {
+  try {
+    const [articles, publishers] = await Promise.all([store.read("articles"), store.read("publishers")]);
+    res.json(articles.map(({ id, title, author, snippet, price, payee }) => {
+      const publisherEntry = Object.values(publishers).find((publisher) => normalizeIdentity(publisher.name) === normalizeIdentity(author));
+      return { id, title, author, snippet, price, payee, verified: Boolean(publisherEntry?.verified) };
+    }));
+  } catch (error) { next(error); }
+});
+
+app.get("/api/articles/:id", optionalAuth, async (req, res, next) => {
+  try {
+    if (String(req.headers.authorization || "").startsWith("x402 ")) {
+      return res.status(410).json({ error: "Legacy unsigned x402 access is disabled; use the authenticated unlock endpoint" });
+    }
+    const article = await getArticle(req.params.id);
+    if (!article) return res.status(404).json({ error: "Article not found" });
+
+    const publishers = await store.read("publishers");
+    const ownsArticle = isArticleOwner(article, publishers, req.auth);
+    const user = req.auth ? await getUserRecord(req.auth) : null;
+    const unlocked = Boolean(user?.unlockedArticles?.[article.id]);
+    if (!ownsArticle && !unlocked) {
+      return res.status(402).json({
+        error: "Payment Required",
+        price: article.price,
+        currency: "USDC",
+        articleId: article.id,
       });
-      const json = await response.json();
-      const status = json.data?.transaction?.state;
-      const txHash = json.data?.transaction?.txHash;
-      
-      console.log(`[Circle Poller] Tx ${transactionId} attempt ${i+1}: status ${status}`);
-      
-      if (txHash) {
-        return { status, txHash };
-      }
-      
-      if (status === "FAILED" || status === "DENIED") {
-        return { status, txHash: transactionId };
-      }
-      
-      // Wait 1 second before next poll
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    } catch (err) {
-      console.error(`[Circle Poller] Error on attempt ${i+1}:`, err.message);
     }
-  }
-  
-  // Fallback to UUID if it's still pending after 4 seconds
-  return { status: "PENDING", txHash: transactionId };
-}
-
-// Helper to verify EIP-3009 TransferWithAuthorization signature (Keep for extension backwards compatibility)
-function verifyEip3009(authData) {
-  try {
-    const { from, to, value, validAfter, validBefore, nonce, signature } = authData;
-
-    // Define EIP-712 Domain for USDC on Arc
-    const domain = {
-      name: "USD Coin",
-      version: "2",
-      chainId: ARC_CHAIN_ID,
-      verifyingContract: ARC_USDC_ADDRESS
-    };
-
-    // EIP-3009 Types
-    const types = {
-      TransferWithAuthorization: [
-        { name: "from", type: "address" },
-        { name: "to", type: "address" },
-        { name: "value", type: "uint256" },
-        { name: "validAfter", type: "uint256" },
-        { name: "validBefore", type: "uint256" },
-        { name: "nonce", type: "bytes32" }
-      ]
-    };
-
-    const valueData = {
-      from,
-      to,
-      value: BigInt(value),
-      validAfter: BigInt(validAfter),
-      validBefore: BigInt(validBefore),
-      nonce
-    };
-
-    const recoveredAddress = ethers.verifyTypedData(domain, types, valueData, signature);
-    return recoveredAddress.toLowerCase() === from.toLowerCase();
-  } catch (error) {
-    console.error("Signature verification failed:", error);
-    return false;
-  }
-}
-
-// Get all articles (Metadatas and Snippets only)
-app.get("/api/articles", (req, res) => {
-  try {
-    const pubDb = readPublishersDb();
-    const articles = readArticlesDb();
-    const metaArticles = articles.map(({ id, title, author, snippet, price, payee }) => {
-      // Find if author exists in publishers database by name (case-insensitive)
-      const publisherKey = Object.keys(pubDb).find(
-        key => pubDb[key].name.toLowerCase() === author.toLowerCase()
-      );
-      const verified = publisherKey ? pubDb[publisherKey].verified : false;
-      
-      return {
-        id,
-        title,
-        author,
-        snippet,
-        price,
-        payee,
-        verified
-      };
-    });
-    res.json(metaArticles);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Helper to generate a clean plain-text snippet of the article content
-function generateSnippet(content) {
-  if (!content) return "";
-  
-  // Strip markdown headers
-  let cleanText = content.replace(/^#+\s+/gm, "");
-  
-  // Strip blockquotes, lists, links, inline code and code blocks
-  cleanText = cleanText
-    .replace(/^>\s+/gm, "")
-    .replace(/^[\s-*+]+(.*?)$/gm, "$1")
-    .replace(/```[\s\S]*?```/g, "")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
-    
-  // Clean up formatting
-  cleanText = cleanText.replace(/\s+/g, " ").trim();
-  
-  if (cleanText.length <= 200) {
-    return cleanText + (cleanText.endsWith("...") ? "" : "...");
-  }
-  
-  let snippet = cleanText.substring(0, 197);
-  const lastSpace = snippet.lastIndexOf(" ");
-  if (lastSpace > 150) {
-    snippet = snippet.substring(0, lastSpace);
-  }
-  return snippet + "...";
-}
-
-// POST create a new article (from verified publishers)
-app.post("/api/articles", (req, res) => {
-  const { title, content, price, author, payee } = req.body;
-  if (!title || !content || !price || !author || !payee) {
-    return res.status(400).json({ error: "Missing required fields" });
-  }
-
-  try {
-    const db = readArticlesDb();
-    
-    // Generate new ID by finding the maximum numeric ID present
-    let maxId = 5;
-    db.forEach(art => {
-      const numId = parseInt(art.id);
-      if (!isNaN(numId) && numId > maxId) {
-        maxId = numId;
-      }
-    });
-    const newId = String(maxId + 1);
-    
-    // Create snippet (clean plain text summary)
-    const snippet = generateSnippet(content);
-    
-    const newArticle = {
-      id: newId,
-      title,
-      author,
-      snippet,
-      content,
-      price: String(parseFloat(price).toFixed(2)),
-      payee
-    };
-    
-    db.push(newArticle);
-    writeArticlesDb(db);
-    
-    res.json({ success: true, article: newArticle });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// GET all publishers
-app.get("/api/publishers", (req, res) => {
-  try {
-    const db = readPublishersDb();
-    res.json(db);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Helper to get client IP
-function getClientIp(req) {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (forwarded) {
-    return forwarded.split(",")[0].trim();
-  }
-  return req.socket.remoteAddress;
-}
-
-// GET check if current IP is authorized admin
-app.get("/api/admin/check-ip", (req, res) => {
-  try {
-    const clientIp = getClientIp(req);
-    const db = readAdminIpsDb();
-    const authenticated = db.includes(clientIp);
-    res.json({ authenticated, ip: clientIp });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST authorize current IP as admin (requires password)
-app.post("/api/admin/authorize-ip", (req, res) => {
-  const { password } = req.body;
-  const adminPassword = process.env.ADMIN_PASSWORD || "123456A@a";
-  if (password !== adminPassword) {
-    return res.status(401).json({ error: "Invalid password" });
-  }
-  try {
-    const clientIp = getClientIp(req);
-    const db = readAdminIpsDb();
-    if (!db.includes(clientIp)) {
-      db.push(clientIp);
-      writeAdminIpsDb(db);
-    }
-    res.json({ success: true, ip: clientIp });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST create a publisher
-app.post("/api/publishers", (req, res) => {
-  const { email, name, domain, walletAddress, category } = req.body;
-  if (!email || !name || !domain || !walletAddress) {
-    return res.status(400).json({ error: "Missing required fields" });
-  }
-  const normalizedEmail = email.toLowerCase();
-  try {
-    const db = readPublishersDb();
-    db[normalizedEmail] = {
-      name,
-      domain,
-      walletAddress,
-      verified: false,
-      category: category || "General"
-    };
-    writePublishersDb(db);
-    res.json({ success: true, publisher: db[normalizedEmail] });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// PUT toggle/update verify publisher (body/query supported to avoid path params with dots/at-symbols on Vercel)
-app.put("/api/publishers/verify", (req, res) => {
-  const email = req.body.email || req.query.email;
-  const { verified } = req.body;
-  if (!email) {
-    return res.status(400).json({ error: "Email is required" });
-  }
-  const normalizedEmail = email.toLowerCase();
-  try {
-    const db = readPublishersDb();
-    if (!db[normalizedEmail]) {
-      return res.status(404).json({ error: "Publisher not found" });
-    }
-    db[normalizedEmail].verified = typeof verified === 'boolean' ? verified : !db[normalizedEmail].verified;
-    writePublishersDb(db);
-    res.json({ success: true, publisher: db[normalizedEmail] });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// PUT toggle/update verify publisher (legacy parameter fallback)
-app.put("/api/publishers/:email/verify", (req, res) => {
-  const email = req.params.email;
-  const { verified } = req.body;
-  if (!email) {
-    return res.status(400).json({ error: "Email is required" });
-  }
-  const normalizedEmail = email.toLowerCase();
-  try {
-    const db = readPublishersDb();
-    if (!db[normalizedEmail]) {
-      return res.status(404).json({ error: "Publisher not found" });
-    }
-    db[normalizedEmail].verified = typeof verified === 'boolean' ? verified : !db[normalizedEmail].verified;
-    writePublishersDb(db);
-    res.json({ success: true, publisher: db[normalizedEmail] });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// DELETE publisher (query/body supported to avoid path params with dots/at-symbols on Vercel)
-app.delete("/api/publishers", (req, res) => {
-  const email = req.query.email || req.body.email;
-  if (!email) {
-    return res.status(400).json({ error: "Email is required" });
-  }
-  const normalizedEmail = email.toLowerCase();
-  try {
-    const db = readPublishersDb();
-    if (!db[normalizedEmail]) {
-      return res.status(404).json({ error: "Publisher not found" });
-    }
-    delete db[normalizedEmail];
-    writePublishersDb(db);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// DELETE publisher (legacy parameter fallback)
-app.delete("/api/publishers/:email", (req, res) => {
-  const email = req.params.email;
-  if (!email) {
-    return res.status(400).json({ error: "Email is required" });
-  }
-  const normalizedEmail = email.toLowerCase();
-  try {
-    const db = readPublishersDb();
-    if (!db[normalizedEmail]) {
-      return res.status(404).json({ error: "Publisher not found" });
-    }
-    delete db[normalizedEmail];
-    writePublishersDb(db);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-
-// Get premium article with x402 Paywall logic (Keep for extension backwards compatibility)
-app.get("/api/articles/:id", (req, res) => {
-  const articleId = req.params.id;
-  const articles = readArticlesDb();
-  const article = articles.find((a) => a.id === articleId);
-
-  if (!article) {
-    return res.status(404).json({ error: "Article not found" });
-  }
-
-  // Allow author to fetch their own article content directly without paywall validation
-  const authorQuery = req.query.author;
-  if (authorQuery && article.author.toLowerCase() === authorQuery.toLowerCase()) {
-    return res.json({
-      success: true,
-      articleId,
-      title: article.title,
-      author: article.author,
-      content: article.content
-    });
-  }
-
-  const authHeader = req.headers["authorization"];
-
-  if (!authHeader || !authHeader.startsWith("x402 ")) {
-    return res.status(402).json({
-      error: "Payment Required",
-      message: `Reading this article costs $${article.price} USDC. Please pay via Arc Network.`,
-      price: article.price,
-      currency: "USDC",
-      payee: article.payee,
-      chainId: ARC_CHAIN_ID,
-      tokenAddress: ARC_USDC_ADDRESS,
-      articleId
-    });
-  }
-
-  try {
-    const base64Payload = authHeader.substring(5);
-    const jsonString = Buffer.from(base64Payload, "base64").toString("utf8");
-    const authData = JSON.parse(jsonString);
-
-    console.log(`[x402] Received payment request from: ${authData.from} for ${article.price} USDC`);
-
-    const expectedAmount = Math.round(parseFloat(article.price) * 1000000);
-    if (parseInt(authData.value) !== expectedAmount) {
-      return res.status(400).json({ error: "Invalid payment amount" });
-    }
-
-    // SECURITY FIX: Removed hardcoded "circle-authorized" bypass that allowed free article access.
-    // In production, only trust actual EIP-3009 cryptographic verification.
-    const isValid = verifyEip3009(authData);
-
-    if (!isValid) {
-      return res.status(403).json({ error: "Invalid signature or authorization failed" });
-    }
-
-    console.log("------------------------------------------------------------------");
-    console.log(`[Arc Relayer] SUCCESS: EIP-3009 Signature verified off-chain!`);
-    console.log(`[Arc Relayer] Dispatching to Arc Chain RPC...`);
-    console.log(`[Arc Relayer] Gas-Free transaction batched and settled on Arc Network!`);
-    console.log("------------------------------------------------------------------");
-
     res.json({
       success: true,
-      articleId,
+      articleId: article.id,
       title: article.title,
       author: article.author,
-      content: article.content
+      content: article.content,
+      ...(article.pdfUrl ? { pdfUrl: article.pdfUrl } : {}),
     });
-
-  } catch (error) {
-    console.error("Failed to process x402 header:", error);
-    res.status(400).json({ error: "Malformed x402 authorization header" });
-  }
+  } catch (error) { next(error); }
 });
 
-// PUT edit an article (requires authorship verification)
-app.put("/api/articles/:id", (req, res) => {
-  const articleId = req.params.id;
-  const { title, content, price, author } = req.body;
-  if (!title || !content || !price || !author) {
-    return res.status(400).json({ error: "Missing required fields" });
-  }
-
+app.post("/api/articles", requireAuth, validate(schemas.articleCreate), async (req, res, next) => {
   try {
-    const db = readArticlesDb();
-    const articleIndex = db.findIndex(a => a.id === articleId);
-    if (articleIndex === -1) {
-      return res.status(404).json({ error: "Article not found" });
-    }
-
-    // Verify authorship case-insensitively
-    if (db[articleIndex].author.toLowerCase() !== author.toLowerCase()) {
-      return res.status(403).json({ error: "Unauthorized: You are not the author of this article" });
-    }
-
-    const snippet = generateSnippet(content);
-
-    db[articleIndex] = {
-      ...db[articleIndex],
-      title,
-      content,
-      price: String(parseFloat(price).toFixed(2)),
-      snippet
-    };
-
-    writeArticlesDb(db);
-    res.json({ success: true, article: db[articleIndex] });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    const publishers = await store.read("publishers");
+    const publisherEntry = getPublisherEntryForAuth(publishers, req.auth);
+    if (!publisherEntry?.[1]?.verified) return res.status(403).json({ error: "A verified publisher account is required" });
+    const [publisherKey, publisher] = publisherEntry;
+    let article;
+    await store.update("articles", (articles) => {
+      article = {
+        id: crypto.randomUUID(),
+        title: req.validatedBody.title,
+        author: publisher.name,
+        publisherId: publisherKey,
+        snippet: generateSnippet(req.validatedBody.content),
+        content: req.validatedBody.content,
+        price: req.validatedBody.price,
+        payee: publisher.walletAddress,
+      };
+      articles.push(article);
+    });
+    res.status(201).json({ success: true, article });
+  } catch (error) { next(error); }
 });
 
-// DELETE an article (requires authorship verification)
-app.delete("/api/articles/:id", (req, res) => {
-  const articleId = req.params.id;
-  const author = req.body.author || req.query.author;
-  if (!author) {
-    return res.status(400).json({ error: "Author is required to verify ownership" });
-  }
-
+app.put("/api/articles/:id", requireAuth, validate(schemas.articleUpdate), async (req, res, next) => {
   try {
-    const db = readArticlesDb();
-    const articleIndex = db.findIndex(a => a.id === articleId);
-    if (articleIndex === -1) {
-      return res.status(404).json({ error: "Article not found" });
-    }
+    const publishers = await store.read("publishers");
+    let updated;
+    await store.update("articles", (articles) => {
+      const index = articles.findIndex((article) => article.id === req.params.id);
+      if (index < 0) { const error = new Error("Article not found"); error.statusCode = 404; throw error; }
+      if (!isArticleOwner(articles[index], publishers, req.auth)) { const error = new Error("You do not own this article"); error.statusCode = 403; throw error; }
+      articles[index] = {
+        ...articles[index],
+        title: req.validatedBody.title,
+        content: req.validatedBody.content,
+        price: req.validatedBody.price,
+        snippet: generateSnippet(req.validatedBody.content),
+      };
+      updated = articles[index];
+    });
+    res.json({ success: true, article: updated });
+  } catch (error) { next(error); }
+});
 
-    // Verify authorship case-insensitively
-    if (db[articleIndex].author.toLowerCase() !== author.toLowerCase()) {
-      return res.status(403).json({ error: "Unauthorized: You are not the author of this article" });
-    }
-
-    db.splice(articleIndex, 1);
-    writeArticlesDb(db);
+app.delete("/api/articles/:id", requireAuth, async (req, res, next) => {
+  try {
+    const publishers = await store.read("publishers");
+    await store.update("articles", (articles) => {
+      const index = articles.findIndex((article) => article.id === req.params.id);
+      if (index < 0) { const error = new Error("Article not found"); error.statusCode = 404; throw error; }
+      if (!isArticleOwner(articles[index], publishers, req.auth)) { const error = new Error("You do not own this article"); error.statusCode = 403; throw error; }
+      articles.splice(index, 1);
+    });
     res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch (error) { next(error); }
 });
 
-// Endpoint to get/create user wallet
-app.post("/api/user/wallet", async (req, res) => {
-  const { email, walletId, address, balance: clientBalance, isMock: clientIsMock } = req.body;
-  if (!email) {
-    return res.status(400).json({ error: "Email is required" });
-  }
-  const normalizedEmail = email.toLowerCase();
-
+app.get("/api/publishers", optionalAuth, async (req, res, next) => {
   try {
-    const db = readUsersDb();
-    
-    // Hardcoded recovery mapping for daveynfts@gmail.com to prevent database loss
-    if (normalizedEmail === "daveynfts@gmail.com") {
-      db[normalizedEmail] = {
-        walletId: "86284069-1e23-5a75-86d7-3da2500d8779",
-        address: "0x1746978f956142e0482f0aff320d917ace450bcf",
-        balance: db[normalizedEmail]?.balance || "19.0094053052"
+    const publishers = await store.read("publishers");
+    if (isAdminIdentity(req.auth)) return res.json(publishers);
+
+    const response = {};
+    for (const [key, publisher] of Object.entries(publishers)) {
+      const ownRecord = req.auth && (key === req.auth.accountKey || publisher.privyUserId === req.auth.userId);
+      const responseKey = ownRecord ? req.auth.accountKey : publicPublisherId(key);
+      response[responseKey] = {
+        name: publisher.name,
+        domain: publisher.domain,
+        walletAddress: publisher.walletAddress,
+        verified: Boolean(publisher.verified),
+        category: publisher.category || "General",
+        ...(ownRecord ? {
+          totalEarned: publisher.totalEarned || "0.00",
+          totalClaimed: publisher.totalClaimed || "0.00",
+          claimHistory: publisher.claimHistory || [],
+        } : {}),
       };
-      writeUsersDb(db);
     }
-    
-    // Restore wallet mapping from client storage if it was lost on serverless cold start
-    // ONLY restore if the client's cached mock flag is explicitly defined and matches the server mode.
-    // This prevents legacy cached frontends (which send undefined isMock) from corrupting the live DB.
-    const clientMock = clientIsMock === true || clientIsMock === 'true';
-    const clientLive = clientIsMock === false || clientIsMock === 'false';
-    const canRestore = (isMockMode && clientMock) || (!isMockMode && clientLive);
-    
-    if (!db[normalizedEmail] && walletId && address && canRestore) {
-      console.log(`[Circle W3S] Restoring wallet for ${normalizedEmail} from client: ${address}`);
-      db[normalizedEmail] = {
-        walletId,
-        address,
-        balance: clientBalance || "0.0100"
+    res.json(response);
+  } catch (error) { next(error); }
+});
+
+app.post("/api/publishers", requireAuth, async (req, res, next) => {
+  try {
+    const admin = isAdminIdentity(req.auth);
+    const parsed = (admin && req.body.email ? schemas.adminPublisherCreate : schemas.publisherApplication).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Invalid publisher application", details: parsed.error.issues });
+    const key = admin && parsed.data.email ? parsed.data.email : req.auth.accountKey;
+    let publisher;
+    await store.update("publishers", (publishers) => {
+      if (publishers[key] && !admin) { const error = new Error("A publisher application already exists"); error.statusCode = 409; throw error; }
+      publisher = {
+        ...publishers[key],
+        name: parsed.data.name,
+        domain: parsed.data.domain,
+        walletAddress: parsed.data.walletAddress,
+        category: parsed.data.category || "General",
+        verified: admin ? Boolean(publishers[key]?.verified) : false,
+        privyUserId: admin ? publishers[key]?.privyUserId || null : req.auth.userId,
+        totalEarned: publishers[key]?.totalEarned || "0.00",
+        totalClaimed: publishers[key]?.totalClaimed || "0.00",
       };
-      writeUsersDb(db);
-    }
-    
-    if (db[normalizedEmail]) {
-      try {
-        const balance = await getWalletUsdcBalance(db[normalizedEmail].walletId);
-        db[normalizedEmail].balance = balance;
-        writeUsersDb(db);
-        return res.json({
-          walletId: db[normalizedEmail].walletId,
-          address: db[normalizedEmail].address,
-          balance,
-          isMock: isMockMode
-        });
-      } catch (err) {
-        // BUGFIX: Do NOT delete the user's wallet record on transient API errors.
-        // Return cached data instead of destroying the user's wallet registration.
-        console.warn(`[Circle W3S] Balance query failed for wallet ${db[normalizedEmail].walletId}: ${err.message}. Returning cached balance.`);
-        return res.json({
-          walletId: db[normalizedEmail].walletId,
-          address: db[normalizedEmail].address,
-          balance: db[normalizedEmail].balance || "0.0",
-          isMock: isMockMode,
-          warning: "Balance may be stale due to API error"
-        });
-      }
-    }
-
-    console.log(`[Circle W3S] Creating new wallet for: ${normalizedEmail}`);
-    let newWalletId, newAddress;
-
-    if (isMockMode) {
-      newWalletId = crypto.randomUUID();
-      newAddress = "0x" + crypto.randomBytes(20).toString("hex");
-      console.log(`[Mock Mode] Generated wallet address: ${newAddress}`);
-    } else {
-      const wallet = await createCircleWallet();
-      newWalletId = wallet.id;
-      newAddress = wallet.address;
-    }
-
-    db[normalizedEmail] = {
-      walletId: newWalletId,
-      address: newAddress,
-      balance: "0.0000"
-    };
-    writeUsersDb(db);
-
-    res.json({
-      walletId: newWalletId,
-      address: newAddress,
-      balance: "0.0000",
-      isMock: isMockMode
+      publishers[key] = publisher;
     });
-
-  } catch (error) {
-    console.error("Failed to get/create user wallet:", error);
-    res.status(500).json({ error: error.message || "Failed to get or create wallet" });
-  }
+    res.status(201).json({ success: true, publisher });
+  } catch (error) { next(error); }
 });
 
-// Endpoint to request faucet from publisher wallet
-app.post("/api/user/faucet", async (req, res) => {
-  const { email, walletId, address } = req.body;
-  if (!email) {
-    return res.status(400).json({ error: "Email is required" });
-  }
-  const normalizedEmail = email.toLowerCase();
-
+app.put("/api/publishers/verify", requireAuth, requireAdmin, validate(schemas.publisherVerify), async (req, res, next) => {
   try {
-    const db = readUsersDb();
-    
-    // Restore wallet mapping from client storage if it was lost on serverless cold start
-    // BUGFIX: Only restore if client sends matching mode flag to prevent cross-mode corruption
-    const clientMock = req.body.isMock === true || req.body.isMock === 'true';
-    const clientLive = req.body.isMock === false || req.body.isMock === 'false';
-    const canRestore = (isMockMode && clientMock) || (!isMockMode && clientLive);
-    
-    if (!db[normalizedEmail] && walletId && address && canRestore) {
-      console.log(`[Circle W3S] Restoring wallet for ${normalizedEmail} from client: ${address}`);
-      db[normalizedEmail] = {
-        walletId,
-        address,
-        balance: "0.0"
-      };
-      writeUsersDb(db);
-    }
+    let publisher;
+    await store.update("publishers", (publishers) => {
+      publisher = publishers[req.validatedBody.email];
+      if (!publisher) { const error = new Error("Publisher not found"); error.statusCode = 404; throw error; }
+      publisher.verified = req.validatedBody.verified;
+    });
+    res.json({ success: true, publisher });
+  } catch (error) { next(error); }
+});
 
-    if (!db[normalizedEmail]) {
-      return res.status(400).json({ error: "User wallet not initialized" });
-    }
+app.put("/api/publishers/:email/verify", requireAuth, requireAdmin, async (req, res, next) => {
+  req.body = { ...req.body, email: req.params.email };
+  validate(schemas.publisherVerify)(req, res, async () => {
+    try {
+      await store.update("publishers", (publishers) => {
+        if (!publishers[req.validatedBody.email]) { const error = new Error("Publisher not found"); error.statusCode = 404; throw error; }
+        publishers[req.validatedBody.email].verified = req.validatedBody.verified;
+      });
+      res.json({ success: true });
+    } catch (error) { next(error); }
+  });
+});
 
-    // Cooldown check (30 minutes)
+async function deletePublisher(req, res, next) {
+  try {
+    const email = normalizeIdentity(req.query.email || req.params.email || req.body.email);
+    if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: "A valid publisher email is required" });
+    await store.update("publishers", (publishers) => {
+      if (!publishers[email]) { const error = new Error("Publisher not found"); error.statusCode = 404; throw error; }
+      delete publishers[email];
+    });
+    res.json({ success: true });
+  } catch (error) { next(error); }
+}
+app.delete("/api/publishers", requireAuth, requireAdmin, deletePublisher);
+app.delete("/api/publishers/:email", requireAuth, requireAdmin, deletePublisher);
+
+app.get("/api/admin/session", requireAuth, (req, res) => {
+  res.json({ authenticated: isAdminIdentity(req.auth), email: req.auth.email || null });
+});
+app.post("/api/admin/session", requireAuth, (req, res) => {
+  const authenticated = isAdminIdentity(req.auth);
+  res.status(authenticated ? 200 : 403).json({ authenticated, success: authenticated, email: req.auth.email || null });
+});
+
+app.post("/api/user/wallet", requireAuth, async (req, res, next) => {
+  try {
+    const user = await getOrCreateUserWallet(req.auth);
+    res.json({
+      walletId: user.walletId,
+      address: user.address,
+      balance: user.balance,
+      unlockedArticles: user.unlockedArticles || {},
+      isMock: isMockMode,
+    });
+  } catch (error) { next(error); }
+});
+
+const faucetLimiter = rateLimit({ windowMs: 30 * 60 * 1000, limit: 3, standardHeaders: "draft-7", legacyHeaders: false });
+app.post("/api/user/faucet", requireAuth, faucetLimiter, async (req, res, next) => {
+  const amount = "1.00";
+  const operationId = crypto.randomUUID();
+  try {
+    const user = await getOrCreateUserWallet(req.auth);
     const now = Date.now();
-    const lastFaucet = db[normalizedEmail].lastFaucetTime || 0;
-    const cooldown = 30 * 60 * 1000; // 30 minutes in ms
-    const timePassed = now - lastFaucet;
-
-    if (timePassed < cooldown) {
-      const timeLeftMs = cooldown - timePassed;
-      const timeLeftMins = Math.ceil(timeLeftMs / 1000 / 60);
-      return res.status(429).json({
-        error: `Faucet cooldown active. Please wait ${timeLeftMins} minute(s) before requesting again.`
-      });
-    }
-
-    const userWalletId = db[normalizedEmail].walletId;
-    const userAddress = db[normalizedEmail].address;
-    const amount = 0.05;
-
-    console.log(`[Circle W3S] Fauceting ${amount} USDC from publisher wallet to ${userAddress}`);
-
-    let txHash;
-    if (isMockMode) {
-      txHash = "0x" + crypto.randomBytes(32).toString("hex");
-      const currentBal = parseFloat(db[normalizedEmail].balance || "0.0");
-      db[normalizedEmail].balance = (currentBal + amount).toFixed(4);
-      db[normalizedEmail].lastFaucetTime = now;
-      writeUsersDb(db);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      console.log(`[Mock Faucet] Added ${amount} USDC to ${normalizedEmail}`);
-    } else {
-      const txId = await transferCircleUsdc(process.env.PUBLISHER_WALLET_ID, userAddress, amount);
-      const result = await pollTransactionStatus(txId);
-      if (result.status === "FAILED" || result.status === "DENIED") {
-        throw new Error(`Circle transaction failed with status: ${result.status}`);
-      }
-      txHash = result.txHash;
-      db[normalizedEmail].lastFaucetTime = now;
-    }
-
-    const finalBalance = await getWalletUsdcBalance(userWalletId);
-    db[normalizedEmail].balance = finalBalance;
-    writeUsersDb(db);
-
-    res.json({
-      success: true,
-      txHash,
-      balance: finalBalance
+    await store.update("users", (users) => {
+      const record = users[req.auth.accountKey];
+      if (record.pendingFaucet) { const error = new Error("A faucet transfer is already pending"); error.statusCode = 409; throw error; }
+      if (now - Number(record.lastFaucetTime || 0) < 30 * 60 * 1000) { const error = new Error("Faucet cooldown is active"); error.statusCode = 429; throw error; }
+      record.pendingFaucet = operationId;
     });
 
+    const operation = await startTransfer({
+      operationId,
+      type: "faucet",
+      auth: req.auth,
+      sourceWalletId: process.env.PUBLISHER_WALLET_ID,
+      destinationAddress: user.address,
+      amount,
+      details: { userWalletId: user.walletId },
+    });
+    ensureOperationAccepted(operation);
+    const refreshed = await getUserRecord(req.auth);
+    res.status(operation.status === "COMPLETE" ? 200 : 202).json({ ...operationResponse(operation), balance: refreshed?.balance });
   } catch (error) {
-    console.error("Faucet error:", error);
-    res.status(500).json({ error: error.message || "Failed to execute faucet transfer" });
+    await store.update("users", (users) => {
+      const record = users[req.auth.accountKey];
+      if (record?.pendingFaucet === operationId || record?.pendingFaucet === "reserved") delete record.pendingFaucet;
+    }).catch(() => undefined);
+    next(error);
   }
 });
 
-// Endpoint to unlock an article
-app.post("/api/articles/unlock", async (req, res) => {
-  const { email, articleId, walletId, address } = req.body;
-  if (!email || !articleId) {
-    return res.status(400).json({ error: "Email and articleId are required" });
-  }
-  const normalizedEmail = email.toLowerCase();
-
-  const articles = readArticlesDb();
-  let article = articles.find(a => a.id === articleId);
-  if (!article && articleId === "surfai-daily") {
-    article = {
-      id: "surfai-daily",
-      title: "SurfAI Daily Intelligence Dispatch",
-      price: "0.15",
-      payee: "0x1746978f956142e0482f0aff320d917ace450bcf"
-    };
-  }
-  if (!article) {
-    return res.status(404).json({ error: "Article not found" });
-  }
-
+app.post("/api/articles/unlock", requireAuth, validate(schemas.articleUnlock), async (req, res, next) => {
+  const operationId = crypto.randomUUID();
   try {
-    const db = readUsersDb();
-    
-    // Restore wallet mapping from client storage if it was lost on serverless cold start
-    // BUGFIX: Only restore if client sends matching mode flag to prevent cross-mode corruption
-    const clientMock = req.body.isMock === true || req.body.isMock === 'true';
-    const clientLive = req.body.isMock === false || req.body.isMock === 'false';
-    const canRestore = (isMockMode && clientMock) || (!isMockMode && clientLive);
-    
-    if (!db[normalizedEmail] && walletId && address && canRestore) {
-      console.log(`[Circle W3S] Restoring wallet for ${normalizedEmail} from client: ${address}`);
-      db[normalizedEmail] = {
-        walletId,
-        address,
-        balance: "0.0"
-      };
-      writeUsersDb(db);
+    const article = await getArticle(req.validatedBody.articleId);
+    if (!article) return res.status(404).json({ error: "Article not found" });
+    const user = await getOrCreateUserWallet(req.auth);
+    const publishers = await store.read("publishers");
+    const publisherEntry = findPublisherForArticle(publishers, article);
+    if (!publisherEntry?.[1]?.verified) return res.status(409).json({ error: "Article publisher is not verified" });
+    const [publisherKey] = publisherEntry;
+
+    const liveBalance = isLiveMode ? await getWalletUsdcBalance(user.walletId) : user.balance;
+    const cost = parseUsdc(article.price, { max: "1000" });
+    if (parseUsdc(liveBalance, { allowZero: true, max: null }) < cost) {
+      return res.status(402).json({ error: "Insufficient balance", balance: liveBalance });
     }
 
-    if (!db[normalizedEmail]) {
-      return res.status(400).json({ error: "User wallet not initialized. Please log in again." });
-    }
-
-    const userWalletId = db[normalizedEmail].walletId;
-    const userWalletAddress = db[normalizedEmail].address;
-    
-    const currentBalance = await getWalletUsdcBalance(userWalletId);
-    const cost = parseFloat(article.price);
-    
-    if (parseFloat(currentBalance) < cost) {
-      return res.status(402).json({ error: "Insufficient balance", balance: currentBalance });
-    }
-
-    console.log(`[Circle W3S] Transferring ${cost} USDC from user wallet (${userWalletAddress}) to publisher (${PUBLISHER_WALLET})`);
-    
-    let txHash;
-
-    if (isMockMode) {
-      txHash = "0x" + crypto.randomBytes(32).toString("hex");
-      const newBal = (parseFloat(currentBalance) - cost).toFixed(4);
-      db[normalizedEmail].balance = newBal;
-      writeUsersDb(db);
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      console.log(`[Mock Mode] Transfer successful. TxHash: ${txHash}`);
-    } else {
-      const txId = await transferCircleUsdc(userWalletId, PUBLISHER_WALLET, cost);
-      const result = await pollTransactionStatus(txId);
-      if (result.status === "FAILED" || result.status === "DENIED") {
-        throw new Error(`Circle transaction failed with status: ${result.status}`);
-      }
-      txHash = result.txHash;
-    }
-
-    const finalBalance = await getWalletUsdcBalance(userWalletId);
-    db[normalizedEmail].balance = finalBalance;
-    writeUsersDb(db);
-
-    // Update publisher total earned
-    try {
-      const pubDb = readPublishersDb();
-      const publisherKey = Object.keys(pubDb).find(
-        key => pubDb[key].name.toLowerCase() === article.author.toLowerCase()
-      );
-      if (publisherKey) {
-        pubDb[publisherKey].totalEarned = ((parseFloat(pubDb[publisherKey].totalEarned || "0")) + cost).toFixed(4);
-        writePublishersDb(pubDb);
-        console.log(`[Publisher Earnings] Credited ${cost} USDC to ${pubDb[publisherKey].name}. Total Earned: ${pubDb[publisherKey].totalEarned}`);
-      }
-    } catch (pubErr) {
-      console.error("Failed to update publisher earnings:", pubErr);
-    }
-
-    res.json({
-      success: true,
-      txHash,
-      balance: finalBalance,
-      isMock: isMockMode
+    await store.update("users", (users) => {
+      const record = users[req.auth.accountKey];
+      record.balance = liveBalance;
+      if (record.unlockedArticles?.[article.id]) { const error = new Error("Article is already unlocked"); error.statusCode = 409; throw error; }
+      record.pendingUnlocks ||= {};
+      if (record.pendingUnlocks[article.id]) { const error = new Error("An unlock payment is already pending"); error.statusCode = 409; throw error; }
+      record.pendingUnlocks[article.id] = operationId;
     });
 
+    const operation = await startTransfer({
+      operationId,
+      type: "unlock",
+      auth: req.auth,
+      sourceWalletId: user.walletId,
+      destinationAddress: publisherWalletAddress,
+      amount: formatUsdc(cost),
+      details: { userWalletId: user.walletId, articleId: article.id, publisherKey },
+    });
+    ensureOperationAccepted(operation);
+    const refreshed = await getUserRecord(req.auth);
+    res.status(operation.status === "COMPLETE" ? 200 : 202).json({ ...operationResponse(operation), balance: refreshed?.balance });
   } catch (error) {
-    console.error("Unlock article error:", error);
-    res.status(500).json({ error: error.message || "Failed to process transaction on Arc Testnet" });
+    await store.update("users", (users) => {
+      const pending = users[req.auth.accountKey]?.pendingUnlocks;
+      if ([operationId, "reserved"].includes(pending?.[req.validatedBody?.articleId])) delete pending[req.validatedBody.articleId];
+    }).catch(() => undefined);
+    next(error);
   }
 });
 
-// Endpoint to claim publisher revenue
-app.post("/api/publishers/claim", async (req, res) => {
-  const { email } = req.body;
-  if (!email) {
-    return res.status(400).json({ error: "Email is required" });
-  }
-  const normalizedEmail = email.toLowerCase();
-
+app.post("/api/user/withdraw", requireAuth, validate(schemas.withdraw), async (req, res, next) => {
+  const operationId = crypto.randomUUID();
   try {
-    const pubDb = readPublishersDb();
-    if (!pubDb[normalizedEmail]) {
-      return res.status(404).json({ error: "Publisher not found" });
+    const user = await getOrCreateUserWallet(req.auth);
+    const liveBalance = isLiveMode ? await getWalletUsdcBalance(user.walletId) : user.balance;
+    const amount = parseUsdc(req.validatedBody.amount, { max: null });
+    if (parseUsdc(liveBalance, { allowZero: true, max: null }) < amount) {
+      return res.status(400).json({ error: "Insufficient balance for withdrawal", balance: liveBalance });
     }
-    
-    const publisher = pubDb[normalizedEmail];
-    const totalEarned = parseFloat(publisher.totalEarned || "0");
-    const totalClaimed = parseFloat(publisher.totalClaimed || "0");
-    const claimable = totalEarned - totalClaimed;
-
-    if (claimable <= 0) {
-      return res.status(400).json({ error: "No revenue available to claim" });
-    }
-
-    console.log(`[Circle W3S] Publisher ${publisher.name} claiming ${claimable} USDC to ${publisher.walletAddress}`);
-
-    let txHash;
-    if (isMockMode) {
-      txHash = "0x" + crypto.randomBytes(32).toString("hex");
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      console.log(`[Mock Mode] Publisher claim successful. TxHash: ${txHash}`);
-    } else {
-      const txId = await transferCircleUsdc(process.env.PUBLISHER_WALLET_ID, publisher.walletAddress, claimable);
-      // Wait for completion 1 time using our updated 1-check poller
-      const result = await pollTransactionStatus(txId);
-      if (result.status === "FAILED" || result.status === "DENIED") {
-        throw new Error(`Circle transaction failed with status: ${result.status}`);
-      }
-      txHash = result.txHash;
-    }
-
-    publisher.totalClaimed = (totalClaimed + claimable).toFixed(4);
-    
-    // Record claim history
-    if (!publisher.claimHistory) {
-      publisher.claimHistory = [];
-    }
-    publisher.claimHistory.unshift({
-      amount: claimable.toFixed(4),
-      txHash: txHash,
-      timestamp: Date.now()
+    await store.update("users", (users) => {
+      const record = users[req.auth.accountKey];
+      if (record.pendingWithdrawal) { const error = new Error("A withdrawal is already pending"); error.statusCode = 409; throw error; }
+      record.balance = liveBalance;
+      record.pendingWithdrawal = operationId;
     });
-
-    writePublishersDb(pubDb);
-
-    res.json({
-      success: true,
-      txHash,
-      totalClaimed: publisher.totalClaimed,
-      claimHistory: publisher.claimHistory,
-      isMock: isMockMode
+    const operation = await startTransfer({
+      operationId,
+      type: "withdraw",
+      auth: req.auth,
+      sourceWalletId: user.walletId,
+      destinationAddress: req.validatedBody.destinationAddress,
+      amount: formatUsdc(amount),
+      details: { userWalletId: user.walletId },
     });
-
+    ensureOperationAccepted(operation);
+    const refreshed = await getUserRecord(req.auth);
+    res.status(operation.status === "COMPLETE" ? 200 : 202).json({ ...operationResponse(operation), balance: refreshed?.balance });
   } catch (error) {
-    console.error("Claim revenue error:", error);
-    res.status(500).json({ error: error.message || "Failed to execute claim transfer" });
+    await store.update("users", (users) => {
+      const record = users[req.auth.accountKey];
+      if ([operationId, "reserved"].includes(record?.pendingWithdrawal)) delete record.pendingWithdrawal;
+    }).catch(() => undefined);
+    next(error);
   }
 });
 
-// Endpoint to withdraw funds from user Circle wallet to a personal EVM wallet
-app.post("/api/user/withdraw", async (req, res) => {
-  const { email, walletId, address, destinationAddress, amount } = req.body;
-  if (!email || !destinationAddress || !amount) {
-    return res.status(400).json({ error: "Email, destinationAddress and amount are required" });
-  }
-  const normalizedEmail = email.toLowerCase();
-  const withdrawAmount = parseFloat(amount);
-  if (isNaN(withdrawAmount) || withdrawAmount <= 0) {
-    return res.status(400).json({ error: "Invalid withdraw amount" });
-  }
-
+app.post("/api/publishers/claim", requireAuth, async (req, res, next) => {
+  const operationId = crypto.randomUUID();
   try {
-    const db = readUsersDb();
-    
-    // Restore wallet mapping from client storage if it was lost on serverless cold start
-    // BUGFIX: Only restore if client sends matching mode flag to prevent cross-mode corruption
-    const clientMock = req.body.isMock === true || req.body.isMock === 'true';
-    const clientLive = req.body.isMock === false || req.body.isMock === 'false';
-    const canRestore = (isMockMode && clientMock) || (!isMockMode && clientLive);
-    
-    if (!db[normalizedEmail] && walletId && address && canRestore) {
-      console.log(`[Circle W3S] Restoring wallet for ${normalizedEmail} from client: ${address}`);
-      db[normalizedEmail] = {
-        walletId,
-        address,
-        balance: "0.0"
-      };
-      writeUsersDb(db);
-    }
-
-    if (!db[normalizedEmail]) {
-      return res.status(400).json({ error: "User wallet not initialized. Please log in again." });
-    }
-
-    const userWalletId = db[normalizedEmail].walletId;
-    const userWalletAddress = db[normalizedEmail].address;
-    
-    const currentBalance = await getWalletUsdcBalance(userWalletId);
-    
-    if (parseFloat(currentBalance) < withdrawAmount) {
-      return res.status(400).json({ error: "Insufficient balance for withdrawal", balance: currentBalance });
-    }
-
-    console.log(`[Circle W3S] Withdrawing ${withdrawAmount} USDC from user wallet (${userWalletAddress}) to personal wallet (${destinationAddress})`);
-    
-    let txHash;
-
-    if (isMockMode) {
-      txHash = "0x" + crypto.randomBytes(32).toString("hex");
-      const newBal = (parseFloat(currentBalance) - withdrawAmount).toFixed(4);
-      db[normalizedEmail].balance = newBal;
-      writeUsersDb(db);
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      console.log(`[Mock Mode] Withdrawal successful. TxHash: ${txHash}`);
-    } else {
-      const txId = await transferCircleUsdc(userWalletId, destinationAddress, withdrawAmount);
-      const result = await pollTransactionStatus(txId);
-      if (result.status === "FAILED" || result.status === "DENIED") {
-        throw new Error(`Circle transaction failed with status: ${result.status}`);
-      }
-      txHash = result.txHash;
-    }
-
-    const finalBalance = await getWalletUsdcBalance(userWalletId);
-    db[normalizedEmail].balance = finalBalance;
-    writeUsersDb(db);
-
-    res.json({
-      success: true,
-      txHash,
-      balance: finalBalance,
-      isMock: isMockMode
+    const publishers = await store.read("publishers");
+    const publisherEntry = getPublisherEntryForAuth(publishers, req.auth);
+    if (!publisherEntry?.[1]?.verified) return res.status(403).json({ error: "A verified publisher account is required" });
+    const [publisherKey, publisher] = publisherEntry;
+    if (publisher.pendingClaim) return res.status(409).json({ error: "A claim is already pending" });
+    const earned = parseUsdc(publisher.totalEarned || "0", { allowZero: true, max: null });
+    const claimed = parseUsdc(publisher.totalClaimed || "0", { allowZero: true, max: null });
+    if (earned <= claimed) return res.status(400).json({ error: "No revenue available to claim" });
+    const amount = formatUsdc(earned - claimed);
+    await store.update("publishers", (items) => { items[publisherKey].pendingClaim = operationId; });
+    const operation = await startTransfer({
+      operationId,
+      type: "claim",
+      auth: req.auth,
+      sourceWalletId: process.env.PUBLISHER_WALLET_ID,
+      destinationAddress: publisher.walletAddress,
+      amount,
+      details: { publisherKey },
     });
-
+    ensureOperationAccepted(operation);
+    const refreshed = (await store.read("publishers"))[publisherKey];
+    res.status(operation.status === "COMPLETE" ? 200 : 202).json({
+      ...operationResponse(operation),
+      totalClaimed: refreshed.totalClaimed,
+      claimHistory: refreshed.claimHistory || [],
+    });
   } catch (error) {
-    console.error("Withdrawal error:", error);
-    res.status(500).json({ error: error.message || "Failed to process withdrawal on Arc Testnet" });
+    const publishers = await store.read("publishers").catch(() => ({}));
+    const publisherEntry = getPublisherEntryForAuth(publishers, req.auth);
+    if (publisherEntry) {
+      await store.update("publishers", (items) => {
+        if ([operationId, "reserved"].includes(items[publisherEntry[0]]?.pendingClaim)) delete items[publisherEntry[0]].pendingClaim;
+      }).catch(() => undefined);
+    }
+    next(error);
   }
 });
 
-if (process.env.NODE_ENV !== "production") {
-  app.listen(PORT, () => {
-    console.log(`[Server] Lepton x402 Publisher running on http://localhost:${PORT}`);
-  });
+app.get("/api/transactions/:id", requireAuth, async (req, res, next) => {
+  try {
+    let operation = (await store.read("transactions"))[req.params.id];
+    if (!operation) return res.status(404).json({ error: "Payment operation not found" });
+    if (operation.userId !== req.auth.userId && !isAdminIdentity(req.auth)) return res.status(403).json({ error: "Access denied" });
+    if (isLiveMode && operation.status === "PENDING" && operation.circleTransactionId) {
+      operation = await finalizeOperation(operation.id, await getCircleTransaction(operation.circleTransactionId));
+    }
+    res.status(operation.status === "PENDING" ? 202 : 200).json(operationResponse(operation));
+  } catch (error) { next(error); }
+});
+
+app.use((error, _req, res, _next) => {
+  const status = Number(error.statusCode || 500);
+  if (status >= 500) console.error("[PaperCut API]", error.message);
+  res.status(status).json({ error: status >= 500 && NODE_ENV === "production" ? "Internal server error" : error.message });
+});
+
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`[PaperCut API] Listening on http://localhost:${PORT} (${PAYMENT_MODE} payments)`));
 }
 
 module.exports = app;

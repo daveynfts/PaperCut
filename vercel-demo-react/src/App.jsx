@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { usePrivy, useWallets, useLogin } from '@privy-io/react-auth';
+import React, { useCallback, useState, useEffect } from 'react';
+import { useIdentityToken, usePrivy, useWallets, useLogin } from '@privy-io/react-auth';
+import DOMPurify from 'dompurify';
+import { marked } from 'marked';
 import './App.css';
 import logoImg from './assets/logo.png';
 
@@ -9,7 +11,6 @@ const INITIAL_ARTICLES = [
     title: "Exploring the Antigravity of Decentralized Liquidity",
     author: "Hayden Adams",
     snippet: "How automated market makers and concentrated liquidity protocols are redefining financial architecture without intermediaries...",
-    content: "How automated market makers and concentrated liquidity protocols are redefining financial architecture without intermediaries. Traditional financial plumbing relies on order books managed by centralized institutions. By utilizing constant product formulas and on-chain liquidity pools, Uniswap proved that trustless market-making is not only possible but highly efficient. Concentrated liquidity further refines this by allowing providers to allocate capital to specific price ranges, maximizing efficiency and cementing AMMs as the foundational substrate of decentralized finance.",
     price: "0.05",
     payee: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
     verified: true
@@ -19,7 +20,6 @@ const INITIAL_ARTICLES = [
     title: "The Promise and Challenges of Crypto-Pluralism",
     author: "Vitalik Buterin",
     snippet: "Pluralism in the digital age requires decentralized governance models that respect individual sovereignty while fostering coordination...",
-    content: "Pluralism in the digital age requires decentralized governance models that respect individual sovereignty while fostering coordination. Quadratic voting, retrofunding, and decentralized identity systems represent the first wave of tools enabling communities to steward public goods without relying on centralized bureaucracies. We must refine these mechanisms to ensure they are robust against collusion, Sybil attacks, and platform capture, cementing a truly democratic substrate for the internet.",
     price: "0.08",
     payee: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
     verified: true
@@ -29,7 +29,6 @@ const INITIAL_ARTICLES = [
     title: "The Rise of the Startup Society and Cloud First Cities",
     author: "Balaji Srinivasan",
     snippet: "Physical nations are slow, bureaucratic, and bound to geographical legacy. The startup society starts cloud-first, building digital...",
-    content: "Physical nations are slow, bureaucratic, and bound to geographical legacy. The startup society starts cloud-first, building digital consensus, crowdfunding land, and negotiating diplomatic recognition dynamically. By leveraging public block explorers, cryptographic citizenship, and smart-contract law, we can run experiments in governance at cloud speeds, offering alternative jurisdictions for people who value innovation and voluntary association.",
     price: "0.10",
     payee: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
     verified: true
@@ -39,7 +38,6 @@ const INITIAL_ARTICLES = [
     title: "Ultra-Sound Money: Analysing the Deflationary Mechanics of EIP-1559",
     author: "Bankless",
     snippet: "Is Ethereum truly ultra-sound? Let's dissect the base fee burn mechanism and how network transaction fee demand impacts ether supply...",
-    content: "Is Ethereum truly ultra-sound? Let's dissect the base fee burn mechanism and how network transaction fee demand impacts ether supply. Under EIP-1559, a portion of every transaction fee is permanently removed from circulation. When network activity exceeds threshold limits, the burn rate surpasses issuance, resulting in net-deflationary supply dynamics. This fundamentally transforms ether from a pure utility token into a scarce, productive store of value.",
     price: "0.04",
     payee: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
     verified: true
@@ -49,7 +47,6 @@ const INITIAL_ARTICLES = [
     title: "Read, Write, Own: How Web3 Restores the Original Vision of the Internet",
     author: "Chris Dixon",
     snippet: "Web1 was read-only, dominated by open protocols. Web2 added write capabilities, but centralized the power in corporate platforms. Web3...",
-    content: "Web1 was read-only, dominated by open protocols. Web2 added write capabilities, but centralized the power in corporate platforms. Web3 introduces ownership. By giving users and builders direct ownership of the networks they use through tokens, we align incentives, reduce platform rent-seeking, and reignite the innovative explosion of the early internet. This isn't just about finance; it's about rebuilding digital democracy.",
     price: "0.06",
     payee: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
     verified: true
@@ -59,7 +56,6 @@ const INITIAL_ARTICLES = [
     title: "L1 vs L2: The Geopolitics of Blockchain Scaling Solutions",
     author: "Haseeb Qureshi",
     snippet: "Will Ethereum Layer 2s cannibalize the base chain? We examine the economic flywheels of rollups, blob space fees, and security...",
-    content: "Will Ethereum Layer 2s cannibalize the base chain? We examine the economic flywheels of rollups, blob space fees, and security. As Layer 2 execution becomes dirt cheap, value accrual moves to the settlement layer through L1 blob consumption. The geopolitics of blockchains suggest a future where L1s act as global supreme courts, and L2s act as high-speed commercial cities. This balance is critical to prevent fragmentation and secure long-term decentralization.",
     price: "0.05",
     payee: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
     verified: true
@@ -82,8 +78,8 @@ const getInferredBackendUrl = () => {
     return "";
   }
   
-  // Fallback: local dev without VITE_API_URL still uses live backend
-  return "https://paper-cut-apce.vercel.app";
+  // Local development must never fall through to a production payment API.
+  return "http://localhost:4000";
 };
 const BACKEND_URL = getInferredBackendUrl();
 
@@ -257,16 +253,6 @@ const VerifiedBadge = ({ onApplyClick }) => {
 // --- Bug Fix Helpers ---
 const isValidEthAddress = (addr) => /^0x[a-fA-F0-9]{40}$/.test(addr);
 
-const getLocalStorageItemParsed = (key, defaultValue) => {
-  try {
-    const stored = localStorage.getItem(key);
-    return stored ? JSON.parse(stored) : defaultValue;
-  } catch (err) {
-    console.error(`Failed to parse localStorage key ${key}:`, err);
-    return defaultValue;
-  }
-};
-
 const safeParseResponse = async (response) => {
   const text = await response.text();
   try {
@@ -277,9 +263,10 @@ const safeParseResponse = async (response) => {
 };
 
 function App() {
-  const { logout, authenticated, user } = usePrivy();
+  const { logout, authenticated, user, getAccessToken } = usePrivy();
+  const { identityToken } = useIdentityToken();
   const { login } = useLogin({
-    onComplete: (user, isNewUser, wasPreviouslyAuthenticated) => {
+    onComplete: (user) => {
       console.log("[PaperCut] Login complete:", user);
       setError("");
     },
@@ -287,12 +274,34 @@ function App() {
       console.error("[PaperCut] Login failed:", err);
       let errMsg = err?.message || String(err);
       if (errMsg.toLowerCase().includes("origin") || errMsg.toLowerCase().includes("domain") || errMsg.toLowerCase().includes("authorized") || errMsg.toLowerCase().includes("whitelist")) {
-        errMsg = `Domain not authorized. Please log in to dashboard.privy.io, select App ID "cmqhlq3yb009i0ci5vvnjwqnf", and add "${window.location.origin}" to the Allowed Domains under settings.`;
+        errMsg = `Domain not authorized. Add "${window.location.origin}" to the Allowed Domains for the configured app in the Privy dashboard.`;
       }
       setError(errMsg);
     }
   });
   const { wallets } = useWallets();
+
+  const authFetch = useCallback(async (url, options = {}) => {
+    const headers = new Headers(options.headers || {});
+    if (authenticated) {
+      const accessToken = await getAccessToken();
+      if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
+      if (identityToken) headers.set('X-Privy-Identity-Token', identityToken);
+    }
+    return window.fetch(url, { ...options, headers });
+  }, [authenticated, getAccessToken, identityToken]);
+
+  const waitForPaymentOperation = async (initialData) => {
+    if (!initialData?.pending || !initialData.transactionId) return initialData;
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      await new Promise(resolve => window.setTimeout(resolve, 1000));
+      const response = await authFetch(`${BACKEND_URL}/api/transactions/${initialData.transactionId}`);
+      const data = await safeParseResponse(response);
+      if (data.status === 'COMPLETE') return { ...initialData, ...data, pending: false, success: true };
+      if (!response.ok || data.status === 'FAILED') throw new Error(data.error || 'Payment operation failed.');
+    }
+    throw new Error('Payment is still pending. Please refresh shortly to check its status.');
+  };
 
   const [circleWallet, setCircleWallet] = useState(null);
   const activeWallet = wallets ? wallets[0] : null;
@@ -310,21 +319,6 @@ function App() {
   const [pdfSimulating, setPdfSimulating] = useState(false);
   const [pdfReady, setPdfReady] = useState(false);
   const [pdfSimStep, setPdfSimStep] = useState(0);
-  
-  // SurfAI Admin Configuration States
-  const [surfTitleOverride, setSurfTitleOverride] = useState(() => {
-    return localStorage.getItem("papercut_surf_title_override") || "";
-  });
-  const [surfPriceOverride, setSurfPriceOverride] = useState(() => {
-    return localStorage.getItem("papercut_surf_price_override") || "0.15";
-  });
-  const [surfPdfUrlOverride, setSurfPdfUrlOverride] = useState(() => {
-    return localStorage.getItem("papercut_surf_pdf_url_override") || "https://pub-8288264395e64bebab09946b5bc0b740.r2.dev/SurfPaperCut/surfai-daily-briefing.pdf";
-  });
-  const [surfContentOverride, setSurfContentOverride] = useState(() => {
-    return localStorage.getItem("papercut_surf_content_override") || "";
-  });
-  const [surfConfigStatusMsg, setSurfConfigStatusMsg] = useState("");
   
   // SurfAI Video Mockup States
   const [showSurfVideoMockup, setShowSurfVideoMockup] = useState(false);
@@ -344,8 +338,7 @@ function App() {
   const [adminCategory, setAdminCategory] = useState("Web3 Infrastructures & Protocols");
   const [adminStatusMsg, setAdminStatusMsg] = useState("");
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
-  const [adminPasswordInput, setAdminPasswordInput] = useState("");
-  const [adminPasswordError, setAdminPasswordError] = useState("");
+  const [adminAuthError, setAdminAuthError] = useState("");
 
   // Publisher Portal states
   const [pubFormName, setPubFormName] = useState("");
@@ -391,98 +384,14 @@ function App() {
 
   const parseMarkdownToHtml = (text) => {
     if (!text) return "";
-    let html = text
-      .replace(/\r/g, "") // Strip all carriage returns to prevent breaking regexes with trailing \r
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-    
-    // Parse code blocks (```lang ... ```)
-    html = html.replace(/```([\s\S]*?)```/g, '<pre class="code-block"><code>$1</code></pre>');
-    
-    // Parse inline code (`code`)
-    html = html.replace(/`(.*?)`/g, '<code class="inline-code">$1</code>');
-    
-    // Parse headings
-    html = html.replace(/^#\s+(.*?)$/gm, "<h1>$1</h1>");
-    html = html.replace(/^##\s+(.*?)$/gm, "<h2>$1</h2>");
-    html = html.replace(/^###\s+(.*?)$/gm, "<h3>$1</h3>");
-    
-    // Parse bold & italic
-    html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
-    html = html.replace(/\*(.*?)\*/g, "<em>$1</em>");
-    
-    // Parse Markdown Images & Videos: ![alt](url)
-    html = html.replace(/!\[(.*?)\]\((.*?)\)/g, (match, alt, url) => {
-      const sanitizedUrl = url.trim();
-      const isVideo = sanitizedUrl.match(/\.(mp4|webm|mov|ogg|m4v)($|\?)/i) || alt.toLowerCase().includes('video');
-      
-      if (isVideo) {
-        return `<video controls class="preview-video" style="max-width:100%; width:100%; border:2px solid var(--ink-black); box-shadow:4px 4px 0 var(--ink-black); margin: 16px 0; background: #000; display: block;">
-                  <source src="${sanitizedUrl}" />
-                  Your browser does not support the video tag.
-                </video>`;
-      } else {
-        return `<img src="${sanitizedUrl}" alt="${alt}" class="preview-img" style="max-width:100%; height:auto; border:2px solid var(--ink-black); box-shadow:4px 4px 0 var(--ink-black); margin: 16px 0; display: block;" />`;
-      }
+    const rendered = marked.parse(String(text), { gfm: true, breaks: true });
+    return DOMPurify.sanitize(rendered, {
+      USE_PROFILES: { html: true },
+      ADD_TAGS: ['video', 'source'],
+      ADD_ATTR: ['controls'],
+      FORBID_TAGS: ['style', 'iframe', 'object', 'embed'],
+      FORBID_ATTR: ['style'],
     });
-
-    // Parse raw video links on their own line (any HTTP/HTTPS link ending in video extension)
-    html = html.replace(/^(https?:\/\/[^\s]+?\.(?:mp4|webm|mov|ogg|m4v)(?:\?[^\s]*)?)$/gim, (match, url) => {
-      return `<video controls class="preview-video" style="max-width:100%; width:100%; border:2px solid var(--ink-black); box-shadow:4px 4px 0 var(--ink-black); margin: 16px 0; background: #000; display: block;">
-                <source src="${url.trim()}" />
-                Your browser does not support the video tag.
-              </video>`;
-    });
-    
-    // Parse links [text](url) — SECURITY FIX: sanitize href to prevent javascript: XSS
-    html = html.replace(/\[(.*?)\]\((.*?)\)/g, (match, text, url) => {
-      const sanitizedUrl = url.trim().toLowerCase();
-      if (sanitizedUrl.startsWith('http://') || sanitizedUrl.startsWith('https://') || sanitizedUrl.startsWith('mailto:')) {
-        // If the URL matches a video format, or if text is video, render as video player!
-        const isVideo = url.trim().match(/\.(mp4|webm|mov|ogg|m4v)($|\?)/i) || text.toLowerCase().includes('video');
-        if (isVideo) {
-          return `<video controls class="preview-video" style="max-width:100%; width:100%; border:2px solid var(--ink-black); box-shadow:4px 4px 0 var(--ink-black); margin: 16px 0; background: #000; display: block;">
-                    <source src="${url.trim()}" />
-                    Your browser does not support the video tag.
-                  </video>`;
-        }
-        return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="preview-link">${text}</a>`;
-      }
-      return text; // Strip dangerous protocol links, keep only the text
-    });
-    
-    // Parse horizontal rules (---)
-    html = html.replace(/^---$/gm, "<hr class=\"preview-hr\" />");
-    
-    // Parse blockquotes (> text) -> Note > is encoded as &gt;
-    html = html.replace(/^&gt;\s+(.*?)$/gm, '<blockquote class="preview-blockquote">$1</blockquote>');
-    
-    // Parse bulleted lists (- or * item)
-    html = html.replace(/^[\-\*]\s+(.*?)$/gm, '<li class="preview-li">$1</li>');
-    
-    const lines = html.split("\n");
-    const parsedLines = lines.map(line => {
-      const trimmed = line.trim();
-      if (
-        trimmed.startsWith("<h1>") || 
-        trimmed.startsWith("<h2>") || 
-        trimmed.startsWith("<h3>") || 
-        trimmed.startsWith("<pre") || 
-        trimmed.startsWith("<code") || 
-        trimmed.startsWith("<hr") || 
-        trimmed.startsWith("<blockquote") || 
-        trimmed.startsWith("<li") ||
-        trimmed.startsWith("<video") ||
-        trimmed.startsWith("<img") ||
-        trimmed === ""
-      ) {
-        return line;
-      }
-      return `<p class="preview-p">${line}</p>`;
-    });
-    
-    return parsedLines.join("");
   };
 
   const generateClientSnippet = (content) => {
@@ -615,95 +524,39 @@ function App() {
     previewPane.scrollTop = scrollPct * (previewPane.scrollHeight - previewPane.clientHeight);
   };
 
-  const fetchFullArticleContent = async (articleId, priceStr) => {
+  const fetchFullArticleContent = useCallback(async (articleId) => {
     try {
-      const userEmail = user?.email?.address || user?.id || "anonymous-user";
-      const unlockedInfo = unlockedArticles[articleId];
-      if (!unlockedInfo) return;
-
-      // SECURITY FIX: Removed forged "circle-authorized" signature bypass.
-      // For already-unlocked articles, fetch content using the author query param.
-      // The article's author name serves as the access key for content retrieval.
-      const articleMeta = articles.find(a => a.id === articleId);
-      const authorName = articleMeta?.author || "";
-      
-      const response = await fetch(`${BACKEND_URL}/api/articles/${articleId}?author=${encodeURIComponent(authorName)}`);
+      if (!unlockedArticles[articleId]) return;
+      const response = await authFetch(`${BACKEND_URL}/api/articles/${articleId}`);
       const data = await safeParseResponse(response);
       if (response.ok && data.success && data.content) {
-        setArticles(prev => prev.map(art => art.id === articleId ? { ...art, content: data.content } : art));
-        setSelectedArticle(prev => prev && prev.id === articleId ? { ...prev, content: data.content } : prev);
+        const protectedFields = { content: data.content, ...(data.pdfUrl ? { pdfUrl: data.pdfUrl } : {}) };
+        setArticles(prev => prev.map(art => art.id === articleId ? { ...art, ...protectedFields } : art));
+        setSelectedArticle(prev => prev && prev.id === articleId ? { ...prev, ...protectedFields } : prev);
         return;
       }
-      
-      // Fallback
-      const localArticles = getLocalStorageItemParsed("papercut_local_articles", []);
-      const matched = localArticles.find(la => la.id === articleId);
-      if (matched && matched.content) {
-        setArticles(prev => prev.map(art => art.id === articleId ? { ...art, content: matched.content } : art));
-        setSelectedArticle(prev => prev && prev.id === articleId ? { ...prev, content: matched.content } : prev);
-      }
+      throw new Error(data.error || 'Article access has not been granted by the server.');
     } catch (err) {
       console.error("Failed to fetch full article content:", err);
-      // Fallback
-      const localArticles = getLocalStorageItemParsed("papercut_local_articles", []);
-      const matched = localArticles.find(la => la.id === articleId);
-      if (matched && matched.content) {
-        setArticles(prev => prev.map(art => art.id === articleId ? { ...art, content: matched.content } : art));
-        setSelectedArticle(prev => prev && prev.id === articleId ? { ...prev, content: matched.content } : prev);
-      }
+      setError(err.message || 'Unable to load protected article content.');
     }
-  };
+  }, [authFetch, unlockedArticles]);
 
   useEffect(() => {
     if (selectedArticle && unlockedArticles[selectedArticle.id] && !selectedArticle.content) {
-      fetchFullArticleContent(selectedArticle.id, selectedArticle.price);
+      fetchFullArticleContent(selectedArticle.id);
     }
-  }, [selectedArticle, unlockedArticles]);
+  }, [fetchFullArticleContent, selectedArticle, unlockedArticles]);
 
-  const fetchArticles = async () => {
+  const fetchArticles = useCallback(async () => {
     try {
-      const response = await fetch(`${BACKEND_URL}/api/articles`);
-      let fetchedArticles = [];
+      const response = await authFetch(`${BACKEND_URL}/api/articles`);
       const data = await safeParseResponse(response);
-      if (response.ok && Array.isArray(data)) {
-        fetchedArticles = data;
-      }
-      
-      // Merge with INITIAL_ARTICLES first
-      const mergedWithInitial = fetchedArticles.map(item => {
-        const local = INITIAL_ARTICLES.find(la => la.id === item.id);
-        // Only merge if the authors match case-insensitively
-        if (local && local.author.toLowerCase() === item.author.toLowerCase()) {
-          return {
-            ...local,
-            ...item
-          };
-        }
-        return item;
-      });
-      
-      // Ensure all INITIAL_ARTICLES are present
-      INITIAL_ARTICLES.forEach(la => {
-        if (!mergedWithInitial.some(a => a.id === la.id && a.author.toLowerCase() === la.author.toLowerCase())) {
-          mergedWithInitial.push(la);
-        }
-      });
-      
-      // Load local storage articles
-      const localArticles = getLocalStorageItemParsed("papercut_local_articles", []);
-      
-      // Merge them
-      const allArticles = [...mergedWithInitial];
-      localArticles.forEach(la => {
-        if (!allArticles.some(a => a.id === la.id && a.author.toLowerCase() === la.author.toLowerCase())) {
-          allArticles.push(la);
-        }
-      });
-      
-      // Sort by ID descending so newest dispatches appear at the top of LATEST DISPATCHES list
+      if (!response.ok || !Array.isArray(data)) throw new Error(data.error || 'Failed to load articles.');
+      const allArticles = data.map(article => ({ ...article, content: article.content || undefined }));
       allArticles.sort((a, b) => {
-        const idA = parseInt(a.id.replace("local-", "")) || 0;
-        const idB = parseInt(b.id.replace("local-", "")) || 0;
+        const idA = parseInt(a.id, 10) || 0;
+        const idB = parseInt(b.id, 10) || 0;
         if (idA !== idB) {
           return idB - idA;
         }
@@ -713,27 +566,13 @@ function App() {
       setArticles(allArticles);
     } catch (err) {
       console.error("Failed to fetch articles:", err);
-      // Fallback
-      const localArticles = getLocalStorageItemParsed("papercut_local_articles", []);
-      const allArticles = [...INITIAL_ARTICLES];
-      localArticles.forEach(la => {
-        if (!allArticles.some(a => a.id === la.id && a.author.toLowerCase() === la.author.toLowerCase())) {
-          allArticles.push(la);
-        }
-      });
-      allArticles.sort((a, b) => {
-        const idA = parseInt(a.id.replace("local-", "")) || 0;
-        const idB = parseInt(b.id.replace("local-", "")) || 0;
-        if (idA !== idB) return idB - idA;
-        return b.id.localeCompare(a.id);
-      });
-      setArticles(allArticles);
+      setArticles(INITIAL_ARTICLES);
     }
-  };
+  }, [authFetch]);
 
-  const fetchPublishers = async () => {
+  const fetchPublishers = useCallback(async () => {
     try {
-      const response = await fetch(`${BACKEND_URL}/api/publishers`);
+      const response = await authFetch(`${BACKEND_URL}/api/publishers`);
       if (response.ok) {
         const data = await response.json();
         const normalized = {};
@@ -745,12 +584,12 @@ function App() {
     } catch (err) {
       console.error("Failed to fetch publishers:", err);
     }
-  };
+  }, [authFetch]);
 
-  const getPublisherRecord = (email) => {
+  const getPublisherRecord = useCallback((email) => {
     if (!publishers || !email) return null;
     return publishers[email.toLowerCase()] || null;
-  };
+  }, [publishers]);
 
   // Handle URL subpath routing for /admin, /papercut/admin, or hash #/admin / #/publisher
   useEffect(() => {
@@ -809,7 +648,7 @@ function App() {
       setPubEarnings(globalEarned);
       setPubClaimed(globalClaimed);
     }
-  }, [isPublisherView, userEmail, publishers]);
+  }, [getPublisherRecord, isPublisherView, userEmail]);
 
   const handlePublishArticleSubmit = async (e) => {
     e.preventDefault();
@@ -821,12 +660,8 @@ function App() {
     setIsPublishing(true);
     setPublishStatusMsg("Publishing dispatch to database...");
     
-    const publisherRecord = getPublisherRecord(user?.email?.address || "");
-    const authorName = publisherRecord ? publisherRecord.name : "Anonymous Publisher";
-    const payoutWallet = publisherRecord ? publisherRecord.walletAddress : (smartWalletAddress || activeWallet?.address || user?.wallet?.address || "");
-
     try {
-      const response = await fetch(`${BACKEND_URL}/api/articles`, {
+      const response = await authFetch(`${BACKEND_URL}/api/articles`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -834,34 +669,13 @@ function App() {
         body: JSON.stringify({
           title: newArticleTitle,
           content: newArticleContent,
-          price: newArticlePrice,
-          author: authorName,
-          payee: payoutWallet
+          price: newArticlePrice
         })
       });
       
       const data = await safeParseResponse(response);
       if (!response.ok) {
         throw new Error(data.error || "Failed to publish article.");
-      }
-      
-      // Save locally to local storage as well
-      const newId = data.article?.id || String(Date.now());
-      const newLocalArticle = {
-        id: newId,
-        title: newArticleTitle,
-        content: newArticleContent,
-        snippet: generateClientSnippet(newArticleContent),
-        price: String(parseFloat(newArticlePrice).toFixed(2)),
-        author: authorName,
-        payee: payoutWallet,
-        verified: !!publisherRecord?.verified
-      };
-      
-      const existingLocal = getLocalStorageItemParsed("papercut_local_articles", []);
-      if (!existingLocal.some(a => a.id === newId)) {
-        existingLocal.push(newLocalArticle);
-        localStorage.setItem("papercut_local_articles", JSON.stringify(existingLocal));
       }
       
       setPublishStatusMsg("Article published successfully!");
@@ -877,30 +691,7 @@ function App() {
       
     } catch (err) {
       console.error("Publish article error:", err);
-      // Fallback
-      const fallbackId = "local-" + Date.now();
-      const newLocalArticle = {
-        id: fallbackId,
-        title: newArticleTitle,
-        content: newArticleContent,
-        snippet: generateClientSnippet(newArticleContent),
-        price: String(parseFloat(newArticlePrice).toFixed(2)),
-        author: authorName,
-        payee: payoutWallet,
-        verified: !!publisherRecord?.verified
-      };
-      const existingLocal = getLocalStorageItemParsed("papercut_local_articles", []);
-      existingLocal.push(newLocalArticle);
-      localStorage.setItem("papercut_local_articles", JSON.stringify(existingLocal));
-      
-      setPublishStatusMsg("Article saved to local draft storage!");
-      setNewArticleTitle("");
-      setNewArticleContent("");
-      await fetchArticles();
-      setTimeout(() => {
-        setPublisherTab("ledger");
-        setPublishStatusMsg("");
-      }, 1500);
+      setPublishStatusMsg(err.message || "Failed to publish article.");
     } finally {
       setIsPublishing(false);
     }
@@ -913,9 +704,6 @@ function App() {
     setEditContent("");
     setEditStatusMsg("Loading content...");
 
-    const publisherRecord = getPublisherRecord(user?.email?.address || "");
-    const authorName = publisherRecord ? publisherRecord.name : "";
-
     // If content is already present (e.g. from local storage), use it
     if (art.content) {
       setEditContent(art.content);
@@ -926,7 +714,7 @@ function App() {
     // Otherwise, fetch it from server
     try {
       const rawId = art.id.replace("local-", "");
-      const response = await fetch(`${BACKEND_URL}/api/articles/${rawId}?author=${encodeURIComponent(authorName)}`);
+      const response = await authFetch(`${BACKEND_URL}/api/articles/${rawId}`);
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.content) {
@@ -939,9 +727,7 @@ function App() {
       console.error("Failed to fetch full article for editing:", err);
     }
 
-    // Fallback if not found or server error
-    setEditContent(art.snippet || "");
-    setEditStatusMsg("");
+    setEditStatusMsg("Unable to load the protected article content.");
   };
 
   const handleEditArticleSubmit = async (e) => {
@@ -954,12 +740,10 @@ function App() {
     setIsEditingSubmit(true);
     setEditStatusMsg("Saving updates on server...");
 
-    const publisherRecord = getPublisherRecord(user?.email?.address || "");
-    const authorName = publisherRecord ? publisherRecord.name : "Anonymous Publisher";
     const rawId = editingArticle.id.replace("local-", "");
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/articles/${rawId}`, {
+      const response = await authFetch(`${BACKEND_URL}/api/articles/${rawId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json"
@@ -967,8 +751,7 @@ function App() {
         body: JSON.stringify({
           title: editTitle,
           content: editContent,
-          price: editPrice,
-          author: authorName
+          price: editPrice
         })
       });
 
@@ -976,22 +759,6 @@ function App() {
       if (!response.ok) {
         throw new Error(data.error || "Failed to update article.");
       }
-
-      // Update client-side local storage cache if it exists
-      const existingLocal = JSON.parse(localStorage.getItem("papercut_local_articles") || "[]");
-      const updatedLocal = existingLocal.map(art => {
-        if (art.id === editingArticle.id || art.id === rawId) {
-          return {
-            ...art,
-            title: editTitle,
-            content: editContent,
-            price: String(parseFloat(editPrice).toFixed(2)),
-            snippet: data.article?.snippet || art.snippet
-          };
-        }
-        return art;
-      });
-      localStorage.setItem("papercut_local_articles", JSON.stringify(updatedLocal));
 
       setEditStatusMsg("Article updated successfully!");
       
@@ -1001,7 +768,7 @@ function App() {
           ...prev,
           title: editTitle,
           content: editContent,
-          price: String(parseFloat(editPrice).toFixed(2)),
+          price: data.article?.price || editPrice,
           snippet: data.article?.snippet || prev.snippet
         }));
       }
@@ -1015,43 +782,7 @@ function App() {
 
     } catch (err) {
       console.error("Failed to edit article:", err);
-      // Fallback update in local storage only
-      const existingLocal = JSON.parse(localStorage.getItem("papercut_local_articles") || "[]");
-      const updatedLocal = existingLocal.map(art => {
-        if (art.id === editingArticle.id) {
-          return {
-            ...art,
-            title: editTitle,
-            content: editContent,
-            snippet: generateClientSnippet(editContent),
-            price: String(parseFloat(editPrice).toFixed(2))
-          };
-        }
-        return art;
-      });
-      localStorage.setItem("papercut_local_articles", JSON.stringify(updatedLocal));
-
-      setEditStatusMsg("Article updated locally (Server connection failed)!");
-      
-      if (selectedArticle && selectedArticle.id === editingArticle.id) {
-        setSelectedArticle(prev => ({
-          ...prev,
-          title: editTitle,
-          content: editContent,
-          snippet: generateClientSnippet(editContent),
-          price: String(parseFloat(editPrice).toFixed(2))
-        }));
-      }
-
-      setTimeout(() => {
-        setEditingArticle(null);
-        setEditTitle("");
-        setEditContent("");
-        setEditPrice("");
-        setEditStatusMsg("");
-      }, 1500);
-
-      await fetchArticles();
+      setEditStatusMsg(err.message || "Failed to update article.");
     } finally {
       setIsEditingSubmit(false);
     }
@@ -1062,30 +793,17 @@ function App() {
       return;
     }
 
-    const publisherRecord = getPublisherRecord(user?.email?.address || "");
-    const authorName = publisherRecord ? publisherRecord.name : "Anonymous Publisher";
-    const rawId = articleToDelete.id.replace("local-", "");
+    const rawId = articleToDelete.id;
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/articles/${rawId}?author=${encodeURIComponent(authorName)}`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          author: authorName
-        })
+      const response = await authFetch(`${BACKEND_URL}/api/articles/${rawId}`, {
+        method: "DELETE"
       });
 
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error || "Failed to delete article.");
       }
-
-      // Remove from local storage cache
-      const existingLocal = JSON.parse(localStorage.getItem("papercut_local_articles") || "[]");
-      const updatedLocal = existingLocal.filter(art => art.id !== articleToDelete.id && art.id !== rawId);
-      localStorage.setItem("papercut_local_articles", JSON.stringify(updatedLocal));
 
       alert("Dispatch deleted successfully.");
       
@@ -1098,18 +816,7 @@ function App() {
 
     } catch (err) {
       console.error("Failed to delete article:", err);
-      // Fallback delete from local storage only
-      const existingLocal = JSON.parse(localStorage.getItem("papercut_local_articles") || "[]");
-      const updatedLocal = existingLocal.filter(art => art.id !== articleToDelete.id);
-      localStorage.setItem("papercut_local_articles", JSON.stringify(updatedLocal));
-
-      alert("Dispatch deleted locally (Server connection failed).");
-      
-      if (selectedArticle && selectedArticle.id === articleToDelete.id) {
-        setSelectedArticle(null);
-      }
-
-      await fetchArticles();
+      alert(err.message || "Failed to delete dispatch.");
     }
   };
 
@@ -1123,13 +830,12 @@ function App() {
     }
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/publishers`, {
+      const response = await authFetch(`${BACKEND_URL}/api/publishers`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          email: userEmail,
           name: pubFormName,
           domain: pubFormDomain,
           walletAddress: pubFormWallet,
@@ -1156,16 +862,15 @@ function App() {
     setPubClaiming(true);
     setPubClaimSuccess("");
     try {
-      const response = await fetch(`${BACKEND_URL}/api/publishers/claim`, {
+      const response = await authFetch(`${BACKEND_URL}/api/publishers/claim`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: userEmail })
+        body: JSON.stringify({})
       });
-      const data = await response.json();
+      let data = await safeParseResponse(response);
+      if (response.ok) data = await waitForPaymentOperation(data);
       
       if (response.ok && data.success) {
-        const newClaimed = parseFloat(data.totalClaimed || pubEarnings);
-        setPubClaimed(newClaimed);
         setPubClaimSuccess(`Revenue successfully claimed on Arc Testnet! TxHash: ${data.txHash}`);
         fetchPublishers(); // Refresh global data
       } else {
@@ -1182,8 +887,7 @@ function App() {
     setIsAdminView(showAdmin);
     if (!showAdmin) {
       setIsAdminAuthenticated(false);
-      setAdminPasswordInput("");
-      setAdminPasswordError("");
+      setAdminAuthError("");
     }
     if (showAdmin) {
       // Set hash - this is bulletproof and works on Vercel without 404 rewrite rules!
@@ -1204,14 +908,14 @@ function App() {
   useEffect(() => {
     fetchArticles();
     fetchPublishers();
-  }, []);
+  }, [fetchArticles, fetchPublishers]);
 
   // Check if current IP is authorized admin when entering admin view
   useEffect(() => {
     if (isAdminView && !isAdminAuthenticated) {
       const checkAdminIp = async () => {
         try {
-          const response = await fetch(`${BACKEND_URL}/api/admin/check-ip`);
+      const response = await authFetch(`${BACKEND_URL}/api/admin/session`);
           if (response.ok) {
             const data = await response.json();
             if (data.authenticated) {
@@ -1224,12 +928,12 @@ function App() {
       };
       checkAdminIp();
     }
-  }, [isAdminView, isAdminAuthenticated]);
+  }, [authFetch, authenticated, isAdminView, isAdminAuthenticated]);
 
   const handleToggleVerify = async (email, currentStatus) => {
     setAdminStatusMsg(`Updating verification for ${email}...`);
     try {
-      const response = await fetch(`${BACKEND_URL}/api/publishers/verify`, {
+      const response = await authFetch(`${BACKEND_URL}/api/publishers/verify`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json"
@@ -1255,7 +959,7 @@ function App() {
     if (!confirm(`Are you sure you want to delete publisher ${email}?`)) return;
     setAdminStatusMsg(`Deleting publisher ${email}...`);
     try {
-      const response = await fetch(`${BACKEND_URL}/api/publishers?email=${encodeURIComponent(email)}`, {
+      const response = await authFetch(`${BACKEND_URL}/api/publishers?email=${encodeURIComponent(email)}`, {
         method: "DELETE"
       });
       if (response.ok) {
@@ -1283,7 +987,7 @@ function App() {
     }
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/publishers`, {
+      const response = await authFetch(`${BACKEND_URL}/api/publishers`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -1376,17 +1080,10 @@ function App() {
     }
     setCopyStatus("Syncing balance...");
     try {
-      const userEmail = user.email?.address || user.id || "anonymous-user";
-      const response = await fetch(`${BACKEND_URL}/api/user/wallet`, {
+      const response = await authFetch(`${BACKEND_URL}/api/user/wallet`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ 
-          email: userEmail,
-          walletId: circleWallet.walletId,
-          address: circleWallet.address
-        })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
       });
       const data = await response.json();
       if (response.ok) {
@@ -1429,22 +1126,17 @@ function App() {
     }
     
     try {
-      const userEmail = user.email?.address || user.id || "anonymous-user";
-      const response = await fetch(`${BACKEND_URL}/api/user/faucet`, {
+      const response = await authFetch(`${BACKEND_URL}/api/user/faucet`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ 
-          email: userEmail,
-          walletId: activeWallet.walletId,
-          address: activeWallet.address
-        })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
       });
-      const data = await safeParseResponse(response);
+      let data = await safeParseResponse(response);
       if (response.ok) {
-        setCircleWallet(prev => prev ? { ...prev, balance: data.balance } : null);
-        setFaucetSuccess("Faucet complete! +0.05 USDC has been credited to your account.");
+        data = await waitForPaymentOperation(data);
+        const walletResult = await fetchUserCircleWallet();
+        if (walletResult?.wallet) setCircleWallet(walletResult.wallet);
+        setFaucetSuccess(`Faucet complete! +${data.amount} USDC has been credited to your account.`);
         setCopyStatus("Faucet complete!");
         setTimeout(() => setCopyStatus("Click address to copy"), 2000);
       } else {
@@ -1486,21 +1178,6 @@ function App() {
     // Always use real explorer logic
   };
 
-  // Load unlocked states from storage on mount / user change
-  useEffect(() => {
-    if (authenticated && user) {
-      const userEmail = user.email?.address || user.id || "anonymous-user";
-      const data = localStorage.getItem(`papercut_unlocked_articles_${userEmail}`);
-      if (data) {
-        setUnlockedArticles(JSON.parse(data));
-      } else {
-        setUnlockedArticles({});
-      }
-    } else {
-      setUnlockedArticles({});
-    }
-  }, [authenticated, user]);
-
   // Update active wallet chain ID when wallet changes
   useEffect(() => {
     if (wallets && wallets[0]) {
@@ -1509,41 +1186,21 @@ function App() {
   }, [wallets]);
 
   // Fetch or create user's Circle Programmable Wallet on backend upon login
-  const fetchUserCircleWallet = async () => {
+  const fetchUserCircleWallet = useCallback(async () => {
     if (!authenticated || !user) {
       setCircleWallet(null);
+      setUnlockedArticles({});
       return;
     }
     
     setIsLoadingWallet(true);
     setError("");
     
-    const userEmail = user.email?.address || user.id || "anonymous-user";
-    
-    // Load local wallet backup if available to recover mapping on serverless cold starts
-    let localBackup = null;
     try {
-      const stored = localStorage.getItem(`circle_wallet_${userEmail}`);
-      if (stored) {
-        localBackup = JSON.parse(stored);
-      }
-    } catch (e) {
-      console.error("Failed to read local wallet backup:", e);
-    }
-    
-    try {
-      const response = await fetch(`${BACKEND_URL}/api/user/wallet`, {
+      const response = await authFetch(`${BACKEND_URL}/api/user/wallet`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ 
-          email: userEmail,
-          walletId: localBackup?.walletId,
-          address: localBackup?.address,
-          balance: localBackup?.balance,
-          isMock: localBackup?.isMock
-        })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
       });
       const data = await response.json();
       if (response.ok) {
@@ -1554,7 +1211,7 @@ function App() {
           isMock: data.isMock
         };
         setCircleWallet(walletData);
-        localStorage.setItem(`circle_wallet_${userEmail}`, JSON.stringify(walletData));
+        setUnlockedArticles(data.unlockedArticles || {});
         return { wallet: walletData, error: null };
       } else {
         const errorMsg = data.error || "Failed to load Circle MPC wallet.";
@@ -1569,11 +1226,11 @@ function App() {
     } finally {
       setIsLoadingWallet(false);
     }
-  };
+  }, [authenticated, authFetch, user]);
 
   useEffect(() => {
     fetchUserCircleWallet();
-  }, [authenticated, user]);
+  }, [fetchUserCircleWallet]);
 
   useEffect(() => {
     if (showWalletModal) {
@@ -1613,39 +1270,25 @@ function App() {
     setWithdrawError("");
     setWithdrawSuccess("");
 
-    const userEmail = user?.email?.address || user?.id || "anonymous-user";
-
     try {
-      const response = await fetch(`${BACKEND_URL}/api/user/withdraw`, {
+      const response = await authFetch(`${BACKEND_URL}/api/user/withdraw`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          email: userEmail,
-          walletId: circleWallet.walletId,
-          address: circleWallet.address,
           destinationAddress: withdrawAddress,
           amount: withdrawAmount
         })
       });
 
-      const data = await safeParseResponse(response);
+      let data = await safeParseResponse(response);
       if (!response.ok) {
         throw new Error(data.error || "Withdrawal request failed.");
       }
-
-      setCircleWallet(prev => prev ? { ...prev, balance: data.balance } : null);
-      
-      // Update local storage backup
-      const stored = localStorage.getItem(`circle_wallet_${userEmail}`);
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          parsed.balance = data.balance;
-          localStorage.setItem(`circle_wallet_${userEmail}`, JSON.stringify(parsed));
-        } catch (err) {}
-      }
+      data = await waitForPaymentOperation(data);
+      const walletResult = await fetchUserCircleWallet();
+      if (walletResult?.wallet) setCircleWallet(walletResult.wallet);
 
       setWithdrawSuccess(`Success! Withdrew ${amountVal.toFixed(4)} USDC. TxHash: ${shortenAddress(data.txHash)}`);
       setWithdrawAmount("");
@@ -1763,49 +1406,15 @@ function App() {
   };
 
   const getDailyAISurfArticle = () => {
-    const days = [
-      "Sunday: Sovereign Oracle Networks and Autonomous Agent Data Markets",
-      "Monday: Cross-Chain Liquidity Migration on L2 Rollup Sequencers",
-      "Tuesday: Tokenomics Equilibrium Models for Sovereign LLM Swarms",
-      "Wednesday: Programmatic Micro-Tariffs and Decentralized GPU Compute Networks",
-      "Thursday: MEV Mitigation Frameworks in Concentrated Liquidity Pools",
-      "Friday: AI Surf: Capital Allocation Flywheels of Autonomous LLM Swarms",
-      "Saturday: Zero-Knowledge Proofs for Private On-Chain Capital Allocation"
-    ];
-    const dayIndex = new Date().getDay();
-    const defaultTitle = days[dayIndex];
-    
-    const activeTitle = surfTitleOverride || defaultTitle;
-    const activePrice = surfPriceOverride || "0.15";
-    const activePdfUrl = surfPdfUrlOverride || "https://pub-8288264395e64bebab09946b5bc0b740.r2.dev/SurfPaperCut/surfai-daily-briefing.pdf";
-    const defaultContent = `## SurfAI Daily Intelligence Dispatch
-
-### Overview
-This document was compiled programmatically by the **SurfAI autonomous agent network** to report on the state of decentralized resource allocation.
-
-* **Asset Inspected**: USDC / ARC Token
-* **Analysis Beat**: ${activeTitle.includes(': ') ? activeTitle.split(': ')[0] : 'AI-Agent Autonomous Economics'}
-* **Network Target**: Arc L1 Testnet
-* **Report Hash**: sha256-4cf8e3c1a9d023bf9a13b0c95e0c52d4aa182035e08f3c80
-
-### Cryptographic Receipt Verification
-Once payment is finalized on-chain via the **Lepton x402** protocol, the smart contract settles the ${activePrice} USDC tariff directly to the publisher.
-
-[The full PDF analysis briefing is compiled, signed, and hosted securely on Cloudflare R2 Decentralized Storage Container.]`;
-
-    const activeContent = surfContentOverride || defaultContent;
-
     return {
       id: "surfai-daily",
-      title: activeTitle,
-      author: "SurfAI",
+      title: "SurfAI Daily Intelligence Dispatch",
+      author: "DaveyNFTs",
       category: "AI-Agent Autonomous Economics",
-      price: activePrice,
+      price: "0.15",
       payee: "0x1746978f956142e0482f0aff320d917ace450bcf",
       verified: true,
-      snippet: "An advanced programmatic intelligence report compiled automatically by the SurfAI pipeline on daily capital flows, sovereign resource allocations, and micro-tariffs.",
-      content: activeContent,
-      pdfUrl: activePdfUrl
+      snippet: "An advanced programmatic intelligence report compiled automatically by the SurfAI pipeline on daily capital flows, sovereign resource allocations, and micro-tariffs."
     };
   };
 
@@ -1828,23 +1437,6 @@ Once payment is finalized on-chain via the **Lepton x402** protocol, the smart c
         }, 1000);
       }, 1000);
     }, 1000);
-  };
-
-  const handleSaveSurfConfig = (e) => {
-    e.preventDefault();
-    localStorage.setItem("papercut_surf_title_override", surfTitleOverride);
-    localStorage.setItem("papercut_surf_price_override", surfPriceOverride);
-    localStorage.setItem("papercut_surf_pdf_url_override", surfPdfUrlOverride);
-    localStorage.setItem("papercut_surf_content_override", surfContentOverride);
-    
-    setSurfConfigStatusMsg("SurfAI Configuration Saved Successfully!");
-    
-    // Refresh the article if it is the currently selected SurfAI article
-    if (selectedArticle && selectedArticle.id === "surfai-daily") {
-      setSelectedArticle(getDailyAISurfArticle());
-    }
-    
-    setTimeout(() => setSurfConfigStatusMsg(""), 3000);
   };
 
   const triggerVideoSimulation = () => {
@@ -1897,44 +1489,40 @@ Once payment is finalized on-chain via the **Lepton x402** protocol, the smart c
 
     setTxStatus("Authorizing pay-per-read micropayment via Circle W3S...");
 
-    const userEmail = user?.email?.address || user?.id || "anonymous-user";
-
     try {
-      const response = await fetch(`${BACKEND_URL}/api/articles/unlock`, {
+      const response = await authFetch(`${BACKEND_URL}/api/articles/unlock`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          email: userEmail,
-          articleId: selectedArticle.id,
-          walletId: circleWallet.walletId,
-          address: circleWallet.address
+          articleId: selectedArticle.id
         })
       });
       
-      const data = await safeParseResponse(response);
+      let data = await safeParseResponse(response);
       if (!response.ok) {
         throw new Error(data.error || "Micropayment failed.");
       }
+      data = await waitForPaymentOperation(data);
 
       console.log("[PaperCut React] Micropayment transfer successful:", data.txHash);
       setTxHash(data.txHash);
-      setTxStatus("Payment settled on Arc Testnet!");
+      setTxStatus("Payment settled successfully!");
 
       // Update local wallet balance state
-      setCircleWallet(prev => prev ? { ...prev, balance: data.balance } : null);
+      const walletResult = await fetchUserCircleWallet();
+      if (walletResult?.wallet) setCircleWallet(walletResult.wallet);
 
       // Save unlocked state
       const updatedUnlocked = { 
         ...unlockedArticles, 
         [selectedArticle.id]: {
-          txHash: data.txHash || "0x8fdc9dfa539f8fc0d13cf941f81e14d3d4aa182035e0",
+          txHash: data.txHash || data.transactionId,
           isMock: !!data.isMock
         } 
       };
       setUnlockedArticles(updatedUnlocked);
-      localStorage.setItem(`papercut_unlocked_articles_${userEmail}`, JSON.stringify(updatedUnlocked));
       
       setTimeout(() => {
         setTxStatus("");
@@ -2826,52 +2414,44 @@ Once payment is finalized on-chain via the **Lepton x402** protocol, the smart c
             <div className="greek-key"></div>
             <h2 className="serif-title font-italic" style={{ color: 'var(--ink-red)', fontSize: '24px', marginBottom: '8px' }}>ADMIN ACCESS CONTROL</h2>
             <p className="mono-text text-muted" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '24px' }}>
-              Cryptographic Signature Key Required
+              Verified Privy administrator session required
             </p>
             
             <form onSubmit={async (e) => {
               e.preventDefault();
-              setAdminPasswordError("");
+              setAdminAuthError("");
+              if (!authenticated) {
+                login();
+                return;
+              }
               try {
-                const response = await fetch(`${BACKEND_URL}/api/admin/authorize-ip`, {
+                const response = await authFetch(`${BACKEND_URL}/api/admin/session`, {
                   method: "POST",
-                  headers: {
-                    "Content-Type": "application/json"
-                  },
-                  body: JSON.stringify({ password: adminPasswordInput })
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({})
                 });
                 if (response.ok) {
                   setIsAdminAuthenticated(true);
-                  setAdminPasswordError("");
+                  setAdminAuthError("");
                 } else {
-                  setAdminPasswordError("INVALID ACCESS PASSKEY");
+                  const data = await safeParseResponse(response);
+                  setAdminAuthError(data.error || "THIS ACCOUNT IS NOT AN ADMINISTRATOR");
                 }
               } catch (err) {
-                console.error("Failed to authorize admin IP:", err);
+                console.error("Failed to authorize admin session:", err);
                 // SECURITY FIX: Removed hardcoded password fallback.
                 // Admin auth must go through the backend server.
-                setAdminPasswordError("SERVER UNREACHABLE — Cannot authenticate");
+                setAdminAuthError("SERVER UNREACHABLE — Cannot authenticate");
               }
             }} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', textAlign: 'left' }}>
-                <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>ENTER ACCREDITATION PASSWORD</label>
-                <input 
-                  type="password"
-                  required
-                  value={adminPasswordInput}
-                  onChange={(e) => setAdminPasswordInput(e.target.value)}
-                  placeholder="••••••••••••"
-                  style={{ padding: '10px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-mono)', fontSize: '14px', textAlign: 'center', letterSpacing: '0.2em' }}
-                />
-              </div>
               <button type="submit" className="btn" style={{ padding: '10px 0', letterSpacing: '0.06em', fontSize: '12px' }}>
-                VERIFY CREDENTIALS
+                {authenticated ? "VERIFY ADMIN ACCOUNT" : "SIGN IN WITH PRIVY"}
               </button>
             </form>
 
-            {adminPasswordError && (
+            {adminAuthError && (
               <div className="mono-text" style={{ marginTop: '16px', fontSize: '11px', color: 'var(--ink-red)', border: '1px dashed var(--ink-red)', padding: '6px', background: 'rgba(186,45,45,0.05)' }}>
-                {adminPasswordError}
+                {adminAuthError}
               </div>
             )}
             <div style={{ marginTop: '24px', borderTop: '1px dashed var(--ink-light-grey)', paddingTop: '16px' }}>
@@ -2969,68 +2549,6 @@ Once payment is finalized on-chain via the **Lepton x402** protocol, the smart c
                 )}
               </div>
 
-              {/* Card 2: SurfAI Config Form */}
-              <div className="vintage-form-card" style={{ border: '2px solid var(--ink-black)', padding: '24px', backgroundColor: 'var(--paper-accent)', boxShadow: '4px 4px 0 var(--ink-black)', width: '100%' }}>
-                <div style={{ fontFamily: 'var(--font-headline)', fontWeight: 'bold', fontSize: '15px', color: 'var(--ink-red)', borderBottom: '1px solid var(--ink-black)', paddingBottom: '6px', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  🌊 SurfAI Daily Post Config
-                </div>
-                <form onSubmit={handleSaveSurfConfig} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>ACTIVE REPORT TITLE (OVERRIDE)</label>
-                    <input 
-                      type="text" 
-                      value={surfTitleOverride}
-                      onChange={(e) => setSurfTitleOverride(e.target.value)}
-                      placeholder="Leave blank for day-of-week title" 
-                      style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '12px' }}
-                    />
-                  </div>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>TARIFF FEE (USDC)</label>
-                    <input 
-                      type="text" 
-                      required
-                      value={surfPriceOverride}
-                      onChange={(e) => setSurfPriceOverride(e.target.value)}
-                      placeholder="0.15" 
-                      style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-mono)', fontSize: '12px' }}
-                    />
-                  </div>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>CLOUDFLARE R2 PDF URL</label>
-                    <input 
-                      type="text" 
-                      required
-                      value={surfPdfUrlOverride}
-                      onChange={(e) => setSurfPdfUrlOverride(e.target.value)}
-                      placeholder="https://pub-..." 
-                      style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-mono)', fontSize: '11px' }}
-                    />
-                  </div>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label className="mono-text" style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--ink-black)' }}>REPORT CONTENT (MARKDOWN)</label>
-                    <textarea 
-                      rows="6"
-                      value={surfContentOverride}
-                      onChange={(e) => setSurfContentOverride(e.target.value)}
-                      placeholder="Enter custom analysis report content in Markdown..." 
-                      style={{ padding: '8px', border: '1px solid var(--ink-black)', background: 'var(--paper-bg)', fontFamily: 'var(--font-serif)', fontSize: '12px', resize: 'vertical' }}
-                    />
-                  </div>
-                  
-                  <button type="submit" className="btn btn-sm" style={{ padding: '10px 0', marginTop: '8px', letterSpacing: '0.06em', fontSize: '12px' }}>
-                    SAVE SURFAI CONFIG
-                  </button>
-                </form>
-                {surfConfigStatusMsg && (
-                  <div className="mono-text" style={{ marginTop: '12px', fontSize: '11px', color: 'green', textAlign: 'center', border: '1px dashed green', padding: '6px', background: 'rgba(0,128,0,0.05)' }}>
-                    {surfConfigStatusMsg}
-                  </div>
-                )}
-              </div>
             </div>
 
             {/* Right pane: Publishers List */}
@@ -3634,23 +3152,29 @@ Once payment is finalized on-chain via the **Lepton x402** protocol, the smart c
                               <p className="serif-body" style={{ fontSize: '12.5px', marginBottom: '16px', color: 'var(--ink-grey)' }}>
                                 PDF Report Hash: <span style={{ fontFamily: 'monospace', fontSize: '11px', background: 'var(--paper-bg-darker)', padding: '2px 4px' }}>sha256-4cf8e3c1a9d023bf9a13b0c95e0c52d4aa182035e08f3c80</span>
                               </p>
-                              <a 
-                                className="btn"
-                                href={selectedArticle.pdfUrl || "https://pub-8288264395e64bebab09946b5bc0b740.r2.dev/SurfPaperCut/surfai-daily-briefing.pdf"} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                style={{ 
-                                  padding: '10px 24px', 
-                                  fontSize: '12px', 
-                                  textDecoration: 'none', 
-                                  display: 'inline-block',
-                                  background: 'var(--ink-red)',
-                                  color: '#fff',
-                                  boxShadow: '4px 4px 0 var(--ink-black)'
-                                }}
-                              >
-                                📥 DOWNLOAD REPORT FROM CLOUDFLARE R2
-                              </a>
+                              {selectedArticle.pdfUrl ? (
+                                <a
+                                  className="btn"
+                                  href={selectedArticle.pdfUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{
+                                    padding: '10px 24px',
+                                    fontSize: '12px',
+                                    textDecoration: 'none',
+                                    display: 'inline-block',
+                                    background: 'var(--ink-red)',
+                                    color: '#fff',
+                                    boxShadow: '4px 4px 0 var(--ink-black)'
+                                  }}
+                                >
+                                  📥 DOWNLOAD PROTECTED REPORT
+                                </a>
+                              ) : (
+                                <p className="mono-text" style={{ fontSize: '11px', color: 'var(--ink-grey)' }}>
+                                  No protected PDF has been configured for this report.
+                                </p>
+                              )}
                               <button 
                                 className="btn btn-secondary"
                                 onClick={() => {
@@ -3941,7 +3465,7 @@ Once payment is finalized on-chain via the **Lepton x402** protocol, the smart c
                     disabled={faucetLoading}
                     style={{ width: '100%' }}
                   >
-                    {faucetLoading ? "STAMPING TARIFF..." : "CLAIM 0.05 USDC FAUCET"}
+                    {faucetLoading ? "STAMPING TARIFF..." : "CLAIM 1.00 USDC FAUCET"}
                   </button>
                   {faucetSuccess && (
                     <div className="mono-text" style={{ fontSize: '9px', color: 'green', border: '1px dashed green', padding: '6px', background: 'rgba(0,128,0,0.03)', marginTop: '8px', textAlign: 'center' }}>

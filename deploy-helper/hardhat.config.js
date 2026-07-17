@@ -1,50 +1,28 @@
-import "@nomicfoundation/hardhat-ethers";
-import "@nomicfoundation/hardhat-verify";
-import "@openzeppelin/hardhat-upgrades";
-import dotenv from "dotenv";
+import "dotenv/config";
+import { configVariable, defineConfig } from "hardhat/config";
+import hardhatEthers from "@nomicfoundation/hardhat-ethers";
+import hardhatMocha from "@nomicfoundation/hardhat-mocha";
 
-dotenv.config();
-
-const privateKey = process.env.PRIVATE_KEY || "";
-
-export default {
+export default defineConfig({
+  plugins: [hardhatEthers, hardhatMocha],
   solidity: {
-    version: "0.8.20",
+    version: "0.8.23",
     settings: {
-      optimizer: {
-        enabled: true,
-        runs: 200,
-      },
+      optimizer: { enabled: true, runs: 200 },
     },
   },
   networks: {
     mantleSepolia: {
+      type: "http",
+      chainType: "l1",
       url: "https://rpc.sepolia.mantle.xyz",
-      accounts: privateKey ? [privateKey] : [],
-      timeout: 120000,
+      accounts: [configVariable("PRIVATE_KEY")],
     },
     arcTestnet: {
+      type: "http",
+      chainType: "l1",
       url: "https://rpc.testnet.arc.network",
-      accounts: privateKey ? [privateKey] : [],
-      timeout: 120000,
+      accounts: [configVariable("PRIVATE_KEY")],
     },
   },
-  etherscan: {
-    apiKey: {
-      mantleSepolia: "xyz",
-    },
-    customChains: [
-      {
-        network: "mantleSepolia",
-        chainId: 5003,
-        urls: {
-          apiURL: "https://explorer.sepolia.mantle.xyz/api",
-          browserURL: "https://explorer.sepolia.mantle.xyz",
-        },
-      },
-    ],
-  },
-  sourcify: {
-    enabled: true,
-  },
-};
+});

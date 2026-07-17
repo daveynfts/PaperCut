@@ -1,14 +1,17 @@
-const { ethers } = require("ethers");
+import dotenv from "dotenv";
+import { ethers } from "ethers";
 
-async function checkWallet() {
-    const mnemonic = "game fat model depend catch false embark busy reason shield fish escape";
-    const wallet = ethers.Wallet.fromPhrase(mnemonic);
-    console.log("Derived Address:", wallet.address);
-    console.log("Private Key:", wallet.privateKey);
+dotenv.config();
 
-    const provider = new ethers.JsonRpcProvider("https://rpc.sepolia.mantle.xyz");
-    const balance = await provider.getBalance(wallet.address);
-    console.log("Balance (MNT):", ethers.formatEther(balance));
+async function main() {
+  if (!process.env.PRIVATE_KEY) throw new Error("PRIVATE_KEY is required in the local .env file");
+  const provider = new ethers.JsonRpcProvider(process.env.RPC_URL || "https://rpc.testnet.arc.network");
+  const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+  console.log("Wallet address:", wallet.address);
+  console.log("Native balance:", ethers.formatEther(await provider.getBalance(wallet.address)));
 }
 
-checkWallet().catch(console.error);
+main().catch((error) => {
+  console.error(error.message);
+  process.exitCode = 1;
+});

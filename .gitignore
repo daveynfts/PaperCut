@@ -1,7 +1,13 @@
 node_modules/
 .env
+.env.*
+!.env.example
 .DS_Store
 *.log
 users.json
+transactions.json
+server/*.tmp
 assets/*.mp4
+coverage/
+deployments/
 

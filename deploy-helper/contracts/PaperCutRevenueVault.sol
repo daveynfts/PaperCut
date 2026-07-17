@@ -1,31 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-/**
- * @title IERC20
- * @dev Complete ERC20 Token Standard Interface (M-1)
- */
-interface IERC20 {
-    function transfer(address to, uint256 value) external returns (bool);
-    function transferFrom(address from, address to, uint256 value) external returns (bool);
-    function balanceOf(address account) external view returns (uint256);
-    function approve(address spender, uint256 value) external returns (bool);
-    function allowance(address owner, address spender) external view returns (uint256);
-    function totalSupply() external view returns (uint256);
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-    event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(address indexed owner, address indexed spender, uint256 value);
-}
-
-/**
- * @title PaperCutRevenueVault
- * @notice Smart contract for direct on-chain article purchases and publisher revenue distribution.
- * Readers pay USDC directly to this contract when buying an article. The contract allocates the funds,
- * handles platform fee splits, and lets publishers claim their earnings securely.
- */
+/// @notice Custodial article revenue vault with owner-controlled prices and recipients.
 contract PaperCutRevenueVault {
+    using SafeERC20 for IERC20;
 
-    // --- Custom Errors (I-3) ---
     error OnlyOwnerPermitted();
     error OnlyPendingOwnerPermitted();
     error ReentrantCall();
@@ -34,19 +16,44 @@ contract PaperCutRevenueVault {
     error FeeTooHigh();
     error InvalidOwnerAddress();
     error InvalidPublisherAddress();
-    error AmountMustBePositive();
-    error USDCTransferFailed();
+    error InvalidArticleId();
+    error InvalidPrice();
+    error ArticleUnavailable();
     error AlreadyPurchased();
     error NoClaimableRevenue();
     error InsufficientContractBalance();
-    error USDCClaimTransferFailed();
     error NoPlatformFeesToWithdraw();
-    error USDCFeeWithdrawalFailed();
     error CannotRecoverUSDC();
-    error RecoveryTransferFailed();
 
-    // --- Reentrancy Guard (H-2) ---
+    struct Article {
+        address publisher;
+        uint256 price;
+        bool active;
+    }
+
     bool private _locked;
+    bool public paused;
+    IERC20 public immutable usdcToken;
+    address public owner;
+    address public pendingOwner;
+    uint256 public platformFeeBps;
+    uint256 public accumulatedPlatformFees;
+    mapping(bytes32 => Article) public articles;
+    mapping(address => uint256) public totalEarned;
+    mapping(address => uint256) public totalClaimed;
+    mapping(address => mapping(bytes32 => bool)) public hasPurchased;
+
+    event ArticleRegistered(bytes32 indexed articleKey, string articleId, address indexed publisher, uint256 price, bool active);
+    event ArticlePurchased(address indexed reader, bytes32 indexed articleKey, string articleId, address indexed publisher, uint256 amount, uint256 publisherShare, uint256 platformFee);
+    event RevenueClaimed(address indexed publisher, uint256 amount);
+    event PlatformFeeUpdated(uint256 oldFeeBps, uint256 newFeeBps);
+    event PlatformFeesWithdrawn(address indexed owner, uint256 amount);
+    event OwnerUpdated(address indexed oldOwner, address indexed newOwner);
+    event OwnershipTransferProposed(address indexed currentOwner, address indexed pendingOwner);
+    event ERC20Recovered(address indexed token, uint256 amount);
+    event Paused(address indexed account);
+    event Unpaused(address indexed account);
+
     modifier nonReentrant() {
         if (_locked) revert ReentrantCall();
         _locked = true;
@@ -54,110 +61,93 @@ contract PaperCutRevenueVault {
         _locked = false;
     }
 
-    // --- Pausable (L-6) ---
-    bool public paused;
-
     modifier whenNotPaused() {
         if (paused) revert ContractIsPaused();
         _;
     }
-
-    // USDC Token Address used for coinage
-    IERC20 public immutable usdcToken;
-    
-    // Contract owner (admin/platform registry)
-    address public owner;
-
-    // Two-step ownership transfer (M-2)
-    address public pendingOwner;
-    
-    // Platform fee basis points (e.g., 500 = 5% fee)
-    // L-5: A value of 0 is intentionally allowed, meaning no platform fee is charged.
-    uint256 public platformFeeBps;
-    
-    // Accumulated fee revenue for the platform
-    uint256 public accumulatedPlatformFees;
-
-    // Mapping: Publisher Address => Total historical revenue earned (after fees)
-    mapping(address => uint256) public totalEarned;
-    
-    // Mapping: Publisher Address => Total claimed revenue
-    mapping(address => uint256) public totalClaimed;
-
-    // Purchase tracking to prevent duplicate charges (H-4)
-    mapping(address => mapping(string => bool)) public hasPurchased;
-
-    // Events
-    event ArticlePurchased(
-        address indexed reader, 
-        string articleId, 
-        address indexed publisher, 
-        uint256 amount,
-        uint256 publisherShare,
-        uint256 platformFee
-    );
-    event RevenueClaimed(address indexed publisher, address indexed receiver, uint256 amount);
-    event PlatformFeeUpdated(uint256 oldFeeBps, uint256 newFeeBps);
-    event PlatformFeesWithdrawn(address indexed owner, uint256 amount);
-    event OwnerUpdated(address indexed oldOwner, address indexed newOwner);
-    event OwnershipTransferProposed(address indexed currentOwner, address indexed pendingOwner);
-    event ERC20Recovered(address indexed token, uint256 amount); // L-1
-    event Paused(address account);
-    event Unpaused(address account);
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert OnlyOwnerPermitted();
         _;
     }
 
-    constructor(address _usdcToken, uint256 _platformFeeBps) {
-        if (_usdcToken == address(0)) revert InvalidTokenAddress();
-        if (_platformFeeBps > 3000) revert FeeTooHigh(); // Max fee capped at 30%
-        usdcToken = IERC20(_usdcToken);
+    constructor(address token, uint256 feeBps) {
+        if (token == address(0)) revert InvalidTokenAddress();
+        if (feeBps > 3000) revert FeeTooHigh();
+        usdcToken = IERC20(token);
         owner = msg.sender;
-        platformFeeBps = _platformFeeBps;
+        platformFeeBps = feeBps;
     }
 
-    // --- Pausable functions (L-6) ---
-
-    /**
-     * @notice Pause the contract, disabling purchases and claims.
-     */
     function pause() external onlyOwner {
         paused = true;
         emit Paused(msg.sender);
     }
 
-    /**
-     * @notice Unpause the contract, re-enabling purchases and claims.
-     */
     function unpause() external onlyOwner {
         paused = false;
         emit Unpaused(msg.sender);
     }
 
-    /**
-     * @notice Set platform fee in basis points (1 bps = 0.01%, 10000 bps = 100%)
-     */
-    function setPlatformFeeBps(uint256 _newFeeBps) external onlyOwner {
-        if (_newFeeBps > 3000) revert FeeTooHigh();
-        emit PlatformFeeUpdated(platformFeeBps, _newFeeBps);
-        platformFeeBps = _newFeeBps;
+    function registerArticle(string calldata articleId, address publisher, uint256 price, bool active) external onlyOwner {
+        bytes32 key = _articleKey(articleId);
+        if (publisher == address(0)) revert InvalidPublisherAddress();
+        if (price == 0) revert InvalidPrice();
+        articles[key] = Article({publisher: publisher, price: price, active: active});
+        emit ArticleRegistered(key, articleId, publisher, price, active);
     }
 
-    /**
-     * @notice Propose a new owner (two-step transfer) (M-2)
-     * @param _newOwner Address of the proposed new owner
-     */
-    function transferOwnership(address _newOwner) external onlyOwner {
-        if (_newOwner == address(0)) revert InvalidOwnerAddress();
-        pendingOwner = _newOwner;
-        emit OwnershipTransferProposed(owner, _newOwner);
+    function purchaseArticle(string calldata articleId) external whenNotPaused nonReentrant {
+        bytes32 key = _articleKey(articleId);
+        Article memory article = articles[key];
+        if (!article.active || article.publisher == address(0) || article.price == 0) revert ArticleUnavailable();
+        if (hasPurchased[msg.sender][key]) revert AlreadyPurchased();
+        hasPurchased[msg.sender][key] = true;
+
+        usdcToken.safeTransferFrom(msg.sender, address(this), article.price);
+        uint256 fee = (article.price * platformFeeBps) / 10000;
+        uint256 publisherShare = article.price - fee;
+        accumulatedPlatformFees += fee;
+        totalEarned[article.publisher] += publisherShare;
+        emit ArticlePurchased(msg.sender, key, articleId, article.publisher, article.price, publisherShare, fee);
     }
 
-    /**
-     * @notice Accept ownership (must be called by the pending owner) (M-2)
-     */
+    function getWithdrawableBalance(address publisher) public view returns (uint256) {
+        uint256 earned = totalEarned[publisher];
+        uint256 claimed = totalClaimed[publisher];
+        return earned > claimed ? earned - claimed : 0;
+    }
+
+    function claim() external whenNotPaused nonReentrant {
+        uint256 amount = getWithdrawableBalance(msg.sender);
+        if (amount == 0) revert NoClaimableRevenue();
+        if (usdcToken.balanceOf(address(this)) < amount) revert InsufficientContractBalance();
+        totalClaimed[msg.sender] += amount;
+        usdcToken.safeTransfer(msg.sender, amount);
+        emit RevenueClaimed(msg.sender, amount);
+    }
+
+    function setPlatformFeeBps(uint256 newFeeBps) external onlyOwner {
+        if (newFeeBps > 3000) revert FeeTooHigh();
+        emit PlatformFeeUpdated(platformFeeBps, newFeeBps);
+        platformFeeBps = newFeeBps;
+    }
+
+    function withdrawPlatformFees() external onlyOwner nonReentrant {
+        uint256 amount = accumulatedPlatformFees;
+        if (amount == 0) revert NoPlatformFeesToWithdraw();
+        if (usdcToken.balanceOf(address(this)) < amount) revert InsufficientContractBalance();
+        accumulatedPlatformFees = 0;
+        usdcToken.safeTransfer(owner, amount);
+        emit PlatformFeesWithdrawn(owner, amount);
+    }
+
+    function transferOwnership(address newOwner) external onlyOwner {
+        if (newOwner == address(0)) revert InvalidOwnerAddress();
+        pendingOwner = newOwner;
+        emit OwnershipTransferProposed(owner, newOwner);
+    }
+
     function acceptOwnership() external {
         if (msg.sender != pendingOwner) revert OnlyPendingOwnerPermitted();
         emit OwnerUpdated(owner, msg.sender);
@@ -165,94 +155,19 @@ contract PaperCutRevenueVault {
         pendingOwner = address(0);
     }
 
-    /**
-     * @notice Purchases an article by transferring USDC from the reader's wallet,
-     * deducting the platform fee, and allocating the remainder to the publisher.
-     * @param articleId The identifier of the article.
-     * @param publisher The target publisher address who wrote the article.
-     * @param amount The purchase price in USDC (decimals included).
-     */
-    function purchaseArticle(
-        string calldata articleId,
-        address publisher,
-        uint256 amount
-    ) external whenNotPaused nonReentrant {
-        if (publisher == address(0)) revert InvalidPublisherAddress();
-        if (amount == 0) revert AmountMustBePositive();
-
-        // Prevent duplicate purchases (H-4)
-        if (hasPurchased[msg.sender][articleId]) revert AlreadyPurchased();
-        hasPurchased[msg.sender][articleId] = true;
-
-        // Transfer USDC from reader to this contract
-        if (!usdcToken.transferFrom(msg.sender, address(this), amount)) revert USDCTransferFailed();
-
-        // Calculate platform fee and publisher share
-        uint256 fee = (amount * platformFeeBps) / 10000;
-        uint256 pubShare = amount - fee;
-
-        // Allocate balances
-        accumulatedPlatformFees += fee;
-        totalEarned[publisher] += pubShare;
-
-        emit ArticlePurchased(msg.sender, articleId, publisher, amount, pubShare, fee);
+    function recoverERC20(address token, uint256 amount) external onlyOwner {
+        if (token == address(usdcToken)) revert CannotRecoverUSDC();
+        IERC20(token).safeTransfer(owner, amount);
+        emit ERC20Recovered(token, amount);
     }
 
-    /**
-     * @notice Computes current claimable/withdrawable balance for a publisher.
-     */
-    function getWithdrawableBalance(address publisher) public view returns (uint256) {
-        uint256 earned = totalEarned[publisher];
-        uint256 claimed = totalClaimed[publisher];
-        if (earned <= claimed) return 0;
-        // I-1: Safe to use unchecked since we verified earned > claimed above
-        unchecked {
-            return earned - claimed;
-        }
+    function articleKey(string calldata articleId) external pure returns (bytes32) {
+        return _articleKey(articleId);
     }
 
-    /**
-     * @notice Publisher claims all available revenue.
-     */
-    function claim() external whenNotPaused nonReentrant {
-        uint256 claimable = getWithdrawableBalance(msg.sender);
-        if (claimable == 0) revert NoClaimableRevenue();
-
-        // Verify contract has enough reserve
-        uint256 contractUsdcBalance = usdcToken.balanceOf(address(this));
-        if (contractUsdcBalance < claimable) revert InsufficientContractBalance();
-
-        // Checks-Effects-Interactions pattern
-        totalClaimed[msg.sender] += claimable;
-
-        // H-1: Emit event BEFORE external call
-        emit RevenueClaimed(msg.sender, msg.sender, claimable);
-
-        if (!usdcToken.transfer(msg.sender, claimable)) revert USDCClaimTransferFailed();
-    }
-
-    /**
-     * @notice Owner withdraws accumulated platform fees.
-     */
-    function withdrawPlatformFees() external onlyOwner nonReentrant {
-        uint256 amount = accumulatedPlatformFees;
-        if (amount == 0) revert NoPlatformFeesToWithdraw();
-
-        // L-4: Verify contract actually holds enough USDC
-        if (usdcToken.balanceOf(address(this)) < amount) revert InsufficientContractBalance();
-
-        accumulatedPlatformFees = 0;
-        if (!usdcToken.transfer(owner, amount)) revert USDCFeeWithdrawalFailed();
-
-        emit PlatformFeesWithdrawn(owner, amount);
-    }
-
-    /**
-     * @notice Recover non-USDC ERC20 tokens sent to the contract by mistake.
-     */
-    function recoverERC20(address tokenAddress, uint256 tokenAmount) external onlyOwner {
-        if (tokenAddress == address(usdcToken)) revert CannotRecoverUSDC();
-        if (!IERC20(tokenAddress).transfer(owner, tokenAmount)) revert RecoveryTransferFailed();
-        emit ERC20Recovered(tokenAddress, tokenAmount); // L-1
+    function _articleKey(string calldata articleId) private pure returns (bytes32) {
+        bytes memory value = bytes(articleId);
+        if (value.length == 0 || value.length > 128) revert InvalidArticleId();
+        return keccak256(value);
     }
 }

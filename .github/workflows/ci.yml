@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vercel-demo-react
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: vercel-demo-react/package-lock.json
+      - run: npm ci
+      - run: npm run check
+
+  contracts:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy-helper
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: deploy-helper/package-lock.json
+      - run: npm ci
+      - run: cmp contracts/PaperCutPublisher.sol ../contracts/PaperCutPublisher.sol
+      - run: cmp contracts/PaperCutRevenueVault.sol ../contracts/PaperCutRevenueVault.sol
+      - run: npm run compile
+      - run: npm test

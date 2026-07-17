@@ -2,51 +2,45 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-/**
- * @title PaperCutPublisher
- * @notice Manages on-chain article unlocking with direct publisher payouts, authorization, and emergency controls.
- * @dev Integrates with ERC20 USDC for micropayments, with pause mechanisms and access controls.
- */
+/// @notice Direct USDC article payments with owner-controlled prices and recipients.
 contract PaperCutPublisher {
-    
-    // --- Custom Errors ---
+    using SafeERC20 for IERC20;
+
     error OnlyOwnerPermitted();
+    error OnlyPendingOwnerPermitted();
     error InvalidTokenAddress();
-    error InvalidAuthorAddress();
-    error AmountMustBePositive();
-    error USDCTransferFailed();
+    error InvalidPublisherAddress();
+    error InvalidArticleId();
+    error InvalidPrice();
     error ContractIsPaused();
     error PublisherNotAuthorized();
+    error ArticleUnavailable();
+    error AlreadyUnlocked();
 
-    // --- State Variables ---
-    
-    // Contract owner
+    struct Article {
+        address publisher;
+        uint256 price;
+        bool active;
+    }
+
     address public owner;
-    
-    // USDC Token Address used for micropayments
+    address public pendingOwner;
     IERC20 public immutable usdcToken;
-
-    // Pausable state
     bool public paused;
-
-    // Registry of authorized publishers
     mapping(address => bool) public authorizedPublishers;
+    mapping(bytes32 => Article) public articles;
+    mapping(address => mapping(bytes32 => bool)) public hasUnlocked;
 
-    // --- Events ---
-    event ArticleUnlocked(
-        address indexed reader,
-        string articleId,
-        address indexed author,
-        uint256 amount
-    );
-    event PublisherAuthorized(address indexed publisher);
-    event PublisherDeauthorized(address indexed publisher);
+    event ArticleRegistered(bytes32 indexed articleKey, string articleId, address indexed publisher, uint256 price, bool active);
+    event ArticleUnlocked(address indexed reader, bytes32 indexed articleKey, string articleId, address indexed publisher, uint256 amount);
+    event PublisherAuthorized(address indexed publisher, bool authorized);
     event OwnerUpdated(address indexed oldOwner, address indexed newOwner);
-    event Paused(address account);
-    event Unpaused(address account);
+    event OwnershipTransferProposed(address indexed currentOwner, address indexed pendingOwner);
+    event Paused(address indexed account);
+    event Unpaused(address indexed account);
 
-    // --- Modifiers ---
     modifier onlyOwner() {
         if (msg.sender != owner) revert OnlyOwnerPermitted();
         _;
@@ -57,74 +51,68 @@ contract PaperCutPublisher {
         _;
     }
 
-    constructor(address _usdcToken) {
-        if (_usdcToken == address(0)) revert InvalidTokenAddress();
+    constructor(address token) {
+        if (token == address(0)) revert InvalidTokenAddress();
         owner = msg.sender;
-        usdcToken = IERC20(_usdcToken);
+        usdcToken = IERC20(token);
     }
 
-    // --- Admin / Owner Functions ---
-
-    /**
-     * @notice Pause the contract, disabling article unlocks.
-     */
     function pause() external onlyOwner {
         paused = true;
         emit Paused(msg.sender);
     }
 
-    /**
-     * @notice Unpause the contract, re-enabling article unlocks.
-     */
     function unpause() external onlyOwner {
         paused = false;
         emit Unpaused(msg.sender);
     }
 
-    /**
-     * @notice Authorize a publisher to receive micropayments.
-     */
-    function authorizePublisher(address publisher) external onlyOwner {
-        if (publisher == address(0)) revert InvalidAuthorAddress();
-        authorizedPublishers[publisher] = true;
-        emit PublisherAuthorized(publisher);
+    function setPublisherAuthorization(address publisher, bool authorized) external onlyOwner {
+        if (publisher == address(0)) revert InvalidPublisherAddress();
+        authorizedPublishers[publisher] = authorized;
+        emit PublisherAuthorized(publisher, authorized);
     }
 
-    /**
-     * @notice Deauthorize a publisher.
-     */
-    function deauthorizePublisher(address publisher) external onlyOwner {
-        authorizedPublishers[publisher] = false;
-        emit PublisherDeauthorized(publisher);
+    function registerArticle(string calldata articleId, address publisher, uint256 price, bool active) external onlyOwner {
+        bytes32 key = _articleKey(articleId);
+        if (publisher == address(0)) revert InvalidPublisherAddress();
+        if (!authorizedPublishers[publisher]) revert PublisherNotAuthorized();
+        if (price == 0) revert InvalidPrice();
+        articles[key] = Article({publisher: publisher, price: price, active: active});
+        emit ArticleRegistered(key, articleId, publisher, price, active);
     }
 
-    /**
-     * @notice Transfer ownership of the contract.
-     */
-    function transferOwnership(address _newOwner) external onlyOwner {
-        if (_newOwner == address(0)) revert OnlyOwnerPermitted();
-        emit OwnerUpdated(owner, _newOwner);
-        owner = _newOwner;
+    function unlockArticle(string calldata articleId) external whenNotPaused {
+        bytes32 key = _articleKey(articleId);
+        Article memory article = articles[key];
+        if (!article.active || !authorizedPublishers[article.publisher]) revert ArticleUnavailable();
+        if (hasUnlocked[msg.sender][key]) revert AlreadyUnlocked();
+
+        hasUnlocked[msg.sender][key] = true;
+        usdcToken.safeTransferFrom(msg.sender, article.publisher, article.price);
+        emit ArticleUnlocked(msg.sender, key, articleId, article.publisher, article.price);
     }
 
-    // --- Core Functions ---
+    function transferOwnership(address newOwner) external onlyOwner {
+        if (newOwner == address(0)) revert OnlyOwnerPermitted();
+        pendingOwner = newOwner;
+        emit OwnershipTransferProposed(owner, newOwner);
+    }
 
-    /**
-     * @notice Direct micropayment for unlocking articles on-chain.
-     * @param articleId The unique identifier of the article.
-     * @param author The publisher receiving the USDC.
-     * @param amount The USDC amount in microunits (6 decimals).
-     */
-    function unlockArticle(string calldata articleId, address author, uint256 amount) external whenNotPaused {
-        if (author == address(0)) revert InvalidAuthorAddress();
-        if (amount == 0) revert AmountMustBePositive();
-        if (!authorizedPublishers[author]) revert PublisherNotAuthorized();
-        
-        // Transfer USDC from reader (msg.sender) to author
-        if (!usdcToken.transferFrom(msg.sender, author, amount)) {
-            revert USDCTransferFailed();
-        }
+    function acceptOwnership() external {
+        if (msg.sender != pendingOwner) revert OnlyPendingOwnerPermitted();
+        emit OwnerUpdated(owner, msg.sender);
+        owner = msg.sender;
+        pendingOwner = address(0);
+    }
 
-        emit ArticleUnlocked(msg.sender, articleId, author, amount);
+    function articleKey(string calldata articleId) external pure returns (bytes32) {
+        return _articleKey(articleId);
+    }
+
+    function _articleKey(string calldata articleId) private pure returns (bytes32) {
+        bytes memory value = bytes(articleId);
+        if (value.length == 0 || value.length > 128) revert InvalidArticleId();
+        return keccak256(value);
     }
 }
