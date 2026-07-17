@@ -18,7 +18,7 @@
   --font-gothic: 'Pirata One', 'UnifrakturCook', 'UnifrakturMaguntia', serif;
   --font-mono: 'Special Elite', 'Courier Prime', Courier, monospace;
   
-  --nav-height: 120px; /* Taller nav header to act as a proper newspaper masthead */
+  --nav-height: 108px;
 }
 
 * {
@@ -33,7 +33,7 @@ body {
   background-size: 4px 4px;
   color: var(--ink-black);
   font-family: var(--font-serif);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
@@ -53,7 +53,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 18px 32px 0px;
+  padding: 12px 32px 0;
   position: relative;
   z-index: 10;
 }
@@ -81,7 +81,7 @@ body {
 
 .logo-text {
   font-family: var(--font-gothic);
-  font-size: 40px;
+  font-size: 36px;
   letter-spacing: 0.05em;
   color: var(--ink-black);
   text-transform: uppercase;
@@ -96,7 +96,7 @@ body {
   border-bottom: 5px double var(--ink-black);
   padding: 10px 0;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--ink-black);
 }
 
@@ -227,7 +227,7 @@ body {
 
 .item-count {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--ink-grey);
 }
 
@@ -271,13 +271,13 @@ body {
   display: flex;
   justify-content: space-between;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--ink-grey);
 }
 
 .card-snippet {
   font-family: var(--font-serif);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--ink-grey);
   line-height: 1.5;
   margin-top: 8px;
@@ -359,7 +359,7 @@ body {
 
 .rubber-stamp {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: bold;
   padding: 6px 12px;
   border-radius: 0;
@@ -446,13 +446,11 @@ body {
 /* Multi-column Layout for Vintage Newspaper Feel */
 .article-body {
   font-family: var(--font-serif);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.8;
   color: var(--ink-black);
-  column-count: 2;
-  column-gap: 28px;
-  column-rule: 1px dashed var(--ink-light-grey);
-  text-align: justify;
+  column-count: 1;
+  text-align: left;
 }
 
 .content-text {
@@ -1641,4 +1639,285 @@ div[id="privy-dialog"] > div,
   outline-offset: -6px !important;
   box-shadow: 8px 8px 0px var(--ink-black) !important;
   border-radius: 0px !important;
+}
+
+/* ============ UX & ACCESSIBILITY REFINEMENTS ============ */
+:where(button, a, input, textarea, select, summary, [role="button"]):focus-visible {
+  outline: 3px solid #2775ca;
+  outline-offset: 3px;
+}
+
+.nav-front-page-btn {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  padding: 4px 0;
+  text-align: inherit;
+}
+
+.verified-badge-button {
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  margin-left: 2px;
+  padding: 7px;
+  border: 0;
+  background: transparent;
+  color: #1d9bf0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.verified-badge-button svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+.verified-learn-more {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 2px 3px;
+  color: var(--ink-red);
+  cursor: pointer;
+  text-decoration: underline;
+  font: bold 12px var(--font-mono);
+}
+
+.article-card {
+  position: relative;
+  padding: 0;
+}
+
+.article-card.active {
+  padding-left: 0;
+}
+
+.article-card-select {
+  appearance: none;
+  width: 100%;
+  padding: 18px 52px 18px 24px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.article-card.active .article-card-select {
+  padding-left: 20px;
+}
+
+.article-card-select:focus-visible {
+  outline-offset: -4px;
+}
+
+.article-card-verified {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+}
+
+.surfai-logo-button,
+.surfai-ticker-link {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+}
+
+.surfai-ticker-link:hover,
+.surfai-ticker-link:focus-visible {
+  color: #fff !important;
+}
+
+.mobile-back-button {
+  display: none;
+  align-self: flex-start;
+  margin-bottom: 20px;
+  border: 1px solid var(--ink-black);
+  background: transparent;
+  color: var(--ink-black);
+  padding: 8px 12px;
+  font: bold 12px var(--font-mono);
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.paywall-intro {
+  max-width: 520px;
+  margin: 0 auto 18px;
+  color: var(--ink-grey);
+  font-size: 14px;
+}
+
+.paywall-options-container {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 18px;
+}
+
+.paywall-primary-option {
+  min-height: 0;
+  max-width: 520px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 18px;
+  border: 1px solid var(--ink-black);
+  background: rgba(245, 238, 211, 0.65);
+}
+
+.paywall-primary-option .btn-paywall {
+  max-width: 300px;
+  min-height: 44px;
+  font-size: 12px;
+}
+
+.paywall-technical-details {
+  width: 100%;
+  border-top: 1px dashed var(--ink-light-grey);
+  padding-top: 12px;
+  color: var(--ink-grey);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.paywall-technical-details > summary {
+  width: max-content;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.paywall-agent-option {
+  max-width: 540px;
+  min-height: 0;
+  margin: 12px auto 0;
+}
+
+.wallet-address-box {
+  width: 100%;
+  color: var(--ink-black);
+  text-align: left;
+}
+
+.wallet-address-box:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.wallet-disclosure {
+  margin-top: 14px;
+  border-top: 1px dashed var(--ink-light-grey);
+  padding-top: 12px;
+}
+
+.wallet-disclosure > summary {
+  cursor: pointer;
+  font: bold 12px var(--font-mono);
+  color: var(--ink-black);
+  text-transform: uppercase;
+}
+
+.wallet-withdraw-section {
+  margin-top: 12px;
+  padding-top: 4px;
+}
+
+.wallet-form-label {
+  color: var(--ink-grey);
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.wallet-close-btn {
+  width: 40px;
+  height: 40px;
+}
+
+@media (max-width: 768px) {
+  .logo-text {
+    font-size: 32px;
+  }
+
+  .nav-controls {
+    align-items: stretch;
+  }
+
+  .nav-controls > * {
+    width: 100%;
+    justify-content: center !important;
+    text-align: center !important;
+  }
+
+  .main-container.has-selected-article .sidebar {
+    display: none;
+  }
+
+  .mobile-back-button {
+    display: inline-flex;
+  }
+
+  .viewer-state {
+    padding: 26px 18px 48px;
+  }
+
+  .serif-title {
+    font-size: clamp(28px, 9vw, 38px);
+  }
+
+  .article-meta {
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    font-size: 12px;
+  }
+
+  .paywall-card {
+    margin: 22px 0;
+    padding: 24px 16px;
+    box-shadow: 4px 4px 0 var(--ink-black);
+  }
+
+  .paywall-title {
+    font-size: 24px;
+  }
+
+  .surfai-ticker-bar {
+    position: static !important;
+    flex-wrap: nowrap !important;
+    padding: 8px 12px !important;
+  }
+
+  .surfai-ticker-content {
+    min-width: 0 !important;
+    overflow: hidden;
+  }
+
+  .surfai-ticker-kicker {
+    display: none;
+  }
+
+  .surfai-ticker-link {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

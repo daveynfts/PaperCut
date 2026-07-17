@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { useIdentityToken, usePrivy, useWallets, useLogin } from '@privy-io/react-auth';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
@@ -107,6 +107,15 @@ const VerifiedBadge = ({ onApplyClick }) => {
   const [showPopover, setShowPopover] = useState(false);
   const [coords, setCoords] = useState({ x: 0, y: 0 });
 
+  useEffect(() => {
+    if (!showPopover) return undefined;
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') setShowPopover(false);
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [showPopover]);
+
   const handleTriggerClick = (e) => {
     e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
@@ -129,30 +138,25 @@ const VerifiedBadge = ({ onApplyClick }) => {
 
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-      <svg 
-        viewBox="0 0 24 24" 
+      <button
+        type="button"
+        className="verified-badge-button"
         onClick={handleTriggerClick}
-        style={{ 
-          width: '14px', 
-          height: '14px', 
-          fill: '#1d9bf0', 
-          display: 'inline-block', 
-          verticalAlign: 'middle', 
-          marginLeft: '4px', 
-          cursor: 'pointer', 
-          userSelect: 'none',
-          flexShrink: 0
-        }}
-        title="Accredited Web3 Publisher - Click to verify"
+        aria-label="View verified publisher details"
+        aria-expanded={showPopover}
+        title="Verified publisher details"
       >
-        <g>
-          <path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.17-2.9-.81-3.88-.98-.98-2.49-1.27-3.88-.81C14.67 2.66 13.43 1.75 12 1.75s-2.67.91-3.37 2.22C7.24 3.51 5.73 3.8 4.75 4.78c-.98.98-1.27 2.49-.81 3.88C2.63 9.33 1.75 10.57 1.75 12s.88 2.67 2.19 3.34c-.46 1.39-.17 2.9.81 3.88.98.98 2.49 1.27 3.88.81.7 1.31 1.94 2.22 3.37 2.22s2.67-.91 3.37-2.22c1.39.46 2.9.17 3.88-.81.98-.98 1.27-2.49.81-3.88 1.31-.7 2.22-1.94 2.22-3.37zM10.25 16.25L6 12l1.5-1.5 2.75 2.75 6.25-6.25 1.5 1.5-8 8z"></path>
-        </g>
-      </svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <g>
+            <path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.17-2.9-.81-3.88-.98-.98-2.49-1.27-3.88-.81C14.67 2.66 13.43 1.75 12 1.75s-2.67.91-3.37 2.22C7.24 3.51 5.73 3.8 4.75 4.78c-.98.98-1.27 2.49-.81 3.88C2.63 9.33 1.75 10.57 1.75 12s.88 2.67 2.19 3.34c-.46 1.39-.17 2.9.81 3.88.98.98 2.49 1.27 3.88.81.7 1.31 1.94 2.22 3.37 2.22s2.67-.91 3.37-2.22c1.39.46 2.9.17 3.88-.81.98-.98 1.27-2.49.81-3.88 1.31-.7 2.22-1.94 2.22-3.37zM10.25 16.25L6 12l1.5-1.5 2.75 2.75 6.25-6.25 1.5 1.5-8 8z"></path>
+          </g>
+        </svg>
+      </button>
 
       {showPopover && (
         <>
           <div 
+            aria-hidden="true"
             onClick={(e) => {
               e.stopPropagation();
               setShowPopover(false);
@@ -167,7 +171,9 @@ const VerifiedBadge = ({ onApplyClick }) => {
             }}
           />
           
-          <div 
+          <div
+            role="dialog"
+            aria-label="Verified publisher details"
             onClick={(e) => e.stopPropagation()}
             style={{
               position: 'fixed',
@@ -210,23 +216,17 @@ const VerifiedBadge = ({ onApplyClick }) => {
               </svg>
               <div style={{ fontSize: '13px' }}>
                 This account is verified.{' '}
-                <span 
+                <button
+                  type="button"
+                  className="verified-learn-more"
                   onClick={(e) => {
                     e.stopPropagation();
                     setShowPopover(false);
                     onApplyClick();
                   }}
-                  style={{ 
-                    color: 'var(--ink-red)', 
-                    cursor: 'pointer', 
-                    textDecoration: 'underline', 
-                    fontWeight: 'bold',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '11px'
-                  }}
                 >
                   Learn more
-                </span>
+                </button>
               </div>
             </div>
             
@@ -1022,6 +1022,9 @@ function App() {
 
   const [isLoadingWallet, setIsLoadingWallet] = useState(false);
   const [showWalletModal, setShowWalletModal] = useState(false);
+  const walletModalRef = useRef(null);
+  const readerHeadingRef = useRef(null);
+  const articleListHeadingRef = useRef(null);
   const [copyStatus, setCopyStatus] = useState("Click address to copy");
   const [faucetLoading, setFaucetLoading] = useState(false);
   const [faucetSuccess, setFaucetSuccess] = useState("");
@@ -1243,6 +1246,49 @@ function App() {
     }
   }, [showWalletModal]);
 
+  useEffect(() => {
+    if (!showWalletModal) return undefined;
+
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const focusModal = window.requestAnimationFrame(() => {
+      walletModalRef.current?.querySelector("button")?.focus();
+    });
+
+    const handleModalKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setShowWalletModal(false);
+        return;
+      }
+
+      if (event.key !== "Tab" || !walletModalRef.current) return;
+      const focusable = Array.from(walletModalRef.current.querySelectorAll(
+        'button:not([disabled]), input:not([disabled]), a[href], summary, [tabindex]:not([tabindex="-1"])'
+      ));
+      if (!focusable.length) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleModalKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusModal);
+      document.removeEventListener("keydown", handleModalKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus?.();
+    };
+  }, [showWalletModal]);
+
   const handleWithdrawSubmit = async (e) => {
     e.preventDefault();
     if (!withdrawAmount || !withdrawAddress) {
@@ -1310,10 +1356,6 @@ function App() {
   };
 
   const handleSelectArticle = (art) => {
-    if (!authenticated) {
-      login();
-      return;
-    }
     setSelectedArticle(art);
     setShowApplyForm(false);
     setTxStatus("");
@@ -1336,6 +1378,16 @@ function App() {
     setVideoSimulating(false);
     setVideoReady(false);
     setVideoSimStep(0);
+    window.setTimeout(() => {
+      if (window.matchMedia("(max-width: 768px)").matches) {
+        readerHeadingRef.current?.focus();
+      }
+    }, 0);
+  };
+
+  const handleReturnToArticleList = () => {
+    setSelectedArticle(null);
+    window.setTimeout(() => articleListHeadingRef.current?.focus(), 0);
   };
 
   const triggerScrapeSimulation = () => {
@@ -1562,7 +1614,8 @@ function App() {
           <span className="logo-text">Paper Cut</span>
         </div>
         <div className="nav-controls">
-          <div 
+          <button
+            type="button"
             className="nav-front-page-btn" 
             onClick={() => {
               setSelectedArticle(null);
@@ -1574,13 +1627,14 @@ function App() {
             style={{ flex: 1, textAlign: 'left' }}
           >
             {isAdminView || isPublisherView ? "← READER VIEW" : "FRONT PAGE"}
-          </div>
+          </button>
           <div className="nav-datetime mono-text" style={{ flex: 1, textAlign: 'center', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--ink-grey)' }}>
             {formatDateTime(currentDate)}
           </div>
           <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
             {isAdminView && (
-              <span 
+              <button
+                type="button"
                 className={`nav-front-page-btn`}
                 onClick={() => {
                   setSelectedArticle(null);
@@ -1591,10 +1645,11 @@ function App() {
                 title="Close Admin Portal"
               >
                 [CLOSE ADMIN]
-              </span>
+              </button>
             )}
             {!isAdminView && !isPublisherView && (
-              <span 
+              <button
+                type="button"
                 className={`nav-front-page-btn`}
                 onClick={() => {
                   setSelectedArticle(null);
@@ -1606,10 +1661,11 @@ function App() {
                 title="Open Publisher Portal"
               >
                 [PUBLISHER PORTAL]
-              </span>
+              </button>
             )}
             {isPublisherView && (
-              <span 
+              <button
+                type="button"
                 className={`nav-front-page-btn`}
                 onClick={() => {
                   setIsPublisherView(false);
@@ -1621,16 +1677,17 @@ function App() {
                 title="Close Publisher Portal"
               >
                 [CLOSE PORTAL]
-              </span>
+              </button>
             )}
             {!authenticated ? (
-              <span 
+              <button
+                type="button"
                 className="nav-front-page-btn" 
                 onClick={login}
-                title="Sign the Register"
+                title="Sign in"
               >
-                SIGN REGISTER
-              </span>
+                SIGN IN
+              </button>
             ) : (
               <div className="wallet-info-group">
                 <button 
@@ -2642,39 +2699,48 @@ function App() {
         )}
         </div>
       ) : (
-        <main className="main-container">
+        <main className={`main-container ${selectedArticle ? 'has-selected-article' : ''}`}>
           {/* LEFT SIDEBAR */}
           <section className="sidebar">
             <div className="section-title">
-              <h2>LATEST DISPATCHES</h2>
+              <h2 ref={articleListHeadingRef} tabIndex="-1">LATEST DISPATCHES</h2>
               <span className="item-count">{articles.length} columns published</span>
             </div>
             <div className="article-list">
               {articles.map((art) => (
-                <div
+                <article
                   key={`${art.id}-${art.author}`}
                   className={`article-card ${selectedArticle?.id === art.id && selectedArticle?.author.toLowerCase() === art.author.toLowerCase() ? 'active' : ''}`}
-                  onClick={() => handleSelectArticle(art)}
                 >
-                  <div className="card-title">{art.title}</div>
-                  <div className="card-meta">
-                    <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-                      By {art.author}
-                      {art.verified && <VerifiedBadge onApplyClick={handleOpenApplyForm} />}
+                  <button
+                    type="button"
+                    className="article-card-select"
+                    onClick={() => handleSelectArticle(art)}
+                    aria-current={selectedArticle?.id === art.id ? 'true' : undefined}
+                    aria-label={`Read ${art.title} by ${art.author}, ${art.price} USDC`}
+                  >
+                    <div className="card-title">{art.title}</div>
+                    <div className="card-meta">
+                      <span>By {art.author}</span>
+                      <span className="price-tag">
+                        <UsdcCoinIcon size={12} className="coin-sidebar" style={{ marginRight: '3px', marginTop: '-2px' }} />
+                        {art.price}
+                      </span>
+                    </div>
+                    <div className="card-snippet">{art.snippet || generateClientSnippet(art.content)}</div>
+                  </button>
+                  {art.verified && (
+                    <span className="article-card-verified">
+                      <VerifiedBadge onApplyClick={handleOpenApplyForm} />
                     </span>
-                    <span className="price-tag">
-                      <UsdcCoinIcon size={12} className="coin-sidebar" style={{ marginRight: '3px', marginTop: '-2px' }} />
-                      {art.price}
-                    </span>
-                  </div>
-                  <div className={`card-snippet ${!authenticated ? 'blurred' : ''}`}>{art.snippet || generateClientSnippet(art.content)}</div>
-                </div>
+                  )}
+                </article>
               ))}
             </div>
           </section>
 
           {/* RIGHT CONTENT */}
-          <section className="viewer" style={{ position: 'relative' }}>
+          <section className="viewer" style={{ position: 'relative' }} aria-label="Article reader">
             {/* SURFAI DAILY INTELLIGENCE TICKER HEADER */}
             {!isPublisherView && !isAdminView && (
               <div className="surfai-ticker-bar" style={{
@@ -2698,7 +2764,7 @@ function App() {
                 width: '100%'
               }}>
                 {/* Logo/Badge */}
-                <div style={{
+                <button type="button" className="surfai-logo-button" style={{
                   background: 'transparent',
                   color: '#fff',
                   cursor: 'pointer',
@@ -2730,12 +2796,13 @@ function App() {
                     </svg>
                   </div>
                   <span style={{ fontWeight: 'bold', color: '#fff', fontSize: '11px', letterSpacing: '0.06em' }}>SurfAI</span>
-                </div>
+                </button>
 
                 {/* Ticker Info */}
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1, minWidth: '180px' }}>
-                  <span style={{ color: 'var(--ink-light-grey)', flexShrink: 0 }}>[DAILY AI DISPATCH]</span>
-                  <span 
+                <div className="surfai-ticker-content" style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1, minWidth: '180px' }}>
+                  <span className="surfai-ticker-kicker" style={{ color: 'var(--ink-light-grey)', flexShrink: 0 }}>[DAILY AI DISPATCH]</span>
+                  <button
+                    type="button"
                     className="surfai-ticker-link" 
                     style={{
                       color: 'var(--paper-bg)',
@@ -2754,7 +2821,7 @@ function App() {
                     title="Click to Read and Unlock AI Report"
                   >
                     {getDailyAISurfArticle().title}
-                  </span>
+                  </button>
                 </div>
               </div>
             )}
@@ -2999,13 +3066,14 @@ function App() {
                 <div className="stamp-row">
                   {/* Stamp 1: Register Status */}
                   {!authenticated ? (
-                    <div 
+                    <button
+                      type="button"
                       className="rubber-stamp stamp-red clickable-stamp" 
                       onClick={login}
-                      title="Click to Sign the Register"
+                      title="Sign in"
                     >
-                      ★ REGISTER: UNSIGNED ★
-                    </div>
+                      SIGN IN TO UNLOCK
+                    </button>
                   ) : (
                     <div className="rubber-stamp stamp-green">
                       ✔ REGISTER: SIGNED
@@ -3014,20 +3082,21 @@ function App() {
 
                   {/* Stamp 2: Vault Status */}
                   {(!authenticated || !circleWallet) ? (
-                    <div 
+                    <button
+                      type="button"
                       className="rubber-stamp stamp-red clickable-stamp"
                       onClick={login}
-                      title="Click to Sign Register and activate Vault"
+                      title="Sign in to activate your wallet"
                     >
-                      ★ VAULT: EMPTY ★
-                    </div>
+                      WALLET: SIGN IN REQUIRED
+                    </button>
                   ) : (
-                    <div className="rubber-stamp stamp-green clickable-stamp"
+                    <button type="button" className="rubber-stamp stamp-green clickable-stamp"
                       onClick={() => setShowWalletModal(true)}
-                      title="Click to open your Secure Ledger Vault"
+                      title="Open USDC wallet"
                     >
-                      ✔ VAULT: ACTIVE
-                    </div>
+                      WALLET: ACTIVE
+                    </button>
                   )}
 
                   {/* Stamp 3: Network Status */}
@@ -3038,8 +3107,11 @@ function App() {
               </div>
             ) : (
               <div id="viewer-active" className="viewer-state">
+                <button type="button" className="mobile-back-button" onClick={handleReturnToArticleList}>
+                  ← Back to articles
+                </button>
                 <div className="article-header">
-                  <h1 className="serif-title">{selectedArticle.title}</h1>
+                  <h1 ref={readerHeadingRef} tabIndex="-1" className="serif-title">{selectedArticle.title}</h1>
                   <div className="article-meta">
                     <span style={{ display: 'inline-flex', alignItems: 'center' }}>
                       By <strong style={{ color: 'var(--ink-black)', marginRight: '2px', marginLeft: '4px' }}>{selectedArticle.author}</strong>
@@ -3202,37 +3274,35 @@ function App() {
 
                       {/* PAYWALL */}
                       <div className="paywall-card">
-                        <div className="paywall-title">TOLL BARRIER: TARIFF DUE</div>
+                        <div className="paywall-title">Unlock this article</div>
+                        <p className="paywall-intro">Read the complete article with a one-time USDC payment.</p>
                         
                         <div className="paywall-options-container">
-                          {/* Option 1: Human Reader */}
-                          <div className="paywall-option-box">
+                          <div className="paywall-option-box paywall-primary-option">
                             <div className="option-icon">🖋️</div>
-                            <div className="option-title">HUMAN READER</div>
+                            <div className="option-title">READ THE FULL ARTICLE</div>
                             <p className="paywall-desc">
                               {!authenticated 
-                                ? "Sign the register to create a Ledger Vault." 
-                                : `Vault: ${shortenAddress(circleWallet?.address)} | Bal: ${parseFloat(circleWallet?.balance || '0.00').toFixed(4)} USDC`
+                                ? "Sign in to create your USDC wallet and continue."
+                                : `Wallet ${shortenAddress(circleWallet?.address)} · Balance ${parseFloat(circleWallet?.balance || '0.00').toFixed(4)} USDC`
                               }
                             </p>
                             {!txStatus && (
                               <button className="btn btn-sm btn-paywall" onClick={handleUnlockOnChain}>
-                                {!authenticated ? "SIGN REGISTER" : (
+                                {!authenticated ? "SIGN IN TO CONTINUE" : (
                                   <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                                    PAY {selectedArticle.price} <UsdcCoinIcon size={14} className="coin-inline" /> USDC
+                                    UNLOCK FOR {selectedArticle.price} <UsdcCoinIcon size={14} className="coin-inline" /> USDC
                                   </span>
                                 )}
                               </button>
                             )}
                           </div>
 
-                          {/* Divider Line */}
-                          <div className="paywall-option-divider"></div>
-
-                          {/* Option 2: AI Agent */}
-                          <div className="paywall-option-box">
+                          <details className="paywall-technical-details">
+                            <summary>Developer demo: AI agent payment flow</summary>
+                          <div className="paywall-option-box paywall-agent-option">
                             <div className="option-icon">🤖</div>
-                            <div className="option-title">AI SCRAPER AGENT</div>
+                            <div className="option-title">AI AGENT SIMULATION</div>
                             
                             {!isScraping ? (
                               <>
@@ -3243,7 +3313,7 @@ function App() {
                                   className="btn btn-sm btn-paywall btn-secondary"
                                   onClick={triggerScrapeSimulation}
                                 >
-                                  LAUNCH AGENT
+                                  RUN DEMO
                                 </button>
                               </>
                             ) : (
@@ -3331,10 +3401,11 @@ function App() {
                               </div>
                             )}
                           </div>
+                          </details>
                         </div>
 
                         {txStatus && (
-                          <div className="tx-status-box" style={{ marginTop: '20px', width: '100%' }}>
+                          <div className="tx-status-box" role="status" aria-live="polite" style={{ marginTop: '20px', width: '100%' }}>
                             <span className="spinner"></span>
                             <span>{txStatus}</span>
                             {txHash && (
@@ -3347,7 +3418,7 @@ function App() {
                           </div>
                         )}
 
-                        {error && <div className="paywall-error" style={{ marginTop: '15px', width: '100%' }}>{error}</div>}
+                        {error && <div className="paywall-error" role="alert" style={{ marginTop: '15px', width: '100%' }}>{error}</div>}
                       </div>
                     </>
                   )}
@@ -3361,9 +3432,16 @@ function App() {
       {/* WALLET DEPOSIT & QR MODAL */}
       {showWalletModal && (
         <div className="modal-overlay" onClick={() => setShowWalletModal(false)}>
-          <div className="modal-content vintage-wallet-modal" onClick={(e) => e.stopPropagation()}>
+          <div
+            ref={walletModalRef}
+            className="modal-content vintage-wallet-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="wallet-dialog-title"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Vintage Close Button in the upper right corner */}
-            <button className="wallet-close-btn" onClick={() => setShowWalletModal(false)}>×</button>
+            <button type="button" className="wallet-close-btn" aria-label="Close wallet" onClick={() => setShowWalletModal(false)}>×</button>
             
             <div className="vintage-wallet-container">
               {/* LEFT COLUMN: IDs & INFO */}
@@ -3372,7 +3450,7 @@ function App() {
                   <div className="wallet-seal">★ OFFICIAL IDENTITY CARD ★</div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginTop: '6px' }}>
                     <img src={logoImg} alt="Paper Cut Seal Logo" style={{ height: '40px', width: '40px', borderRadius: '50%', border: '1.5px solid var(--ink-black)' }} />
-                    <h3 className="wallet-title" style={{ margin: 0 }}>PAPER CUT</h3>
+                    <h3 id="wallet-dialog-title" className="wallet-title" style={{ margin: 0 }}>PAPER CUT WALLET</h3>
                   </div>
                   <div className="wallet-subtitle" style={{ marginTop: '4px' }}>TARIFF ACCOUNT & PORTFOLIO</div>
                 </div>
@@ -3388,20 +3466,22 @@ function App() {
 
                 <div className="wallet-id-group">
                   <div className="wallet-id-label">ACCOUNT NO. (CIRCLE ADDRESS)</div>
-                  <div 
+                  <button
+                    type="button"
                     className="wallet-address-box mono-text" 
                     onClick={() => {
                       if (circleWallet?.address) {
                         handleCopyAddress(circleWallet.address);
                       }
                     }}
+                    disabled={!circleWallet?.address}
                     title={circleWallet?.address ? "Click to copy address" : "Wallet not loaded"}
                   >
                     <span className="address-text">
                       {isLoadingWallet ? "LOADING/CREATING WALLET..." : (circleWallet?.address || "NOT INITIALIZED (CLICK SYNC/FAUCET TO RETRY)")}
                     </span>
                     <span className="copy-badge">{circleWallet?.address ? copyStatus : ""}</span>
-                  </div>
+                  </button>
                 </div>
 
                 <div className="wallet-id-group">
@@ -3415,6 +3495,7 @@ function App() {
                     <button 
                       onClick={handleSyncBalance} 
                       className="btn-sync-balance-vintage"
+                      aria-label="Refresh USDC balance"
                       title="Sync Balance with Ledger"
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
@@ -3479,13 +3560,16 @@ function App() {
                   )}
                 </div>
 
-                <div className="wallet-actions-section" style={{ marginTop: '16px', borderTop: '1px dashed var(--ink-light-grey)', paddingTop: '16px' }}>
+                <details className="wallet-disclosure">
+                  <summary>Withdraw USDC</summary>
+                <div className="wallet-actions-section wallet-withdraw-section">
                   <form onSubmit={handleWithdrawSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <div className="wallet-id-label" style={{ marginBottom: '2px' }}>USDC WITHDRAWAL TO EVM WALLET</div>
                     
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label className="mono-text" style={{ fontSize: '8px', fontWeight: 'bold', color: 'var(--ink-grey)' }}>DESTINATION ADDRESS</label>
+                      <label htmlFor="withdraw-address" className="mono-text wallet-form-label">DESTINATION ADDRESS</label>
                       <input 
+                        id="withdraw-address"
                         type="text" 
                         required 
                         value={withdrawAddress}
@@ -3504,9 +3588,10 @@ function App() {
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label className="mono-text" style={{ fontSize: '8px', fontWeight: 'bold', color: 'var(--ink-grey)' }}>AMOUNT (USDC)</label>
+                      <label htmlFor="withdraw-amount" className="mono-text wallet-form-label">AMOUNT (USDC)</label>
                       <div style={{ display: 'flex', gap: '6px' }}>
                         <input 
+                          id="withdraw-amount"
                           type="number" 
                           step="0.0001" 
                           min="0.0001" 
@@ -3556,6 +3641,7 @@ function App() {
                     )}
                   </form>
                 </div>
+                </details>
               </div>
               
               {/* MIDDLE FOLD SPINE */}
