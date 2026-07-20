@@ -1,6 +1,8 @@
 "use strict";
 
 let privyClientPromise;
+const userCache = new Map();
+const USER_CACHE_TTL_MS = 5 * 60 * 1000;
 
 function normalizeIdentity(value) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -41,6 +43,15 @@ async function getPrivyClient() {
   return privyClientPromise;
 }
 
+async function getPrivyUserById(privy, userId) {
+  const cached = userCache.get(userId);
+  if (cached && cached.expiresAt > Date.now()) return cached.user;
+
+  const user = await privy.users()._get(userId);
+  userCache.set(userId, { user, expiresAt: Date.now() + USER_CACHE_TTL_MS });
+  return user;
+}
+
 function getTestIdentity(req) {
   if (process.env.NODE_ENV !== "test" || process.env.TEST_AUTH_BYPASS !== "true") return null;
   const email = normalizeIdentity(req.headers["x-test-user-email"]);
@@ -58,17 +69,21 @@ async function resolveIdentity(req) {
 
   const accessToken = getBearerToken(req);
   const identityToken = String(req.headers["x-privy-identity-token"] || "").trim();
-  if (!accessToken || !identityToken) return null;
+  if (!accessToken) return null;
 
   const privy = await getPrivyClient();
-  const [claims, user] = await Promise.all([
-    privy.utils().auth().verifyAccessToken(accessToken),
-    privy.utils().auth().verifyIdentityToken(identityToken),
-  ]);
-
+  const claims = await privy.utils().auth().verifyAccessToken(accessToken);
   const claimUserId = getClaimUserId(claims);
+  if (!claimUserId) throw new Error("Privy access token has no user identity");
+
+  // Identity tokens are an optional Privy Dashboard feature. Use one when the
+  // client has it; otherwise load the user identified by the verified access
+  // token so a valid login never becomes an anonymous API request.
+  const user = identityToken
+    ? await privy.utils().auth().verifyIdentityToken(identityToken)
+    : await getPrivyUserById(privy, claimUserId);
   const userId = user?.id || "";
-  if (!claimUserId || !userId || claimUserId !== userId) {
+  if (!userId || claimUserId !== userId) {
     throw new Error("Privy token identities do not match");
   }
 

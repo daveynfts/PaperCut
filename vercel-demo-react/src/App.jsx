@@ -262,6 +262,11 @@ const safeParseResponse = async (response) => {
   }
 };
 
+const isDomainAuthorizationError = (message) => {
+  const normalized = String(message || "").toLowerCase();
+  return ["origin", "domain", "authorized", "whitelist"].some(term => normalized.includes(term));
+};
+
 function App() {
   const { logout, authenticated, user, getAccessToken } = usePrivy();
   const { identityToken } = useIdentityToken();
@@ -273,7 +278,7 @@ function App() {
     onError: (err) => {
       console.error("[PaperCut] Login failed:", err);
       let errMsg = err?.message || String(err);
-      if (errMsg.toLowerCase().includes("origin") || errMsg.toLowerCase().includes("domain") || errMsg.toLowerCase().includes("authorized") || errMsg.toLowerCase().includes("whitelist")) {
+      if (isDomainAuthorizationError(errMsg)) {
         errMsg = `Domain not authorized. Add "${window.location.origin}" to the Allowed Domains for the configured app in the Privy dashboard.`;
       }
       setError(errMsg);
@@ -3050,17 +3055,18 @@ function App() {
                     boxShadow: '3px 3px 0 rgba(186, 45, 45, 0.15)'
                   }}>
                     <div style={{ fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '6px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontSize: '16px' }}>⚠</span> AUTHENTICATION ERROR
+                      <span style={{ fontSize: '16px' }}>⚠</span> REQUEST ERROR
                     </div>
                     <div>{error}</div>
-                    <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed rgba(186, 45, 45, 0.25)', fontSize: '11px', color: 'var(--ink-grey)' }}>
-                      <strong>Next Steps:</strong>
-                      <ol style={{ margin: '4px 0 0 16px', padding: 0 }}>
-                        <li>Ensure <strong>{window.location.origin}</strong> is added to <strong>Allowed Domains</strong> in the Privy Developer Dashboard (dashboard.privy.io) under settings.</li>
-                        <li>Try clearing browser cookies/site data and reloading the page.</li>
-                        <li>Check if MetaMask extension has any pending connection approvals.</li>
-                      </ol>
-                    </div>
+                    {isDomainAuthorizationError(error) && (
+                      <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed rgba(186, 45, 45, 0.25)', fontSize: '11px', color: 'var(--ink-grey)' }}>
+                        <strong>Next Steps:</strong>
+                        <ol style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                          <li>Ensure <strong>{window.location.origin}</strong> is added to <strong>Allowed Domains</strong> in the Privy Developer Dashboard (dashboard.privy.io) under settings.</li>
+                          <li>Try clearing browser cookies/site data and reloading the page.</li>
+                        </ol>
+                      </div>
+                    )}
                   </div>
                 )}
                 <div className="stamp-row">
