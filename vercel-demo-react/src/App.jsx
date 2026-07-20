@@ -1071,12 +1071,20 @@ function App() {
     return `${dateString} — ${timeString}`;
   };
 
-  const handleCopyAddress = (addr) => {
+  const handleCopyAddress = async (addr) => {
     if (!addr) return;
-    navigator.clipboard.writeText(addr).then(() => {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Clipboard access is unavailable in this browser.");
+      }
+      await navigator.clipboard.writeText(addr);
       setCopyStatus("Copied Address!");
       setTimeout(() => setCopyStatus("Click address to copy"), 1500);
-    });
+    } catch (err) {
+      console.error("Failed to copy wallet address:", err);
+      setCopyStatus("Copy failed — select the address manually");
+      setTimeout(() => setCopyStatus("Click address to copy"), 3000);
+    }
   };
 
   const handleSyncBalance = async () => {
@@ -1165,25 +1173,18 @@ function App() {
   const getUnlockedDetails = (artId) => {
     const val = unlockedArticles[artId];
     if (!val) return null;
-    if (typeof val === 'object' && val !== null && 'txHash' in val) {
+    if (typeof val === 'object' && val !== null && typeof val.txHash === 'string' && val.txHash) {
       return { ...val, isMock: false };
     }
-    if (typeof val === 'string') {
+    if (typeof val === 'string' && val) {
       return {
         txHash: val,
         isMock: false
       };
     }
-    return {
-      txHash: "0x8fdc9dfa539f8fc0d13cf941f81e14d3d4aa182035e0",
-      isMock: false
-    };
-  };
-
-  const handleViewTx = (e, artId) => {
-    const details = getUnlockedDetails(artId);
-    if (!details) return;
-    // Always use real explorer logic
+    // Older records may only contain a boolean unlock marker. The content is
+    // still available, but there is no transaction hash that can be linked.
+    return null;
   };
 
   // Update active wallet chain ID when wallet changes
@@ -3131,8 +3132,7 @@ function App() {
                           href={getExplorerUrl("5042002", getUnlockedDetails(selectedArticle.id).txHash)} 
                           target="_blank" 
                           rel="noopener noreferrer" 
-                          onClick={(e) => handleViewTx(e, selectedArticle.id)}
-                          title={getUnlockedDetails(selectedArticle.id).isMock ? "Simulated Transaction - Click for info" : "View transaction on-chain"}
+                          title="View transaction on-chain"
                           style={{ marginLeft: '6px', textDecoration: 'none', display: 'inline-block', fontSize: '13px', cursor: 'pointer' }}
                         >
                           🔗
