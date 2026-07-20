@@ -50,10 +50,11 @@ VITE_API_URL=http://localhost:4000
 
 ## Authentication and administration
 
-Authenticated API requests require both the Privy access token and identity
-token. The frontend sends them as `Authorization: Bearer ...` and
-`X-Privy-Identity-Token`. The API verifies both tokens and rejects them if they
-belong to different users.
+Authenticated API requests require a Privy access token. The frontend sends it
+as `Authorization: Bearer ...`. If Privy identity tokens are enabled, the
+frontend also sends `X-Privy-Identity-Token`; the API verifies both tokens and
+rejects them if they belong to different users. Otherwise, the API loads the
+user identified by the verified access token from Privy.
 
 Set `ADMIN_EMAILS` to a comma-separated allowlist of verified Privy email
 addresses. There is no admin password or client-selected identity fallback.

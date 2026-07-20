@@ -262,6 +262,11 @@ const safeParseResponse = async (response) => {
   }
 };
 
+const isDomainAuthorizationError = (message) => {
+  const normalized = String(message || "").toLowerCase();
+  return ["origin", "domain", "authorized", "whitelist"].some(term => normalized.includes(term));
+};
+
 function App() {
   const { logout, authenticated, user, getAccessToken } = usePrivy();
   const { identityToken } = useIdentityToken();
@@ -273,7 +278,7 @@ function App() {
     onError: (err) => {
       console.error("[PaperCut] Login failed:", err);
       let errMsg = err?.message || String(err);
-      if (errMsg.toLowerCase().includes("origin") || errMsg.toLowerCase().includes("domain") || errMsg.toLowerCase().includes("authorized") || errMsg.toLowerCase().includes("whitelist")) {
+      if (isDomainAuthorizationError(errMsg)) {
         errMsg = `Domain not authorized. Add "${window.location.origin}" to the Allowed Domains for the configured app in the Privy dashboard.`;
       }
       setError(errMsg);
@@ -1066,12 +1071,20 @@ function App() {
     return `${dateString} — ${timeString}`;
   };
 
-  const handleCopyAddress = (addr) => {
+  const handleCopyAddress = async (addr) => {
     if (!addr) return;
-    navigator.clipboard.writeText(addr).then(() => {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Clipboard access is unavailable in this browser.");
+      }
+      await navigator.clipboard.writeText(addr);
       setCopyStatus("Copied Address!");
       setTimeout(() => setCopyStatus("Click address to copy"), 1500);
-    });
+    } catch (err) {
+      console.error("Failed to copy wallet address:", err);
+      setCopyStatus("Copy failed — select the address manually");
+      setTimeout(() => setCopyStatus("Click address to copy"), 3000);
+    }
   };
 
   const handleSyncBalance = async () => {
@@ -1160,25 +1173,18 @@ function App() {
   const getUnlockedDetails = (artId) => {
     const val = unlockedArticles[artId];
     if (!val) return null;
-    if (typeof val === 'object' && val !== null && 'txHash' in val) {
+    if (typeof val === 'object' && val !== null && typeof val.txHash === 'string' && val.txHash) {
       return { ...val, isMock: false };
     }
-    if (typeof val === 'string') {
+    if (typeof val === 'string' && val) {
       return {
         txHash: val,
         isMock: false
       };
     }
-    return {
-      txHash: "0x8fdc9dfa539f8fc0d13cf941f81e14d3d4aa182035e0",
-      isMock: false
-    };
-  };
-
-  const handleViewTx = (e, artId) => {
-    const details = getUnlockedDetails(artId);
-    if (!details) return;
-    // Always use real explorer logic
+    // Older records may only contain a boolean unlock marker. The content is
+    // still available, but there is no transaction hash that can be linked.
+    return null;
   };
 
   // Update active wallet chain ID when wallet changes
@@ -3050,17 +3056,18 @@ function App() {
                     boxShadow: '3px 3px 0 rgba(186, 45, 45, 0.15)'
                   }}>
                     <div style={{ fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '6px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontSize: '16px' }}>⚠</span> AUTHENTICATION ERROR
+                      <span style={{ fontSize: '16px' }}>⚠</span> REQUEST ERROR
                     </div>
                     <div>{error}</div>
-                    <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed rgba(186, 45, 45, 0.25)', fontSize: '11px', color: 'var(--ink-grey)' }}>
-                      <strong>Next Steps:</strong>
-                      <ol style={{ margin: '4px 0 0 16px', padding: 0 }}>
-                        <li>Ensure <strong>{window.location.origin}</strong> is added to <strong>Allowed Domains</strong> in the Privy Developer Dashboard (dashboard.privy.io) under settings.</li>
-                        <li>Try clearing browser cookies/site data and reloading the page.</li>
-                        <li>Check if MetaMask extension has any pending connection approvals.</li>
-                      </ol>
-                    </div>
+                    {isDomainAuthorizationError(error) && (
+                      <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed rgba(186, 45, 45, 0.25)', fontSize: '11px', color: 'var(--ink-grey)' }}>
+                        <strong>Next Steps:</strong>
+                        <ol style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                          <li>Ensure <strong>{window.location.origin}</strong> is added to <strong>Allowed Domains</strong> in the Privy Developer Dashboard (dashboard.privy.io) under settings.</li>
+                          <li>Try clearing browser cookies/site data and reloading the page.</li>
+                        </ol>
+                      </div>
+                    )}
                   </div>
                 )}
                 <div className="stamp-row">
@@ -3125,8 +3132,7 @@ function App() {
                           href={getExplorerUrl("5042002", getUnlockedDetails(selectedArticle.id).txHash)} 
                           target="_blank" 
                           rel="noopener noreferrer" 
-                          onClick={(e) => handleViewTx(e, selectedArticle.id)}
-                          title={getUnlockedDetails(selectedArticle.id).isMock ? "Simulated Transaction - Click for info" : "View transaction on-chain"}
+                          title="View transaction on-chain"
                           style={{ marginLeft: '6px', textDecoration: 'none', display: 'inline-block', fontSize: '13px', cursor: 'pointer' }}
                         >
                           🔗
