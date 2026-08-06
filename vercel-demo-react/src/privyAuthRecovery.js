@@ -3,7 +3,8 @@ const getErrorMessage = (error) => String(error?.message || error || "");
 export const isRecoverablePrivySessionError = (error) => {
   const message = getErrorMessage(error).toLowerCase();
   const isNetworkFailure = message.includes("failed to fetch") || message.includes("no response");
-  return isNetworkFailure && (message.includes("/sessions") || message.includes("auth.privy.io"));
+  const isPrivyRequest = message.includes("auth.privy.io") || message.includes("/api/privy/");
+  return isNetworkFailure && isPrivyRequest && message.includes("/sessions");
 };
 
 export const sendEmailCodeWithSessionRecovery = async ({ email, sendCode, clearSession }) => {
