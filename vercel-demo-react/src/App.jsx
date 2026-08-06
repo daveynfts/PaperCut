@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
-import { useIdentityToken, usePrivy, useWallets, useLogin } from '@privy-io/react-auth';
+import { useIdentityToken, useModalStatus, usePrivy, useWallets, useLogin } from '@privy-io/react-auth';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import './App.css';
@@ -286,6 +286,7 @@ function App() {
       setError(errMsg);
     }
   });
+  const { isOpen: isLoginModalOpen } = useModalStatus();
   const { wallets } = useWallets();
 
   const authFetch = useCallback(async (url, options = {}) => {
@@ -322,6 +323,26 @@ function App() {
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [error, setError] = useState("");
   const [chainId, setChainId] = useState(null);
+
+  const openLogin = useCallback((event) => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+
+    if (authenticated || isLoginModalOpen) return;
+    if (!ready) {
+      setError("Sign-in is still initializing. Please wait a moment and try again.");
+      return;
+    }
+
+    setError("");
+    try {
+      // Never forward React's click/submit event into Privy's options argument.
+      login();
+    } catch (err) {
+      console.error("[PaperCut] Could not open sign-in:", err);
+      setError(err?.message || "Could not open the sign-in window. Please reload and try again.");
+    }
+  }, [authenticated, isLoginModalOpen, login, ready]);
   
   // SurfAI PDF simulation states
   const [pdfSimulating, setPdfSimulating] = useState(false);
@@ -1573,7 +1594,7 @@ function App() {
     setTxHash("");
 
     if (!authenticated) {
-      login();
+      openLogin();
       setIsUnlocking(false);
       return;
     }
@@ -1728,10 +1749,12 @@ function App() {
               <button
                 type="button"
                 className="nav-front-page-btn" 
-                onClick={login}
+                onClick={openLogin}
+                disabled={!ready || isLoginModalOpen}
+                aria-busy={!ready || isLoginModalOpen}
                 title="Sign in"
               >
-                SIGN IN
+                {!ready ? "SIGN-IN LOADING" : isLoginModalOpen ? "SIGN-IN OPEN" : "SIGN IN"}
               </button>
             ) : (
               <div className="wallet-info-group">
@@ -1765,7 +1788,7 @@ function App() {
             <p className="serif-body" style={{ fontSize: '14px', lineHeight: '1.6', marginBottom: '24px', color: 'var(--ink-grey)' }}>
               Please sign the guest register with your cryptographic wallet. Once logged in, we will verify if your account is accredited with writing credentials.
             </p>
-            <button className="btn" onClick={login} style={{ padding: '10px 24px', fontSize: '12px', width: '100%' }}>
+            <button className="btn" onClick={openLogin} disabled={!ready || isLoginModalOpen} style={{ padding: '10px 24px', fontSize: '12px', width: '100%' }}>
               SIGN GUEST REGISTER
             </button>
           </main>
@@ -2523,7 +2546,7 @@ function App() {
               e.preventDefault();
               setAdminAuthError("");
               if (!authenticated) {
-                login();
+                openLogin();
                 return;
               }
               try {
@@ -3115,7 +3138,8 @@ function App() {
                     <button
                       type="button"
                       className="rubber-stamp stamp-red clickable-stamp" 
-                      onClick={login}
+                      onClick={openLogin}
+                      disabled={!ready || isLoginModalOpen}
                       title="Sign in"
                     >
                       SIGN IN TO UNLOCK
@@ -3131,7 +3155,8 @@ function App() {
                     <button
                       type="button"
                       className="rubber-stamp stamp-red clickable-stamp"
-                      onClick={login}
+                      onClick={openLogin}
+                      disabled={!ready || isLoginModalOpen}
                       title="Sign in to activate your wallet"
                     >
                       WALLET: SIGN IN REQUIRED
