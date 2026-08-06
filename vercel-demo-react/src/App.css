@@ -738,6 +738,23 @@ body {
   margin-top: 12px;
 }
 
+.signin-modal-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 12px;
+  color: var(--ink-grey);
+  font: 10px var(--font-mono);
+}
+
+.signin-modal-divider::before,
+.signin-modal-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: var(--ink-light-grey);
+}
+
 .vintage-wallet-modal {
   background: #e8dfbe; /* Slightly darker aged paper inside */
   border: 6px solid #3d2f25; /* Leather outer cover color */
