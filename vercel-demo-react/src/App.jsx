@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
-import { useIdentityToken, useLoginWithEmail, usePrivy, useWallets, useLogin } from '@privy-io/react-auth';
+import { useIdentityToken, useLoginWithEmail, usePrivy } from '@privy-io/react-auth';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import './App.css';
@@ -270,33 +270,18 @@ const isDomainAuthorizationError = (message) => {
 };
 
 function App() {
-  const { ready, logout, authenticated, user, getAccessToken } = usePrivy();
+  const { logout, authenticated, user, getAccessToken } = usePrivy();
   const { identityToken } = useIdentityToken();
-  const { login } = useLogin({
-    onComplete: (user) => {
-      console.log("[PaperCut] Login complete:", user);
-      setError("");
-    },
-    onError: (err) => {
-      console.error("[PaperCut] Login failed:", err);
-      let errMsg = err?.message || String(err);
-      if (isDomainAuthorizationError(errMsg)) {
-        errMsg = `Domain not authorized. Add "${window.location.origin}" to the Allowed Domains for the configured app in the Privy dashboard.`;
-      }
-      setError(errMsg);
-    }
-  });
   const { sendCode: sendEmailCode, loginWithCode: loginWithEmailCode } = useLoginWithEmail();
-  const { wallets } = useWallets();
 
   const authFetch = useCallback(async (url, options = {}) => {
     return resilientAuthFetch(url, options, {
-      authenticated: ready && authenticated,
+      authenticated,
       getAccessToken,
       identityToken,
       fetchImpl: window.fetch.bind(window),
     });
-  }, [authenticated, getAccessToken, identityToken, ready]);
+  }, [authenticated, getAccessToken, identityToken]);
 
   const waitForPaymentOperation = async (initialData) => {
     if (!initialData?.pending || !initialData.transactionId) return initialData;
@@ -313,7 +298,6 @@ function App() {
   const [circleWallet, setCircleWallet] = useState(null);
   const walletRequestRef = useRef(null);
   const walletRequestGenerationRef = useRef(0);
-  const activeWallet = wallets ? wallets[0] : null;
   const smartWalletAddress = circleWallet?.address;
 
   const [selectedArticle, setSelectedArticle] = useState(null);
@@ -322,7 +306,7 @@ function App() {
   const [txHash, setTxHash] = useState("");
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [error, setError] = useState("");
-  const [chainId, setChainId] = useState(null);
+  const chainId = "5042002";
   const [showSignInModal, setShowSignInModal] = useState(false);
   const [signInEmail, setSignInEmail] = useState("");
   const [signInCode, setSignInCode] = useState("");
@@ -355,11 +339,6 @@ function App() {
       setSignInError("Enter a valid email address.");
       return;
     }
-    if (!ready) {
-      setSignInError("Privy is still initializing. Please wait a moment and retry.");
-      return;
-    }
-
     setSignInBusy(true);
     setSignInError("");
     try {
@@ -714,10 +693,10 @@ function App() {
 
   // Prefill wallet address in the publisher registration form
   useEffect(() => {
-    if (smartWalletAddress || activeWallet?.address || user?.wallet?.address) {
-      setPubFormWallet(smartWalletAddress || activeWallet?.address || user?.wallet?.address || "");
+    if (smartWalletAddress || user?.wallet?.address) {
+      setPubFormWallet(smartWalletAddress || user?.wallet?.address || "");
     }
-  }, [smartWalletAddress, activeWallet, user]);
+  }, [smartWalletAddress, user]);
 
   const userEmail = user?.email?.address || user?.id || "";
 
@@ -1265,13 +1244,6 @@ function App() {
     return null;
   };
 
-  // Update active wallet chain ID when wallet changes
-  useEffect(() => {
-    if (wallets && wallets[0]) {
-      setChainId(wallets[0].chainId);
-    }
-  }, [wallets]);
-
   // Fetch or create user's Circle Programmable Wallet on backend upon login
   const fetchUserCircleWallet = useCallback(() => {
     if (!authenticated || !user) {
@@ -1814,7 +1786,7 @@ function App() {
                 <button 
                   className="btn-wallet-icon" 
                   onClick={() => setShowWalletModal(true)} 
-                  title={`Open Ledger Vault Wallet (${smartWalletAddress || activeWallet?.address || user?.wallet?.address})`}
+                  title={`Open Ledger Vault Wallet (${smartWalletAddress || user?.wallet?.address})`}
                 >
                   <svg width="18" height="16" viewBox="0 0 20 18" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
                     <path d="M17 4H3C1.89543 4 1 4.89543 1 6V15C1 16.1046 1.89543 17 3 17H17C18.1046 17 19 16.1046 19 15V6C19 4.89543 18.1046 4 17 4Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -3583,8 +3555,8 @@ function App() {
                   placeholder="reader@example.com"
                   disabled={signInBusy}
                 />
-                <button type="submit" className="btn" disabled={signInBusy || !ready}>
-                  {signInBusy ? "SENDING CODE..." : !ready ? "INITIALIZING PRIVY..." : "SEND SIGN-IN CODE"}
+                <button type="submit" className="btn" disabled={signInBusy}>
+                  {signInBusy ? "SENDING CODE..." : "SEND SIGN-IN CODE"}
                 </button>
               </form>
             ) : (
@@ -3612,18 +3584,6 @@ function App() {
             )}
 
             {signInError && <div className="paywall-error signin-modal-error" role="alert">{signInError}</div>}
-            <div className="signin-modal-divider"><span>OR</span></div>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              disabled={!ready || signInBusy}
-              onClick={() => {
-                setSignInError("");
-                login({ loginMethods: ["wallet"] });
-              }}
-            >
-              CONNECT CRYPTO WALLET
-            </button>
           </section>
         </div>
       )}
@@ -3855,7 +3815,7 @@ function App() {
                   <div className="qr-code-wrapper">
                     <img 
                       className="qr-code-img-vintage" 
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${smartWalletAddress || activeWallet?.address || user?.wallet?.address}`} 
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${smartWalletAddress || user?.wallet?.address}`}
                       alt="Wallet QR Code" 
                     />
                   </div>
