@@ -6,6 +6,7 @@ import './App.css';
 import logoImg from './assets/logo.png';
 import { resilientAuthFetch } from './apiClient.js';
 import { sendEmailCodeWithSessionRecovery } from './privyAuthRecovery.js';
+import { getBackendBaseUrl } from './runtimeConfig.js';
 
 const INITIAL_ARTICLES = [
   {
@@ -64,27 +65,10 @@ const INITIAL_ARTICLES = [
   }
 ];
 
-// Auto-infer backend URL on Vercel deployment if VITE_API_URL is not baked in
-const getInferredBackendUrl = () => {
-  const url = import.meta.env.VITE_API_URL;
-  
-  // BUGFIX: Always respect VITE_API_URL when explicitly set (including localhost)
-  // This allows developers to point at a local backend during development.
-  if (url) {
-    return url.replace(/\/+$/, ""); // strip trailing slashes
-  }
-  
-  // The public site is hosted below /papercut and cannot rely on a same-origin
-  // /api rewrite. Keep a production fallback so a missing build variable does
-  // not leave the UI loaded while every feature silently calls a 404 endpoint.
-  if (typeof window !== "undefined" && !window.location.hostname.includes("localhost") && !window.location.hostname.includes("127.0.0.1")) {
-    return "https://paper-cut-apce.vercel.app";
-  }
-  
-  // Local development must never fall through to a production payment API.
-  return "http://localhost:4000";
-};
-const BACKEND_URL = getInferredBackendUrl();
+const BACKEND_URL = getBackendBaseUrl({
+  configuredUrl: import.meta.env.VITE_API_URL,
+  location: typeof window === "undefined" ? undefined : window.location,
+});
 
 const UsdcCoinIcon = ({ size = 24, className = "", style = {} }) => {
   return (
