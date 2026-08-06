@@ -4,6 +4,7 @@ const { z } = require("zod");
 const { formatUsdc, parseUsdc } = require("./money");
 
 const ethAddress = z.string().trim().regex(/^0x[a-fA-F0-9]{40}$/, "Invalid EVM address");
+const txHash = z.string().trim().regex(/^0x[a-fA-F0-9]{64}$/, "Invalid transaction hash");
 const email = z.string().trim().email().max(254).transform((value) => value.toLowerCase());
 const shortText = z.string().trim().min(1).max(120);
 const content = z.string().trim().min(1).max(100_000);
@@ -34,6 +35,12 @@ const schemas = {
     price: usdcAmount("1000"),
   }),
   articleUnlock: z.object({ articleId: z.string().trim().min(1).max(128) }),
+  entitlementReconcile: z.object({
+    receipts: z.array(z.object({
+      articleId: z.string().trim().min(1).max(128),
+      txHash,
+    })).max(25),
+  }),
   publisherApplication: z.object({
     name: shortText,
     domain,

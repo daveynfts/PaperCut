@@ -41,6 +41,11 @@ test("article content cannot be bypassed with an author query", async () => {
 
 test("protected payment and admin routes reject missing or insufficient identity", async () => {
   await request(app)
+    .post("/api/user/entitlements/reconcile")
+    .send({ receipts: [] })
+    .expect(401);
+
+  await request(app)
     .post("/api/user/withdraw")
     .send({ destinationAddress: "0x1111111111111111111111111111111111111111", amount: "1" })
     .expect(401);

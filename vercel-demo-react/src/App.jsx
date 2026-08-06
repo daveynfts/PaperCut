@@ -7,6 +7,7 @@ import logoImg from './assets/logo.png';
 import { resilientAuthFetch } from './apiClient.js';
 import { sendEmailCodeWithSessionRecovery } from './privyAuthRecovery.js';
 import { getBackendBaseUrl } from './runtimeConfig.js';
+import { collectLegacyEntitlementReceipts } from './legacyEntitlements.js';
 
 const INITIAL_ARTICLES = [
   {
@@ -1309,6 +1310,7 @@ function App() {
         });
         const data = await safeParseResponse(response);
         if (response.ok) {
+          const serverUnlockedArticles = data.unlockedArticles || {};
           const walletData = {
             address: data.address,
             balance: data.balance,
@@ -1317,7 +1319,30 @@ function App() {
           };
           if (walletRequestGenerationRef.current === requestGeneration) {
             setCircleWallet(walletData);
-            setUnlockedArticles(data.unlockedArticles || {});
+            setUnlockedArticles(serverUnlockedArticles);
+          }
+
+          const legacyReceipts = collectLegacyEntitlementReceipts({
+            storage: window.localStorage,
+            user,
+            unlockedArticles: serverUnlockedArticles,
+          });
+          if (legacyReceipts.length) {
+            void (async () => {
+              try {
+                const reconciliationResponse = await authFetch(`${BACKEND_URL}/api/user/entitlements/reconcile`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ receipts: legacyReceipts }),
+                });
+                const reconciliation = await safeParseResponse(reconciliationResponse);
+                if (reconciliationResponse.ok && walletRequestGenerationRef.current === requestGeneration) {
+                  setUnlockedArticles(reconciliation.unlockedArticles || serverUnlockedArticles);
+                }
+              } catch (reconciliationError) {
+                console.error("Could not reconcile legacy article receipts:", reconciliationError);
+              }
+            })();
           }
           return { wallet: walletData, error: null };
         }
