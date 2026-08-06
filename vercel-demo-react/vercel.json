@@ -1,6 +1,7 @@
 {
   "rewrites": [
     { "source": "/papercut/api/privy/:path*", "destination": "https://auth.privy.io/:path*" },
+    { "source": "/api/privy/:path*", "destination": "https://auth.privy.io/:path*" },
     { "source": "/api/:path*", "destination": "https://paper-cut-apce.vercel.app/api/:path*" },
     { "source": "/papercut/admin", "destination": "/papercut/index.html" },
     { "source": "/papercut/admin/", "destination": "/papercut/index.html" },

@@ -34,4 +34,8 @@ test('production Privy traffic uses the same-origin auth proxy', () => {
     source: '/papercut/api/privy/:path*',
     destination: 'https://auth.privy.io/:path*',
   });
+  assert.deepEqual(vercelConfig.rewrites[1], {
+    source: '/api/privy/:path*',
+    destination: 'https://auth.privy.io/:path*',
+  });
 });
