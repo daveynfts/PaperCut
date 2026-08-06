@@ -11,6 +11,12 @@ const { ethers } = require("ethers");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 
 const { isAdminIdentity, normalizeIdentity, optionalAuth, requireAdmin, requireAuth } = require("./auth");
+const {
+  findEntitlementByTxHash,
+  normalizeTxHash,
+  operationBelongsToUser,
+  verifyLegacyCircleTransaction,
+} = require("./entitlements");
 const { formatUsdc, parseExternalUsdcBalance, parseUsdc } = require("./money");
 const { PaperCutStore } = require("./store");
 const { createRetryableInitializer } = require("./retryable-initializer");
@@ -67,6 +73,7 @@ const store = new PaperCutStore({
 let publisherWalletAddress = "";
 let cachedCirclePublicKey = null;
 let cachedCirclePublicKeyAt = 0;
+const walletInitializationPromises = new Map();
 
 function assertPaymentConfiguration() {
   if (NODE_ENV === "production") {
@@ -197,6 +204,14 @@ async function getCircleTransaction(transactionId) {
   return { state: transaction.state || "UNKNOWN", txHash: transaction.txHash || "" };
 }
 
+async function getCircleTransactionByHash(txHash) {
+  const query = new URLSearchParams({ txHash, pageSize: "10" });
+  const payload = await circleRequest(`https://api.circle.com/v1/w3s/transactions?${query}`);
+  return (payload.data?.transactions || []).find((transaction) =>
+    normalizeTxHash(transaction.txHash) === normalizeTxHash(txHash)
+  ) || null;
+}
+
 async function pollCircleTransaction(transactionId, attempts = 5) {
   let result = { state: "INITIATED", txHash: "" };
   for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -294,25 +309,21 @@ async function getUserRecord(auth) {
   return users[auth.accountKey] || null;
 }
 
-async function getOrCreateUserWallet(auth) {
-  let result = (await store.read("users"))[auth.accountKey];
-  if (!result) {
-    let wallet;
-    if (isMockMode) {
-      wallet = { id: crypto.randomUUID(), address: `0x${crypto.randomBytes(20).toString("hex")}` };
-    } else if (isLiveMode) {
-      // Creating a Circle wallet can take several seconds. Do it outside the
-      // shared users-data lock so one new account cannot block every visitor.
-      // The stable idempotency key makes concurrent serverless retries safe.
-      wallet = await createCircleWallet(stableIdempotencyKey(auth.userId));
-    } else {
-      const error = new Error("Payments are disabled");
-      error.statusCode = 503;
-      throw error;
-    }
+async function initializeUserWallet(auth) {
+  let wallet;
+  if (isMockMode) {
+    wallet = { id: crypto.randomUUID(), address: `0x${crypto.randomBytes(20).toString("hex")}` };
+  } else if (isLiveMode) {
+    wallet = await createCircleWallet(stableIdempotencyKey(auth.userId));
+  } else {
+    const error = new Error("Payments are disabled");
+    error.statusCode = 503;
+    throw error;
+  }
 
-    await store.update("users", (users) => {
-      if (!users[auth.accountKey]) {
+  let result;
+  await store.update("users", (users) => {
+    if (!users[auth.accountKey]) {
       users[auth.accountKey] = {
         privyUserId: auth.userId,
         email: auth.email || null,
@@ -322,9 +333,30 @@ async function getOrCreateUserWallet(auth) {
         unlockedArticles: {},
         processedOperations: {},
       };
+    }
+    result = users[auth.accountKey];
+  });
+  return result;
+}
+
+async function getOrCreateUserWallet(auth) {
+  let result = (await store.read("users"))[auth.accountKey];
+  if (!result) {
+    let initialization = walletInitializationPromises.get(auth.accountKey);
+    if (!initialization) {
+      // Circle wallet creation stays outside the shared data lock, while the
+      // per-account promise prevents concurrent requests from repeating the
+      // same database write in one server instance.
+      initialization = initializeUserWallet(auth);
+      walletInitializationPromises.set(auth.accountKey, initialization);
+    }
+    try {
+      result = await initialization;
+    } finally {
+      if (walletInitializationPromises.get(auth.accountKey) === initialization) {
+        walletInitializationPromises.delete(auth.accountKey);
       }
-      result = users[auth.accountKey];
-    });
+    }
   }
 
   if (isLiveMode) {
@@ -334,7 +366,7 @@ async function getOrCreateUserWallet(auth) {
       result = users[auth.accountKey];
     });
   }
-  return result;
+  return reconcileStoredPaymentOperations(auth, result);
 }
 
 async function createOperation(operation) {
@@ -464,6 +496,154 @@ async function finalizeOperation(operationId, circleResult) {
   return operation;
 }
 
+async function reconcileStoredPaymentOperations(auth, user) {
+  if (!auth || !user) return user;
+  const transactions = await store.read("transactions");
+  const userOperations = Object.values(transactions).filter((operation) =>
+    operationBelongsToUser(operation, auth, user)
+  );
+
+  // A browser may close before polling a pending payment. Re-check a bounded
+  // number on every wallet load so a completed Circle transfer cannot remain
+  // permanently detached from its entitlement.
+  const pending = userOperations.filter((operation) =>
+    ["INITIATED", "PENDING"].includes(operation.status) && operation.circleTransactionId
+  ).slice(0, 10);
+  for (const operation of pending) {
+    try {
+      await finalizeOperation(operation.id, await getCircleTransaction(operation.circleTransactionId));
+    } catch (error) {
+      console.error(`[PaperCut API] Could not reconcile payment ${operation.id}:`, error.message);
+    }
+  }
+
+  const refreshedTransactions = pending.length ? await store.read("transactions") : transactions;
+  const completedUnlocks = Object.values(refreshedTransactions).filter((operation) =>
+    operation.type === "unlock" &&
+    operation.status === "COMPLETE" &&
+    operation.articleId &&
+    operationBelongsToUser(operation, auth, user)
+  );
+
+  if (completedUnlocks.length) {
+    await store.update("users", (users) => {
+      const record = users[auth.accountKey];
+      if (!record) return;
+      record.unlockedArticles ||= {};
+      record.processedOperations ||= {};
+      for (const operation of completedUnlocks) {
+        if (!record.unlockedArticles[operation.articleId]) {
+          record.unlockedArticles[operation.articleId] = {
+            txHash: operation.txHash || operation.circleTransactionId || operation.id,
+            confirmedAt: operation.completedAt || operation.updatedAt || operation.createdAt || Date.now(),
+            amount: operation.amount,
+            recovered: true,
+          };
+        }
+        record.processedOperations[operation.id] ||= operation.completedAt || Date.now();
+      }
+    });
+  }
+
+  return (await store.read("users"))[auth.accountKey] || user;
+}
+
+async function saveLegacyReceiptCheck(auth, txHash, check) {
+  await store.update("users", (users) => {
+    const record = users[auth.accountKey];
+    if (!record) return;
+    record.legacyReceiptChecks ||= {};
+    if (Object.keys(record.legacyReceiptChecks).length < 100 || record.legacyReceiptChecks[txHash]) {
+      record.legacyReceiptChecks[txHash] = check;
+    }
+  });
+}
+
+async function reconcileLegacyReceipt(auth, receipt) {
+  const txHash = normalizeTxHash(receipt.txHash);
+  const users = await store.read("users");
+  const user = users[auth.accountKey];
+  if (!user) return { articleId: receipt.articleId, status: "rejected", reason: "Wallet is not initialized" };
+  if (user.unlockedArticles?.[receipt.articleId]) {
+    return { articleId: receipt.articleId, status: "already-unlocked" };
+  }
+
+  const priorCheck = user.legacyReceiptChecks?.[txHash];
+  if (priorCheck) {
+    if (priorCheck.articleId !== receipt.articleId) {
+      return { articleId: receipt.articleId, status: "rejected", reason: "Receipt was already assigned to another article" };
+    }
+    return { articleId: receipt.articleId, status: priorCheck.status, reason: priorCheck.reason };
+  }
+
+  const existingEntitlement = findEntitlementByTxHash(users, txHash);
+  if (existingEntitlement) {
+    const sameEntitlement = existingEntitlement.accountKey === auth.accountKey &&
+      existingEntitlement.articleId === receipt.articleId;
+    return {
+      articleId: receipt.articleId,
+      status: sameEntitlement ? "already-unlocked" : "rejected",
+      ...(sameEntitlement ? {} : { reason: "Receipt was already used for another entitlement" }),
+    };
+  }
+
+  const article = await getArticle(receipt.articleId);
+  if (!article) {
+    await saveLegacyReceiptCheck(auth, txHash, {
+      articleId: receipt.articleId,
+      status: "rejected",
+      reason: "Article no longer exists",
+      checkedAt: Date.now(),
+    });
+    return { articleId: receipt.articleId, status: "rejected", reason: "Article no longer exists" };
+  }
+
+  const transaction = await getCircleTransactionByHash(txHash);
+  const verification = verifyLegacyCircleTransaction({
+    transaction,
+    txHash,
+    user,
+    article,
+    publisherWalletAddress,
+  });
+  if (!verification.ok) {
+    await saveLegacyReceiptCheck(auth, txHash, {
+      articleId: receipt.articleId,
+      status: "rejected",
+      reason: verification.reason,
+      checkedAt: Date.now(),
+    });
+    return { articleId: receipt.articleId, status: "rejected", reason: verification.reason };
+  }
+
+  let granted = false;
+  await store.update("users", (currentUsers) => {
+    const record = currentUsers[auth.accountKey];
+    if (!record) return;
+    const claimed = findEntitlementByTxHash(currentUsers, txHash);
+    if (claimed && (claimed.accountKey !== auth.accountKey || claimed.articleId !== receipt.articleId)) return;
+
+    record.unlockedArticles ||= {};
+    record.legacyReceiptChecks ||= {};
+    record.unlockedArticles[receipt.articleId] ||= {
+      txHash,
+      confirmedAt: Date.parse(transaction.updateDate || transaction.createDate || "") || Date.now(),
+      amount: article.price,
+      recovered: true,
+    };
+    record.legacyReceiptChecks[txHash] = {
+      articleId: receipt.articleId,
+      status: "verified",
+      checkedAt: Date.now(),
+    };
+    granted = true;
+  });
+
+  return granted
+    ? { articleId: receipt.articleId, status: "verified" }
+    : { articleId: receipt.articleId, status: "rejected", reason: "Receipt was claimed concurrently" };
+}
+
 async function startTransfer({ operationId, type, auth, sourceWalletId, destinationAddress, amount, details = {} }) {
   if (PAYMENT_MODE === "disabled") {
     const error = new Error("Payments are currently disabled");
@@ -549,7 +729,8 @@ app.get("/api/articles/:id", optionalAuth, async (req, res, next) => {
 
     const publishers = await store.read("publishers");
     const ownsArticle = isArticleOwner(article, publishers, req.auth);
-    const user = req.auth ? await getUserRecord(req.auth) : null;
+    let user = req.auth ? await getUserRecord(req.auth) : null;
+    if (user) user = await reconcileStoredPaymentOperations(req.auth, user);
     const unlocked = Boolean(user?.unlockedArticles?.[article.id]);
     if (!ownsArticle && !unlocked) {
       return res.status(402).json({
@@ -737,6 +918,23 @@ app.post("/api/user/wallet", requireAuth, async (req, res, next) => {
       unlockedArticles: user.unlockedArticles || {},
       isMock: isMockMode,
     });
+  } catch (error) { next(error); }
+});
+
+app.post("/api/user/entitlements/reconcile", requireAuth, validate(schemas.entitlementReconcile), async (req, res, next) => {
+  try {
+    let user = await getOrCreateUserWallet(req.auth);
+    const results = [];
+    for (const receipt of req.validatedBody.receipts) {
+      try {
+        results.push(await reconcileLegacyReceipt(req.auth, receipt));
+      } catch (error) {
+        console.error(`[PaperCut API] Legacy receipt reconciliation failed for article ${receipt.articleId}:`, error.message);
+        results.push({ articleId: receipt.articleId, status: "retryable-error" });
+      }
+    }
+    user = await reconcileStoredPaymentOperations(req.auth, user);
+    res.json({ success: true, results, unlockedArticles: user.unlockedArticles || {} });
   } catch (error) { next(error); }
 });
 

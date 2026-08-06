@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test tests/*.test.js",
-    "check": "node --check server.js && node --check auth.js && node --check store.js && node --check validation.js && node --check check_tx.js && node --check test_faucet_integration.js"
+    "check": "node --check server.js && node --check auth.js && node --check entitlements.js && node --check money.js && node --check store.js && node --check validation.js && node --check check_tx.js && node --check test_faucet_integration.js"
   },
   "dependencies": {
     "@privy-io/node": "^0.26.0",
