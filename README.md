@@ -111,6 +111,7 @@ for pushes and pull requests.
 - Rotate any credential that has ever appeared in Git history; deleting it from
   the latest revision does not revoke it.
 - Configure `CORS_ORIGIN` with the exact deployed frontend origins.
-- `SURFAI_PDF_URL` is disclosed only after an API grant, but the storage/CDN
-  must still enforce its own access control; prefer short-lived signed URLs.
+- `SURFAI_PDF_URL` and `SURFAI_VIDEO_URL` are disclosed only after an API
+  entitlement grant, but the storage/CDN must still enforce its own access
+  control; prefer short-lived signed URLs backed by private objects.
 - Review and test live Circle transfers with small amounts before production.

@@ -39,3 +39,11 @@ test('production Privy traffic uses the same-origin auth proxy', () => {
     destination: 'https://auth.privy.io/:path*',
   });
 });
+
+test('SurfAI video stays behind the server-verified entitlement gate', () => {
+  assert.doesNotMatch(appSource, /pub-8288264395e64bebab09946b5bc0b740\.r2\.dev/);
+  assert.match(appSource, /!authenticated \|\| !unlockedArticles\[surfArticleId\]/);
+  assert.match(appSource, /await fetchFullArticleContent\(surfArticleId\)/);
+  assert.match(appSource, /if \(!protectedFields\?\.videoUrl\)/);
+  assert.match(appSource, /<source src=\{surfVideoUrl\}/);
+});
