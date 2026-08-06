@@ -28,10 +28,10 @@ test('email and external-wallet authentication are both available', () => {
 });
 
 test('production Privy traffic uses the same-origin auth proxy', () => {
-  assert.match(providerSource, /new URL\('\/api\/privy', window\.location\.origin\)/);
+  assert.match(providerSource, /new URL\('\/papercut\/api\/privy', window\.location\.origin\)/);
   assert.match(providerSource, /apiUrl=\{PRIVY_API_URL\}/);
   assert.deepEqual(vercelConfig.rewrites[0], {
-    source: '/api/privy/:path*',
+    source: '/papercut/api/privy/:path*',
     destination: 'https://auth.privy.io/:path*',
   });
 });
