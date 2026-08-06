@@ -4,6 +4,7 @@ import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import './App.css';
 import logoImg from './assets/logo.png';
+import { resilientAuthFetch } from './apiClient.js';
 
 const INITIAL_ARTICLES = [
   {
@@ -72,10 +73,11 @@ const getInferredBackendUrl = () => {
     return url.replace(/\/+$/, ""); // strip trailing slashes
   }
   
-  // On Vercel deployment, use relative path so Vercel rewrites handles requests server-to-server
-  // This avoids CORS issues completely.
+  // The public site is hosted below /papercut and cannot rely on a same-origin
+  // /api rewrite. Keep a production fallback so a missing build variable does
+  // not leave the UI loaded while every feature silently calls a 404 endpoint.
   if (typeof window !== "undefined" && !window.location.hostname.includes("localhost") && !window.location.hostname.includes("127.0.0.1")) {
-    return "";
+    return "https://paper-cut-apce.vercel.app";
   }
   
   // Local development must never fall through to a production payment API.
@@ -268,7 +270,7 @@ const isDomainAuthorizationError = (message) => {
 };
 
 function App() {
-  const { logout, authenticated, user, getAccessToken } = usePrivy();
+  const { ready, logout, authenticated, user, getAccessToken } = usePrivy();
   const { identityToken } = useIdentityToken();
   const { login } = useLogin({
     onComplete: (user) => {
@@ -287,14 +289,13 @@ function App() {
   const { wallets } = useWallets();
 
   const authFetch = useCallback(async (url, options = {}) => {
-    const headers = new Headers(options.headers || {});
-    if (authenticated) {
-      const accessToken = await getAccessToken();
-      if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
-      if (identityToken) headers.set('X-Privy-Identity-Token', identityToken);
-    }
-    return window.fetch(url, { ...options, headers });
-  }, [authenticated, getAccessToken, identityToken]);
+    return resilientAuthFetch(url, options, {
+      authenticated: ready && authenticated,
+      getAccessToken,
+      identityToken,
+      fetchImpl: window.fetch.bind(window),
+    });
+  }, [authenticated, getAccessToken, identityToken, ready]);
 
   const waitForPaymentOperation = async (initialData) => {
     if (!initialData?.pending || !initialData.transactionId) return initialData;
@@ -309,6 +310,8 @@ function App() {
   };
 
   const [circleWallet, setCircleWallet] = useState(null);
+  const walletRequestRef = useRef(null);
+  const walletRequestGenerationRef = useRef(0);
   const activeWallet = wallets ? wallets[0] : null;
   const smartWalletAddress = circleWallet?.address;
 
@@ -1195,51 +1198,87 @@ function App() {
   }, [wallets]);
 
   // Fetch or create user's Circle Programmable Wallet on backend upon login
-  const fetchUserCircleWallet = useCallback(async () => {
+  const fetchUserCircleWallet = useCallback(() => {
     if (!authenticated || !user) {
+      walletRequestGenerationRef.current += 1;
+      walletRequestRef.current = null;
       setCircleWallet(null);
       setUnlockedArticles({});
-      return;
+      setIsLoadingWallet(false);
+      return Promise.resolve({ wallet: null, error: null });
     }
-    
+
+    const accountId = user.id;
+    if (walletRequestRef.current?.accountId === accountId) {
+      return walletRequestRef.current.promise;
+    }
+
+    const requestGeneration = walletRequestGenerationRef.current + 1;
+    walletRequestGenerationRef.current = requestGeneration;
     setIsLoadingWallet(true);
     setError("");
-    
-    try {
-      const response = await authFetch(`${BACKEND_URL}/api/user/wallet`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({})
-      });
-      const data = await response.json();
-      if (response.ok) {
-        const walletData = {
-          address: data.address,
-          balance: data.balance,
-          walletId: data.walletId,
-          isMock: data.isMock
-        };
-        setCircleWallet(walletData);
-        setUnlockedArticles(data.unlockedArticles || {});
-        return { wallet: walletData, error: null };
-      } else {
+
+    const request = (async () => {
+      try {
+        const response = await authFetch(`${BACKEND_URL}/api/user/wallet`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({})
+        });
+        const data = await safeParseResponse(response);
+        if (response.ok) {
+          const walletData = {
+            address: data.address,
+            balance: data.balance,
+            walletId: data.walletId,
+            isMock: data.isMock
+          };
+          if (walletRequestGenerationRef.current === requestGeneration) {
+            setCircleWallet(walletData);
+            setUnlockedArticles(data.unlockedArticles || {});
+          }
+          return { wallet: walletData, error: null };
+        }
+
         const errorMsg = data.error || "Failed to load Circle MPC wallet.";
-        setError(errorMsg);
+        if (walletRequestGenerationRef.current === requestGeneration) setError(errorMsg);
         return { wallet: null, error: errorMsg };
+      } catch (err) {
+        console.error("Error fetching Circle wallet:", err);
+        const errorMsg = `Network/Proxy Error: ${err.message || String(err)}`;
+        if (walletRequestGenerationRef.current === requestGeneration) setError(errorMsg);
+        return { wallet: null, error: errorMsg };
+      } finally {
+        if (walletRequestGenerationRef.current === requestGeneration) {
+          setIsLoadingWallet(false);
+          walletRequestRef.current = null;
+        }
       }
-    } catch (err) {
-      console.error("Error fetching Circle wallet:", err);
-      const errorMsg = `Network/Proxy Error: ${err.message || String(err)}`;
-      setError(errorMsg);
-      return { wallet: null, error: errorMsg };
-    } finally {
-      setIsLoadingWallet(false);
-    }
+    })();
+
+    walletRequestRef.current = { accountId, promise: request };
+    return request;
   }, [authenticated, authFetch, user]);
 
   useEffect(() => {
     fetchUserCircleWallet();
   }, [fetchUserCircleWallet]);
+
+  useEffect(() => {
+    const refreshAfterInterruption = () => {
+      if (document.visibilityState && document.visibilityState !== "visible") return;
+      fetchArticles();
+      fetchPublishers();
+      if (authenticated) fetchUserCircleWallet();
+    };
+
+    window.addEventListener("online", refreshAfterInterruption);
+    document.addEventListener("visibilitychange", refreshAfterInterruption);
+    return () => {
+      window.removeEventListener("online", refreshAfterInterruption);
+      document.removeEventListener("visibilitychange", refreshAfterInterruption);
+    };
+  }, [authenticated, fetchArticles, fetchPublishers, fetchUserCircleWallet]);
 
   useEffect(() => {
     if (showWalletModal) {

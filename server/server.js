@@ -13,6 +13,7 @@ require("dotenv").config({ path: path.join(__dirname, ".env") });
 const { isAdminIdentity, normalizeIdentity, optionalAuth, requireAdmin, requireAuth } = require("./auth");
 const { formatUsdc, parseUsdc } = require("./money");
 const { PaperCutStore } = require("./store");
+const { createRetryableInitializer } = require("./retryable-initializer");
 const { schemas, validate } = require("./validation");
 
 const app = express();
@@ -141,11 +142,19 @@ async function getEntitySecretCiphertext() {
   return encryptEntitySecret(process.env.CIRCLE_ENTITY_SECRET, cachedCirclePublicKey);
 }
 
-async function createCircleWallet() {
+function stableIdempotencyKey(value) {
+  const bytes = Buffer.from(crypto.createHash("sha256").update(String(value)).digest().subarray(0, 16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+async function createCircleWallet(idempotencyKey) {
   const payload = await circleRequest("https://api.circle.com/v1/w3s/developer/wallets", {
     method: "POST",
     body: JSON.stringify({
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey,
       entitySecretCiphertext: await getEntitySecretCiphertext(),
       walletSetId: process.env.CIRCLE_WALLET_SET_ID,
       blockchains: ["ARC-TESTNET"],
@@ -198,14 +207,14 @@ async function pollCircleTransaction(transactionId, attempts = 5) {
   return result;
 }
 
-const startup = (async () => {
+const ensureStartup = createRetryableInitializer(async () => {
   assertPaymentConfiguration();
   await Promise.all([store.init(), initializePublisherWallet()]);
-})();
+});
 
 app.use("/api", async (_req, res, next) => {
   try {
-    await startup;
+    await ensureStartup();
     next();
   } catch (error) {
     res.status(503).json({ error: "Service configuration is incomplete", detail: NODE_ENV === "production" ? undefined : error.message });
@@ -286,19 +295,24 @@ async function getUserRecord(auth) {
 }
 
 async function getOrCreateUserWallet(auth) {
-  let result;
-  await store.update("users", async (users) => {
-    if (!users[auth.accountKey]) {
-      let wallet;
-      if (isMockMode) {
-        wallet = { id: crypto.randomUUID(), address: `0x${crypto.randomBytes(20).toString("hex")}` };
-      } else if (isLiveMode) {
-        wallet = await createCircleWallet();
-      } else {
-        const error = new Error("Payments are disabled");
-        error.statusCode = 503;
-        throw error;
-      }
+  let result = (await store.read("users"))[auth.accountKey];
+  if (!result) {
+    let wallet;
+    if (isMockMode) {
+      wallet = { id: crypto.randomUUID(), address: `0x${crypto.randomBytes(20).toString("hex")}` };
+    } else if (isLiveMode) {
+      // Creating a Circle wallet can take several seconds. Do it outside the
+      // shared users-data lock so one new account cannot block every visitor.
+      // The stable idempotency key makes concurrent serverless retries safe.
+      wallet = await createCircleWallet(stableIdempotencyKey(auth.userId));
+    } else {
+      const error = new Error("Payments are disabled");
+      error.statusCode = 503;
+      throw error;
+    }
+
+    await store.update("users", (users) => {
+      if (!users[auth.accountKey]) {
       users[auth.accountKey] = {
         privyUserId: auth.userId,
         email: auth.email || null,
@@ -308,9 +322,10 @@ async function getOrCreateUserWallet(auth) {
         unlockedArticles: {},
         processedOperations: {},
       };
-    }
-    result = users[auth.accountKey];
-  });
+      }
+      result = users[auth.accountKey];
+    });
+  }
 
   if (isLiveMode) {
     const balance = await getWalletUsdcBalance(result.walletId);
@@ -771,7 +786,8 @@ app.post("/api/articles/unlock", requireAuth, validate(schemas.articleUnlock), a
     if (!publisherEntry?.[1]?.verified) return res.status(409).json({ error: "Article publisher is not verified" });
     const [publisherKey] = publisherEntry;
 
-    const liveBalance = isLiveMode ? await getWalletUsdcBalance(user.walletId) : user.balance;
+    // getOrCreateUserWallet has just refreshed the live Circle balance.
+    const liveBalance = user.balance;
     const cost = parseUsdc(article.price, { max: "1000" });
     if (parseUsdc(liveBalance, { allowZero: true, max: null }) < cost) {
       return res.status(402).json({ error: "Insufficient balance", balance: liveBalance });
@@ -811,7 +827,8 @@ app.post("/api/user/withdraw", requireAuth, validate(schemas.withdraw), async (r
   const operationId = crypto.randomUUID();
   try {
     const user = await getOrCreateUserWallet(req.auth);
-    const liveBalance = isLiveMode ? await getWalletUsdcBalance(user.walletId) : user.balance;
+    // getOrCreateUserWallet has just refreshed the live Circle balance.
+    const liveBalance = user.balance;
     const amount = parseUsdc(req.validatedBody.amount, { max: null });
     if (parseUsdc(liveBalance, { allowZero: true, max: null }) < amount) {
       return res.status(400).json({ error: "Insufficient balance for withdrawal", balance: liveBalance });
