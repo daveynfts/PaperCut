@@ -2598,6 +2598,47 @@ div[id="privy-dialog"] > div,
   text-transform: uppercase;
 }
 
+.surfai-video-lock-notice {
+  max-width: 520px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: -4px auto 20px;
+  padding: 12px 14px;
+  border: 1px solid #397a76;
+  color: #155b58;
+  background: rgba(113, 210, 186, 0.1);
+  font-family: var(--font-mono);
+  text-align: left;
+}
+
+.surfai-video-lock-notice > span {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid currentColor;
+  transform: rotate(45deg);
+  font-size: 9px;
+}
+
+.surfai-video-lock-notice div {
+  display: grid;
+  gap: 3px;
+}
+
+.surfai-video-lock-notice strong {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.surfai-video-lock-notice small {
+  color: var(--ink-grey);
+  font: 10px/1.45 var(--font-serif);
+}
+
 @keyframes surfaiPulse {
   0% { box-shadow: 0 0 0 0 rgba(113, 210, 186, 0.34); }
   70%, 100% { box-shadow: 0 0 0 7px rgba(113, 210, 186, 0); }

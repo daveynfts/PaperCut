@@ -294,6 +294,7 @@ function getSpecialArticle(articleId) {
       "The optional signed PDF is available below when a protected report URL is configured.",
     ].join("\n"),
     pdfUrl: process.env.SURFAI_PDF_URL || "",
+    videoUrl: process.env.SURFAI_VIDEO_URL || "",
     price: "0.15",
     payee: "0x1746978f956142e0482f0aff320d917ace450bcf",
   };
@@ -747,6 +748,7 @@ app.get("/api/articles/:id", optionalAuth, async (req, res, next) => {
       author: article.author,
       content: article.content,
       ...(article.pdfUrl ? { pdfUrl: article.pdfUrl } : {}),
+      ...(article.videoUrl ? { videoUrl: article.videoUrl } : {}),
     });
   } catch (error) { next(error); }
 });

@@ -433,6 +433,8 @@ function App() {
   const [videoSimulating, setVideoSimulating] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
   const [videoSimStep, setVideoSimStep] = useState(0);
+  const [surfVideoUrl, setSurfVideoUrl] = useState("");
+  const [surfRequestedAsset, setSurfRequestedAsset] = useState("");
 
   // Publisher Admin Portal States
   const [articles, setArticles] = useState(INITIAL_ARTICLES);
@@ -634,27 +636,39 @@ function App() {
 
   const fetchFullArticleContent = useCallback(async (articleId) => {
     try {
-      if (!unlockedArticles[articleId]) return;
       const response = await authFetch(`${BACKEND_URL}/api/articles/${articleId}`);
       const data = await safeParseResponse(response);
       if (response.ok && data.success && data.content) {
-        const protectedFields = { content: data.content, ...(data.pdfUrl ? { pdfUrl: data.pdfUrl } : {}) };
+        const protectedFields = {
+          content: data.content,
+          ...(data.pdfUrl ? { pdfUrl: data.pdfUrl } : {}),
+          ...(data.videoUrl ? { videoUrl: data.videoUrl } : {}),
+        };
         setArticles(prev => prev.map(art => art.id === articleId ? { ...art, ...protectedFields } : art));
         setSelectedArticle(prev => prev && prev.id === articleId ? { ...prev, ...protectedFields } : prev);
-        return;
+        return protectedFields;
       }
       throw new Error(data.error || 'Article access has not been granted by the server.');
     } catch (err) {
       console.error("Failed to fetch full article content:", err);
       setError(err.message || 'Unable to load protected article content.');
     }
-  }, [authFetch, unlockedArticles]);
+  }, [authFetch]);
 
   useEffect(() => {
     if (selectedArticle && unlockedArticles[selectedArticle.id] && !selectedArticle.content) {
       fetchFullArticleContent(selectedArticle.id);
     }
   }, [fetchFullArticleContent, selectedArticle, unlockedArticles]);
+
+  useEffect(() => {
+    if (authenticated && unlockedArticles["surfai-daily"]) return;
+    setSurfVideoUrl("");
+    setShowSurfVideoMockup(false);
+    setVideoSimulating(false);
+    setVideoReady(false);
+    setVideoSimStep(0);
+  }, [authenticated, unlockedArticles]);
 
   const fetchArticles = useCallback(async () => {
     try {
@@ -1678,20 +1692,40 @@ function App() {
     handleToggleAdminView(false);
   };
 
-  const handleSurfLogoClick = () => {
-    // Reset all other views
+  const openSurfVideoStudio = (videoUrl) => {
+    setSurfVideoUrl(videoUrl);
+    setSurfRequestedAsset("");
     setSelectedArticle(null);
     setShowApplyForm(false);
     setIsPublisherView(false);
     handleToggleAdminView(false);
-    
-    // Show video mockup panel and start simulation
     setShowSurfVideoMockup(true);
     triggerVideoSimulation();
   };
 
+  const handleSurfLogoClick = async () => {
+    const surfArticleId = "surfai-daily";
+    if (!authenticated || !unlockedArticles[surfArticleId]) {
+      openSurfDailyDispatch();
+      setSurfRequestedAsset("video");
+      setError("");
+      return;
+    }
+
+    const protectedFields = await fetchFullArticleContent(surfArticleId);
+    if (!protectedFields?.videoUrl) {
+      openSurfDailyDispatch();
+      setError("The protected SurfAI video is not available. Please try again shortly.");
+      return;
+    }
+
+    openSurfVideoStudio(protectedFields.videoUrl);
+  };
+
   const handleUnlockOnChain = async () => {
     if (isUnlocking) return;
+    const unlockingArticleId = selectedArticle?.id;
+    if (!unlockingArticleId) return;
     setIsUnlocking(true);
     setError("");
     setTxStatus("");
@@ -1718,7 +1752,7 @@ function App() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          articleId: selectedArticle.id
+          articleId: unlockingArticleId
         })
       });
       
@@ -1739,12 +1773,21 @@ function App() {
       // Save unlocked state
       const updatedUnlocked = { 
         ...unlockedArticles, 
-        [selectedArticle.id]: {
+        [unlockingArticleId]: {
           txHash: data.txHash || data.transactionId,
           isMock: !!data.isMock
         } 
       };
       setUnlockedArticles(updatedUnlocked);
+
+      if (unlockingArticleId === "surfai-daily" && surfRequestedAsset === "video") {
+        const protectedFields = await fetchFullArticleContent(unlockingArticleId);
+        if (protectedFields?.videoUrl) {
+          openSurfVideoStudio(protectedFields.videoUrl);
+        } else {
+          setError("Payment succeeded, but the protected video is not available yet. Please try Video brief again.");
+        }
+      }
       
       setTimeout(() => {
         setTxStatus("");
@@ -2947,8 +2990,8 @@ function App() {
                   onClick={handleSurfLogoClick}
                   title="Generate an AI video briefing"
                 >
-                  <span aria-hidden="true">▶</span>
-                  <span>Video brief</span>
+                  <span aria-hidden="true">{unlockedArticles["surfai-daily"] ? '▶' : '◆'}</span>
+                  <span>{unlockedArticles["surfai-daily"] ? 'Video brief' : 'Unlock video'}</span>
                 </button>
               </aside>
             )}
@@ -3108,7 +3151,7 @@ function App() {
                       <div className="surfai-video-frame">
                         <span className="surfai-video-corner">SurfAI / Daily intelligence</span>
                         <video controls autoPlay className="preview-video">
-                          <source src="https://pub-8288264395e64bebab09946b5bc0b740.r2.dev/SurfPaperCut/Th%E1%BB%8B_Tr%C6%B0%E1%BB%9Dng_Crypto_13_07_26.mp4" type="video/mp4" />
+                          <source src={surfVideoUrl} type="video/mp4" />
                           Your browser does not support the video tag.
                         </video>
                       </div>
@@ -3387,6 +3430,12 @@ function App() {
                             ? 'One payment unlocks the complete dispatch, signed PDF and AI video briefing.'
                             : 'Read the complete article with a one-time USDC payment.'}
                         </p>
+                        {selectedArticle.id === "surfai-daily" && surfRequestedAsset === "video" && (
+                          <div className="surfai-video-lock-notice" role="status">
+                            <span aria-hidden="true">◆</span>
+                            <div><strong>Video briefing locked</strong><small>Complete the one-time payment below to continue to the protected video.</small></div>
+                          </div>
+                        )}
                         
                         <div className="paywall-options-container">
                           <div className="paywall-option-box paywall-primary-option">

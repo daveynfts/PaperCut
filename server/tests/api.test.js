@@ -13,6 +13,7 @@ process.env.TEST_AUTH_BYPASS = "true";
 process.env.PAYMENT_MODE = "mock";
 process.env.PAPERCUT_DATA_DIR = dataDirectory;
 process.env.ADMIN_EMAILS = "admin@example.com";
+process.env.SURFAI_VIDEO_URL = "https://media.example.test/protected-surfai.mp4";
 
 const app = require("../server");
 const asUser = (email) => ({ "x-test-user-email": email });
@@ -37,6 +38,7 @@ test("article content cannot be bypassed with an author query", async () => {
   const special = await request(app).get("/api/articles/surfai-daily").expect(402);
   assert.equal(special.body.content, undefined);
   assert.equal(special.body.pdfUrl, undefined);
+  assert.equal(special.body.videoUrl, undefined);
 });
 
 test("protected payment and admin routes reject missing or insufficient identity", async () => {
@@ -106,10 +108,20 @@ test("mock payment grants content only after a completed operation", async () =>
   assert.equal(article.body.success, true);
   assert.ok(article.body.content.length > 50);
 
+  const surfUnlock = await request(app).post("/api/articles/unlock").set(reader).send({ articleId: "surfai-daily" }).expect(200);
+  assert.equal(surfUnlock.body.status, "COMPLETE");
+  assert.equal(surfUnlock.body.balance, "0.80");
+
+  const surfArticle = await request(app).get("/api/articles/surfai-daily").set(reader).expect(200);
+  assert.equal(surfArticle.body.videoUrl, process.env.SURFAI_VIDEO_URL);
+
   const wallet = await request(app).post("/api/user/wallet").set(reader).send({}).expect(200);
   assert.ok(wallet.body.unlockedArticles["0"]);
+  assert.ok(wallet.body.unlockedArticles["surfai-daily"]);
 
   await request(app).get("/api/articles/0").set(asUser("other-reader@example.com")).expect(402);
+  const otherSurfArticle = await request(app).get("/api/articles/surfai-daily").set(asUser("other-reader@example.com")).expect(402);
+  assert.equal(otherSurfArticle.body.videoUrl, undefined);
 });
 
 test("concurrent wallet initialization returns one stable wallet", async () => {
