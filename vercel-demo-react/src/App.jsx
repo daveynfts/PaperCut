@@ -91,6 +91,16 @@ const UsdcCoinIcon = ({ size = 24, className = "", style = {} }) => {
   );
 };
 
+const SurfAILogo = ({ size = 36 }) => (
+  <span className="surfai-mark" style={{ '--surfai-mark-size': `${size}px` }} aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" focusable="false">
+      <path d="M2 7C4.5 5 7.5 5 10 7C12.5 9 15.5 9 18 7C19.5 5.8 21 6.2 22 7" />
+      <path d="M2 12C4.5 10 7.5 10 10 12C12.5 14 15.5 14 18 12C19.5 10.8 21 11.2 22 12" />
+      <path d="M2 17C4.5 15 7.5 15 10 17C12.5 19 15.5 19 18 17C19.5 15.8 21 16.2 22 17" />
+    </svg>
+  </span>
+);
+
 const VerifiedBadge = ({ onApplyClick }) => {
   const [showPopover, setShowPopover] = useState(false);
   const [coords, setCoords] = useState({ x: 0, y: 0 });
@@ -1644,6 +1654,7 @@ function App() {
   };
 
   const triggerVideoSimulation = () => {
+    if (videoSimulating) return;
     setVideoSimulating(true);
     setVideoReady(false);
     setVideoSimStep(1);
@@ -1658,6 +1669,13 @@ function App() {
         }, 800);
       }, 1000);
     }, 1000);
+  };
+
+  const openSurfDailyDispatch = () => {
+    handleSelectArticle(getDailyAISurfArticle());
+    setShowApplyForm(false);
+    setIsPublisherView(false);
+    handleToggleAdminView(false);
   };
 
   const handleSurfLogoClick = () => {
@@ -2894,89 +2912,45 @@ function App() {
 
           {/* RIGHT CONTENT */}
           <section className="viewer" style={{ position: 'relative' }} aria-label="Article reader">
-            {/* SURFAI DAILY INTELLIGENCE TICKER HEADER */}
+            {/* SURFAI DAILY INTELLIGENCE DESK */}
             {!isPublisherView && !isAdminView && (
-              <div className="surfai-ticker-bar" style={{
-                background: 'var(--ink-black)',
-                color: 'var(--paper-bg)',
-                borderBottom: '2px solid var(--ink-black)',
-                display: 'flex',
-                alignItems: 'center',
-                padding: '8px 20px',
-                fontFamily: 'var(--font-mono)',
-                fontSize: '11px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                gap: '12px',
-                overflow: 'hidden',
-                minHeight: '38px',
-                flexWrap: 'wrap',
-                position: 'sticky',
-                top: 0,
-                zIndex: 100,
-                width: '100%'
-              }}>
-                {/* Logo/Badge */}
-                <button type="button" className="surfai-logo-button" style={{
-                  background: 'transparent',
-                  color: '#fff',
-                  cursor: 'pointer',
-                  userSelect: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0
-                }}
-                onClick={handleSurfLogoClick}
-                title="Click to Generate AI Video Briefing"
+              <aside className="surfai-ticker-bar" aria-label="SurfAI intelligence desk">
+                <button
+                  type="button"
+                  className="surfai-logo-button"
+                  onClick={openSurfDailyDispatch}
+                  title="Open the SurfAI daily intelligence dispatch"
                 >
-                  {/* SVG SurfAI Logo using the user's custom teal wavy icon logo */}
-                  <div style={{
-                    width: '28px',
-                    height: '28px',
-                    borderRadius: '5px',
-                    background: 'linear-gradient(135deg, #0b3c4d 0%, #051d26 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
-                    marginRight: '6px'
-                  }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M2 7C4.5 5 7.5 5 10 7C12.5 9 15.5 9 18 7C19.5 5.8 21 6.2 22 7" stroke="#ffffff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M2 12C4.5 10 7.5 10 10 12C12.5 14 15.5 14 18 12C19.5 10.8 21 11.2 22 12" stroke="#ffffff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M2 17C4.5 15 7.5 15 10 17C12.5 19 15.5 19 18 17C19.5 15.8 21 16.2 22 17" stroke="#ffffff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </div>
-                  <span style={{ fontWeight: 'bold', color: '#fff', fontSize: '11px', letterSpacing: '0.06em' }}>SurfAI</span>
+                  <SurfAILogo size={30} />
+                  <span className="surfai-brand-copy">
+                    <strong>SurfAI</strong>
+                    <small>Intelligence desk</small>
+                  </span>
                 </button>
 
-                {/* Ticker Info */}
-                <div className="surfai-ticker-content" style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1, minWidth: '180px' }}>
-                  <span className="surfai-ticker-kicker" style={{ color: 'var(--ink-light-grey)', flexShrink: 0 }}>[DAILY AI DISPATCH]</span>
+                <div className="surfai-ticker-content">
+                  <span className="surfai-live-dot" aria-hidden="true"></span>
+                  <span className="surfai-ticker-kicker">Daily signal</span>
                   <button
                     type="button"
-                    className="surfai-ticker-link" 
-                    style={{
-                      color: 'var(--paper-bg)',
-                      textDecoration: 'none',
-                      cursor: 'pointer',
-                      fontWeight: 'bold',
-                      borderBottom: '1px dashed var(--paper-bg)'
-                    }}
-                    onClick={() => {
-                      const dailyArticle = getDailyAISurfArticle();
-                      setSelectedArticle(dailyArticle);
-                      setShowApplyForm(false);
-                      setIsPublisherView(false);
-                      handleToggleAdminView(false);
-                    }}
-                    title="Click to Read and Unlock AI Report"
+                    className="surfai-ticker-link"
+                    onClick={openSurfDailyDispatch}
+                    title="Read and unlock the AI report"
                   >
                     {getDailyAISurfArticle().title}
                   </button>
                 </div>
-              </div>
+
+                <button
+                  type="button"
+                  className="surfai-ticker-action"
+                  onClick={handleSurfLogoClick}
+                  title="Generate an AI video briefing"
+                >
+                  <span aria-hidden="true">▶</span>
+                  <span>Video brief</span>
+                </button>
+              </aside>
             )}
 
             {showApplyForm ? (
@@ -3064,110 +3038,92 @@ function App() {
                 <div className="greek-key" style={{ marginTop: '32px' }}></div>
               </div>
             ) : showSurfVideoMockup ? (
-              <div className="viewer-state surfai-video-mockup-container" style={{ padding: '40px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center', minHeight: '100%', fontFamily: 'var(--font-mono)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '2px solid var(--ink-black)', paddingBottom: '12px', width: '100%', marginBottom: '24px' }}>
-                  {/* SVG SurfAI Logo with waves */}
-                  <div style={{
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '8px',
-                    background: 'linear-gradient(135deg, #0b3c4d 0%, #051d26 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 2px 5px rgba(0,0,0,0.4)',
-                    flexShrink: 0
-                  }}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M2 7C4.5 5 7.5 5 10 7C12.5 9 15.5 9 18 7C19.5 5.8 21 6.2 22 7" stroke="#ffffff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M2 12C4.5 10 7.5 10 10 12C12.5 14 15.5 14 18 12C19.5 10.8 21 11.2 22 12" stroke="#ffffff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M2 17C4.5 15 7.5 15 10 17C12.5 19 15.5 19 18 17C19.5 15.8 21 16.2 22 17" stroke="#ffffff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
+              <div className="viewer-state surfai-studio">
+                <header className="surfai-studio-header">
+                  <div className="surfai-studio-heading">
+                    <SurfAILogo size={48} />
+                    <div>
+                      <span className="surfai-eyebrow">Autonomous media desk / 01</span>
+                      <h2>Turn today&apos;s signal into a briefing.</h2>
+                      <p>SurfAI assembles market intelligence, editorial structure and narration into one concise video dispatch.</p>
+                    </div>
                   </div>
-                  <div>
-                    <h2 className="serif-title font-italic" style={{ margin: 0, fontSize: '24px', color: 'var(--ink-red)' }}>SurfAI Video Intelligence Generator</h2>
-                    <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--ink-grey)' }}>Autonomous Media Briefing Pipeline</span>
-                  </div>
+                  <button type="button" className="surfai-text-button" onClick={() => setShowSurfVideoMockup(false)}>
+                    Close studio
+                  </button>
+                </header>
+
+                <div className="surfai-signal-strip" aria-label="Video briefing specifications">
+                  <div><span>Source</span><strong>Daily signal matrix</strong></div>
+                  <div><span>Format</span><strong>16:9 editorial brief</strong></div>
+                  <div><span>Delivery</span><strong>Protected R2 media</strong></div>
                 </div>
 
-                {videoSimulating && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', maxWidth: '600px', margin: '40px auto' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 'bold' }}>
-                      <span>STATUS: SYNTHESIZING GENERATIVE AI VIDEO BRIEFING...</span>
-                      <span className="blink-text" style={{ animation: 'blink 1s infinite' }}>PROCESSING...</span>
-                    </div>
-                    
-                    {/* Progress bar */}
-                    <div style={{ border: '2px solid var(--ink-black)', height: '18px', background: '#eadeca', position: 'relative', overflow: 'hidden', boxShadow: '3px 3px 0 var(--ink-black)' }}>
-                      <div style={{
-                        background: 'var(--ink-red)',
-                        height: '100%',
-                        width: videoSimStep === 1 ? '33%' : videoSimStep === 2 ? '66%' : '100%',
-                        transition: 'width 0.8s ease-in-out'
-                      }}></div>
-                    </div>
-                    
-                    {/* Console log outputs */}
-                    <div style={{ border: '1px solid var(--ink-light-grey)', padding: '16px', background: 'var(--paper-bg-darker)', fontSize: '11px', lineHeight: '1.6', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <div style={{ display: 'flex', gap: '8px', color: videoSimStep >= 1 ? 'var(--ink-black)' : 'var(--ink-light-grey)' }}>
-                        <span>{videoSimStep >= 1 ? '▶' : '▷'}</span>
-                        <span>[1/3] Loading daily market flow intelligence and SurfAI weights...</span>
+                <section className={`surfai-workbench ${videoReady ? 'is-ready' : 'is-processing'}`} aria-live="polite">
+                  {videoSimulating && (
+                    <>
+                      <div className="surfai-workbench-head">
+                        <div>
+                          <span className="surfai-eyebrow">Generation pipeline</span>
+                          <h3>Synthesizing video intelligence</h3>
+                        </div>
+                        <span className="surfai-status-pill"><i></i> Processing</span>
                       </div>
-                      <div style={{ display: 'flex', gap: '8px', color: videoSimStep >= 2 ? 'var(--ink-black)' : 'var(--ink-light-grey)' }}>
-                        <span>{videoSimStep >= 2 ? '▶' : '▷'}</span>
-                        <span>[2/3] Rendering timeline frames and embedding voiceover synthesis...</span>
-                      </div>
-                      <div style={{ display: 'flex', gap: '8px', color: videoSimStep >= 3 ? 'var(--ink-black)' : 'var(--ink-light-grey)' }}>
-                        <span>{videoSimStep >= 3 ? '▶' : '▷'}</span>
-                        <span>[3/3] Compiling MP4 container and uploading payload to Cloudflare R2 node...</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
 
-                {videoReady && (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '720px' }}>
-                    <div style={{ color: 'green', fontWeight: 'bold', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px' }}>
-                      <span>✔</span>
-                      <span>AI VIDEO BRIEFING GENERATED SUCCESSFULLY</span>
-                    </div>
-
-                    <video 
-                      controls 
-                      autoPlay
-                      className="preview-video" 
-                      style={{ 
-                        maxWidth: '100%', 
-                        width: '100%', 
-                        border: '2px solid var(--ink-black)', 
-                        boxShadow: '6px 6px 0 var(--ink-black)', 
-                        marginBottom: '24px', 
-                        background: '#000', 
-                        display: 'block' 
-                      }}
-                    >
-                      <source src="https://pub-8288264395e64bebab09946b5bc0b740.r2.dev/SurfPaperCut/Th%E1%BB%8B_Tr%C6%B0%E1%BB%9Dng_Crypto_13_07_26.mp4" type="video/mp4" />
-                      Your browser does not support the video tag.
-                    </video>
-
-                    <div style={{ display: 'flex', gap: '16px' }}>
-                      <button 
-                        className="btn"
-                        onClick={triggerVideoSimulation}
-                        style={{ padding: '10px 24px', fontSize: '12px' }}
+                      <div
+                        className="surfai-progress"
+                        role="progressbar"
+                        aria-label="Video generation progress"
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                        aria-valuenow={videoSimStep === 1 ? 33 : videoSimStep === 2 ? 66 : 100}
                       >
-                        ⟳ RE-GENERATE VIDEO
-                      </button>
-                      <button 
-                        className="btn btn-secondary"
-                        onClick={() => setShowSurfVideoMockup(false)}
-                        style={{ padding: '10px 24px', fontSize: '12px' }}
-                      >
-                        RETURN TO HOME
-                      </button>
-                    </div>
-                  </div>
-                )}
+                        <span style={{ width: videoSimStep === 1 ? '33%' : videoSimStep === 2 ? '66%' : '100%' }}></span>
+                      </div>
+
+                      <ol className="surfai-pipeline-list">
+                        <li className={videoSimStep >= 1 ? 'is-active' : ''}>
+                          <b>01</b><span><strong>Ingest intelligence</strong>Load market flows and the latest SurfAI weights.</span>
+                        </li>
+                        <li className={videoSimStep >= 2 ? 'is-active' : ''}>
+                          <b>02</b><span><strong>Build the narrative</strong>Render frames and synchronize editorial voiceover.</span>
+                        </li>
+                        <li className={videoSimStep >= 3 ? 'is-active' : ''}>
+                          <b>03</b><span><strong>Seal the dispatch</strong>Compile the MP4 and publish the protected payload.</span>
+                        </li>
+                      </ol>
+                    </>
+                  )}
+
+                  {videoReady && (
+                    <>
+                      <div className="surfai-workbench-head">
+                        <div>
+                          <span className="surfai-eyebrow">Latest output</span>
+                          <h3>Your video dispatch is ready</h3>
+                        </div>
+                        <span className="surfai-status-pill is-success"><i></i> Ready</span>
+                      </div>
+
+                      <div className="surfai-video-frame">
+                        <span className="surfai-video-corner">SurfAI / Daily intelligence</span>
+                        <video controls autoPlay className="preview-video">
+                          <source src="https://pub-8288264395e64bebab09946b5bc0b740.r2.dev/SurfPaperCut/Th%E1%BB%8B_Tr%C6%B0%E1%BB%9Dng_Crypto_13_07_26.mp4" type="video/mp4" />
+                          Your browser does not support the video tag.
+                        </video>
+                      </div>
+
+                      <div className="surfai-studio-actions">
+                        <button type="button" className="btn surfai-primary-button" onClick={triggerVideoSimulation}>
+                          Generate a fresh cut
+                        </button>
+                        <button type="button" className="btn btn-secondary" onClick={openSurfDailyDispatch}>
+                          Read today&apos;s dispatch
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </section>
               </div>
             ) : !selectedArticle ? (
               <div id="viewer-default" className="viewer-state">
@@ -3264,7 +3220,14 @@ function App() {
                 <button type="button" className="mobile-back-button" onClick={handleReturnToArticleList}>
                   ← Back to articles
                 </button>
-                <div className="article-header">
+                <div className={`article-header ${selectedArticle.id === "surfai-daily" ? 'surfai-article-header' : ''}`}>
+                  {selectedArticle.id === "surfai-daily" && (
+                    <div className="surfai-article-kicker">
+                      <SurfAILogo size={34} />
+                      <span>Machine-curated intelligence · Daily edition</span>
+                      <em>Signal / Live</em>
+                    </div>
+                  )}
                   <h1 ref={readerHeadingRef} tabIndex="-1" className="serif-title">{selectedArticle.title}</h1>
                   <div className="article-meta">
                     <span style={{ display: 'inline-flex', alignItems: 'center' }}>
@@ -3294,129 +3257,117 @@ function App() {
                 <div className="article-body">
                   {unlockedArticles[selectedArticle.id] ? (
                     <div>
+                      {selectedArticle.id === "surfai-daily" && (
+                        <section className="surfai-briefing-intro" aria-label="SurfAI briefing status">
+                          <div className="surfai-briefing-copy">
+                            <span className="surfai-eyebrow">Access granted / Intelligence online</span>
+                            <h2>The day&apos;s clearest signals, without the noise.</h2>
+                            <p>Your payment credential has unlocked the complete AI-curated dispatch and its protected media assets.</p>
+                          </div>
+                          <div className="surfai-briefing-seal" aria-label="Verified on Arc Testnet">
+                            <span>Verified</span>
+                            <strong>ARC</strong>
+                            <small>Testnet</small>
+                          </div>
+                          <dl className="surfai-briefing-metrics">
+                            <div><dt>Coverage</dt><dd>Capital + compute</dd></div>
+                            <div><dt>Access</dt><dd>Permanent</dd></div>
+                            <div><dt>Settlement</dt><dd>0.15 USDC</dd></div>
+                          </dl>
+                        </section>
+                      )}
                       <div 
-                        className="content-text premium-unlocked"
+                        className={`content-text premium-unlocked ${selectedArticle.id === "surfai-daily" ? 'surfai-premium-copy' : ''}`}
                         dangerouslySetInnerHTML={{ __html: parseMarkdownToHtml(selectedArticle.content) }}
                       />
                       
                       {selectedArticle.id === "surfai-daily" && (
-                        <div className="surfai-pdf-container" style={{
-                          border: '2px solid var(--ink-black)',
-                          marginTop: '28px',
-                          padding: '24px',
-                          backgroundColor: 'var(--paper-accent)',
-                          boxShadow: '4px 4px 0 var(--ink-black)',
-                          fontFamily: 'var(--font-mono)',
-                          columnSpan: 'all',
-                          breakInside: 'avoid'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--ink-black)', paddingBottom: '8px', marginBottom: '16px' }}>
-                            <span style={{ fontSize: '20px' }}>🌊</span>
-                            <strong style={{ fontSize: '14px', textTransform: 'uppercase', color: 'var(--ink-red)' }}>SurfAI Secure Report Compiler</strong>
+                        <section className="surfai-report-card" aria-live="polite">
+                          <div className="surfai-report-head">
+                            <div className="surfai-report-title">
+                              <SurfAILogo size={38} />
+                              <div>
+                                <span className="surfai-eyebrow">Protected document / PDF</span>
+                                <h3>Secure report compiler</h3>
+                              </div>
+                            </div>
+                            <span className="surfai-report-format">Signed · PDF</span>
                           </div>
-                          
-                          {/* Case 1: Idle state */}
+
                           {!pdfSimulating && !pdfReady && (
-                            <div style={{ textAlign: 'center', padding: '12px 0' }}>
-                              <p className="serif-body" style={{ fontSize: '13px', marginBottom: '16px', fontStyle: 'italic' }}>
-                                This premium intelligence briefing has been unlocked. You can now compile and download the full analysis report as a signed PDF document.
-                              </p>
-                              <button 
-                                className="btn" 
-                                onClick={triggerPdfSimulation}
-                                style={{ padding: '10px 24px', fontSize: '12px' }}
-                              >
-                                ⚙️ COMPILE PDF REPORT FROM R2 CLOUD
-                              </button>
+                            <div className="surfai-report-idle">
+                              <div className="surfai-document-preview" aria-hidden="true">
+                                <span>SurfAI</span>
+                                <strong>Daily Intelligence<br />Dispatch</strong>
+                                <i></i><i></i><i></i>
+                                <small>Verified research edition</small>
+                              </div>
+                              <div>
+                                <span className="surfai-eyebrow">Premium asset available</span>
+                                <h4>Take the full report offline.</h4>
+                                <p>Compile the complete analysis into a signed PDF, anchored to your verified access credential.</p>
+                                <button type="button" className="btn surfai-primary-button" onClick={triggerPdfSimulation}>
+                                  Compile protected report
+                                </button>
+                              </div>
                             </div>
                           )}
-                          
-                          {/* Case 2: Simulating compilation */}
+
                           {pdfSimulating && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 'bold' }}>
-                                <span>STATUS: COMPILING CRYPTOGRAPHIC PDF REPORT...</span>
-                                <span className="blink-text" style={{ animation: 'blink 1s infinite' }}>LOADING...</span>
-                              </div>
-                              
-                              {/* Progress bar */}
-                              <div style={{ border: '1px solid var(--ink-black)', height: '14px', background: '#eadeca', position: 'relative', overflow: 'hidden' }}>
-                                <div style={{
-                                  background: 'var(--ink-red)',
-                                  height: '100%',
-                                  width: pdfSimStep === 1 ? '25%' : pdfSimStep === 2 ? '55%' : pdfSimStep === 3 ? '85%' : '100%',
-                                  transition: 'width 0.8s ease-in-out'
-                                }}></div>
-                              </div>
-                              
-                              {/* Loading Steps */}
-                              <div style={{ fontSize: '11px', color: 'var(--ink-grey)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                <div style={{ display: 'flex', gap: '8px', color: pdfSimStep >= 1 ? 'var(--ink-black)' : 'var(--ink-light-grey)' }}>
-                                  <span>{pdfSimStep >= 1 ? '✔' : '☐'}</span>
-                                  <span>1. Verify transaction hash & credentials status on Arc Testnet</span>
+                            <div className="surfai-report-processing">
+                              <div className="surfai-workbench-head">
+                                <div>
+                                  <span className="surfai-eyebrow">Document pipeline</span>
+                                  <h3>Compiling cryptographic report</h3>
                                 </div>
-                                <div style={{ display: 'flex', gap: '8px', color: pdfSimStep >= 2 ? 'var(--ink-black)' : 'var(--ink-light-grey)' }}>
-                                  <span>{pdfSimStep >= 2 ? '✔' : '☐'}</span>
-                                  <span>2. Pull daily SurfAI analysis matrix and structure layout</span>
-                                </div>
-                                <div style={{ display: 'flex', gap: '8px', color: pdfSimStep >= 3 ? 'var(--ink-black)' : 'var(--ink-light-grey)' }}>
-                                  <span>{pdfSimStep >= 3 ? '✔' : '☐'}</span>
-                                  <span>3. Anchor document hash & upload signed PDF to Cloudflare R2 container</span>
-                                </div>
+                                <span className="surfai-status-pill"><i></i> Processing</span>
                               </div>
+
+                              <div
+                                className="surfai-progress"
+                                role="progressbar"
+                                aria-label="PDF compilation progress"
+                                aria-valuemin="0"
+                                aria-valuemax="100"
+                                aria-valuenow={pdfSimStep === 1 ? 25 : pdfSimStep === 2 ? 55 : pdfSimStep === 3 ? 85 : 100}
+                              >
+                                <span style={{ width: pdfSimStep === 1 ? '25%' : pdfSimStep === 2 ? '55%' : pdfSimStep === 3 ? '85%' : '100%' }}></span>
+                              </div>
+
+                              <ol className="surfai-pipeline-list is-compact">
+                                <li className={pdfSimStep >= 1 ? 'is-active' : ''}><b>01</b><span><strong>Verify access</strong>Confirm settlement credential on Arc Testnet.</span></li>
+                                <li className={pdfSimStep >= 2 ? 'is-active' : ''}><b>02</b><span><strong>Compose document</strong>Structure the daily analysis matrix.</span></li>
+                                <li className={pdfSimStep >= 3 ? 'is-active' : ''}><b>03</b><span><strong>Anchor and seal</strong>Publish the signed document to protected storage.</span></li>
+                              </ol>
                             </div>
                           )}
-                          
-                          {/* Case 3: PDF is compiled & ready for download */}
+
                           {pdfReady && (
-                            <div style={{ textAlign: 'center', padding: '8px 0' }}>
-                              <div style={{ color: 'green', fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginBottom: '12px' }}>
-                                <span>✔</span>
-                                <span>REPORT COMPILED & ANCHORED SUCCESSFULLY</span>
+                            <div className="surfai-report-ready">
+                              <div>
+                                <span className="surfai-status-pill is-success"><i></i> Report ready</span>
+                                <h4>Compiled, signed and anchored.</h4>
+                                <p>Your protected PDF is ready. Its document fingerprint is attached to this edition.</p>
+                                <code>sha256-4cf8e3c1a9d023bf...e08f3c80</code>
                               </div>
-                              <p className="serif-body" style={{ fontSize: '12.5px', marginBottom: '16px', color: 'var(--ink-grey)' }}>
-                                PDF Report Hash: <span style={{ fontFamily: 'monospace', fontSize: '11px', background: 'var(--paper-bg-darker)', padding: '2px 4px' }}>sha256-4cf8e3c1a9d023bf9a13b0c95e0c52d4aa182035e08f3c80</span>
-                              </p>
-                              {selectedArticle.pdfUrl ? (
-                                <a
-                                  className="btn"
-                                  href={selectedArticle.pdfUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  style={{
-                                    padding: '10px 24px',
-                                    fontSize: '12px',
-                                    textDecoration: 'none',
-                                    display: 'inline-block',
-                                    background: 'var(--ink-red)',
-                                    color: '#fff',
-                                    boxShadow: '4px 4px 0 var(--ink-black)'
-                                  }}
-                                >
-                                  📥 DOWNLOAD PROTECTED REPORT
-                                </a>
-                              ) : (
-                                <p className="mono-text" style={{ fontSize: '11px', color: 'var(--ink-grey)' }}>
-                                  No protected PDF has been configured for this report.
-                                </p>
-                              )}
-                              <button 
-                                className="btn btn-secondary"
-                                onClick={() => {
+                              <div className="surfai-report-actions">
+                                {selectedArticle.pdfUrl ? (
+                                  <a className="btn surfai-primary-button" href={selectedArticle.pdfUrl} target="_blank" rel="noopener noreferrer">
+                                    Download report
+                                  </a>
+                                ) : (
+                                  <span className="surfai-asset-unavailable">Protected PDF is not configured.</span>
+                                )}
+                                <button type="button" className="btn btn-secondary" onClick={() => {
                                   setPdfReady(false);
                                   setPdfSimStep(0);
-                                }}
-                                style={{ 
-                                  padding: '10px 16px', 
-                                  fontSize: '12px', 
-                                  marginLeft: '12px'
-                                }}
-                              >
-                                ⟳ RE-COMPILE
-                              </button>
+                                }}>
+                                  Re-compile
+                                </button>
+                              </div>
                             </div>
                           )}
-                        </div>
+                        </section>
                       )}
                     </div>
                   ) : (
@@ -3426,9 +3377,16 @@ function App() {
                       </div>
 
                       {/* PAYWALL */}
-                      <div className="paywall-card">
-                        <div className="paywall-title">Unlock this article</div>
-                        <p className="paywall-intro">Read the complete article with a one-time USDC payment.</p>
+                      <div className={`paywall-card ${selectedArticle.id === "surfai-daily" ? 'surfai-paywall' : ''}`}>
+                        {selectedArticle.id === "surfai-daily" && (
+                          <div className="surfai-paywall-brand"><SurfAILogo size={40} /><span>SurfAI protected intelligence</span></div>
+                        )}
+                        <div className="paywall-title">{selectedArticle.id === "surfai-daily" ? 'Access the full signal' : 'Unlock this article'}</div>
+                        <p className="paywall-intro">
+                          {selectedArticle.id === "surfai-daily"
+                            ? 'One payment unlocks the complete dispatch, signed PDF and AI video briefing.'
+                            : 'Read the complete article with a one-time USDC payment.'}
+                        </p>
                         
                         <div className="paywall-options-container">
                           <div className="paywall-option-box paywall-primary-option">
