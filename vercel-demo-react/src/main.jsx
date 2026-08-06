@@ -38,7 +38,7 @@ const PRIVY_APP_ID = import.meta.env.VITE_PRIVY_APP_ID;
 // token handling, and wallet UI remain unchanged while the browser only talks
 // to daveynfts.com.
 const PRIVY_API_URL = import.meta.env.PROD && typeof window !== 'undefined'
-  ? new URL('/api/privy', window.location.origin).toString().replace(/\/$/, '')
+  ? new URL('/papercut/api/privy', window.location.origin).toString().replace(/\/$/, '')
   : undefined;
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
