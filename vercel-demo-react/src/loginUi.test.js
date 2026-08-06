@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const appSource = fs.readFileSync(new URL('./App.jsx', import.meta.url), 'utf8');
 const providerSource = fs.readFileSync(new URL('./main.jsx', import.meta.url), 'utf8');
+const vercelConfig = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
 
 test('sign-in buttons always open the app-owned Privy email dialog', () => {
   assert.doesNotMatch(appSource, /onClick=\{login\}/);
@@ -24,4 +25,13 @@ test('email and external-wallet authentication are both available', () => {
   assert.match(appSource, /const handleWalletSignIn = async/);
   assert.match(appSource, /searchParams\.set\("walletLogin", "1"\)/);
   assert.match(appSource, /login\(\{ loginMethods: \["wallet"\] \}\)/);
+});
+
+test('production Privy traffic uses the same-origin auth proxy', () => {
+  assert.match(providerSource, /new URL\('\/api\/privy', window\.location\.origin\)/);
+  assert.match(providerSource, /apiUrl=\{PRIVY_API_URL\}/);
+  assert.deepEqual(vercelConfig.rewrites[0], {
+    source: '/api/privy/:path*',
+    destination: 'https://auth.privy.io/:path*',
+  });
 });

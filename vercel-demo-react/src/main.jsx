@@ -33,6 +33,13 @@ const arcTestnet = {
 import logoImg from './assets/logo.png'
 
 const PRIVY_APP_ID = import.meta.env.VITE_PRIVY_APP_ID;
+// Some embedded browsers time out on direct cross-origin requests to
+// auth.privy.io. Production uses a same-origin Vercel rewrite so Privy's SDK,
+// token handling, and wallet UI remain unchanged while the browser only talks
+// to daveynfts.com.
+const PRIVY_API_URL = import.meta.env.PROD && typeof window !== 'undefined'
+  ? new URL('/api/privy', window.location.origin).toString().replace(/\/$/, '')
+  : undefined;
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
@@ -62,6 +69,7 @@ if (!PRIVY_APP_ID) {
     <React.StrictMode>
       <PrivyProvider
         appId={PRIVY_APP_ID}
+        apiUrl={PRIVY_API_URL}
         config={{
           // 1. Lock Privy strictly to Arc Testnet
           supportedChains: [arcTestnet],
