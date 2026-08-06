@@ -11,7 +11,7 @@ const { ethers } = require("ethers");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 
 const { isAdminIdentity, normalizeIdentity, optionalAuth, requireAdmin, requireAuth } = require("./auth");
-const { formatUsdc, parseUsdc } = require("./money");
+const { formatUsdc, parseExternalUsdcBalance, parseUsdc } = require("./money");
 const { PaperCutStore } = require("./store");
 const { createRetryableInitializer } = require("./retryable-initializer");
 const { schemas, validate } = require("./validation");
@@ -171,7 +171,7 @@ async function getWalletUsdcBalance(walletId) {
   const payload = await circleRequest(`https://api.circle.com/v1/w3s/wallets/${walletId}/balances`);
   const balances = payload.data?.tokenBalances || [];
   const usdc = balances.find((item) => item.token?.symbol === "USDC");
-  return formatUsdc(parseUsdc(usdc?.amount || "0", { allowZero: true, max: null }));
+  return formatUsdc(parseExternalUsdcBalance(usdc?.amount || "0"));
 }
 
 async function createCircleTransfer({ operationId, sourceWalletId, destinationAddress, amount }) {

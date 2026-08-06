@@ -22,6 +22,20 @@ function parseUsdc(value, options = {}) {
   return units;
 }
 
+// Circle returns balance amounts using the token's display precision, which
+// can contain more fractional digits than USDC's six internal decimals. Keep
+// request validation strict, but safely floor external balance data to the
+// nearest USDC base unit so we never overstate spendable funds.
+function parseExternalUsdcBalance(value) {
+  const raw = String(value ?? "").trim();
+  const match = /^(0|[1-9]\d*)(?:\.(\d+))?$/.exec(raw);
+  if (!match) throw new Error("Circle returned an invalid USDC balance");
+
+  const whole = match[1];
+  const fraction = (match[2] || "").slice(0, USDC_DECIMALS).padEnd(USDC_DECIMALS, "0");
+  return BigInt(whole) * USDC_SCALE + BigInt(fraction);
+}
+
 function formatUsdc(units, minimumDecimals = 2) {
   const value = typeof units === "bigint" ? units : BigInt(units);
   if (value < 0n) throw new Error("USDC units cannot be negative");
@@ -33,4 +47,4 @@ function formatUsdc(units, minimumDecimals = 2) {
   return decimals ? `${whole}.${decimals}` : whole.toString();
 }
 
-module.exports = { formatUsdc, parseUsdc, USDC_SCALE };
+module.exports = { formatUsdc, parseExternalUsdcBalance, parseUsdc, USDC_SCALE };
