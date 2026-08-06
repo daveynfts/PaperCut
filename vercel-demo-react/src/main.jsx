@@ -66,7 +66,11 @@ if (!PRIVY_APP_ID) {
           // 1. Lock Privy strictly to Arc Testnet
           supportedChains: [arcTestnet],
           defaultChain: arcTestnet,
-          loginMethods: ['email', 'wallet'],
+          // PaperCut provisions its transaction wallet through the backend
+          // (Circle W3S). Keeping Privy's external-wallet connectors enabled
+          // makes SDK readiness depend on third-party iframes that can be
+          // blocked by embedded browsers, even for an email-only login.
+          loginMethods: ['email'],
           appearance: {
             theme: 'light',
             accentColor: '#8f2d1b',
@@ -75,9 +79,15 @@ if (!PRIVY_APP_ID) {
             landingHeader: 'Sign the Guest Register',
             loginMessage: 'Log in with your cryptographic wallet or electronic mail to unlock dispatch files.',
           },
+          externalWallets: {
+            disableAllExternalWallets: true,
+            walletConnect: { enabled: false },
+          },
           embeddedWallets: {
-            createOnLogin: 'users-without-wallets',
-          }
+            ethereum: { createOnLogin: 'off' },
+            solana: { createOnLogin: 'off' },
+            showWalletUIs: false,
+          },
         }}
       >
         <App />
