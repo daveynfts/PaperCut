@@ -52,6 +52,19 @@ async function getPrivyUserById(privy, userId) {
   return user;
 }
 
+async function resolvePrivyUser(privy, userId, identityToken) {
+  if (!identityToken) return getPrivyUserById(privy, userId);
+
+  try {
+    return await privy.utils().auth().verifyIdentityToken(identityToken);
+  } catch (_error) {
+    // Identity tokens are optional and can expire slightly before a refreshed
+    // access token reaches the client. The access token has already been
+    // verified, so reload exactly that user instead of rejecting the session.
+    return getPrivyUserById(privy, userId);
+  }
+}
+
 function getTestIdentity(req) {
   if (process.env.NODE_ENV !== "test" || process.env.TEST_AUTH_BYPASS !== "true") return null;
   const email = normalizeIdentity(req.headers["x-test-user-email"]);
@@ -79,9 +92,7 @@ async function resolveIdentity(req) {
   // Identity tokens are an optional Privy Dashboard feature. Use one when the
   // client has it; otherwise load the user identified by the verified access
   // token so a valid login never becomes an anonymous API request.
-  const user = identityToken
-    ? await privy.utils().auth().verifyIdentityToken(identityToken)
-    : await getPrivyUserById(privy, claimUserId);
+  const user = await resolvePrivyUser(privy, claimUserId, identityToken);
   const userId = user?.id || "";
   if (!userId || claimUserId !== userId) {
     throw new Error("Privy token identities do not match");
@@ -100,7 +111,10 @@ async function optionalAuth(req, res, next) {
     req.auth = await resolveIdentity(req);
     next();
   } catch (_error) {
-    res.status(401).json({ error: "Invalid or expired authentication token" });
+    // Public routes must remain usable when a browser wakes up with an expired
+    // session. Protected routes still use requireAuth and return a real 401.
+    req.auth = null;
+    next();
   }
 }
 
@@ -142,4 +156,5 @@ module.exports = {
   optionalAuth,
   requireAdmin,
   requireAuth,
+  _test: { resolvePrivyUser },
 };

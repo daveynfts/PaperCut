@@ -10,12 +10,13 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "test": "node --test src/*.test.js",
     "preview": "vite preview",
-    "check": "npm run lint && npm run build"
+    "check": "npm run lint && npm test && npm run build"
   },
   "dependencies": {
-    "@privy-io/react-auth": "^3.35.1",
-    "dompurify": "^3.4.12",
+    "@privy-io/react-auth": "^3.37.0",
+    "dompurify": "^3.4.13",
     "marked": "^17.0.6",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
@@ -33,6 +34,7 @@
     "vite": "^8.1.5"
   },
   "overrides": {
+    "axios": "^1.19.0",
     "@walletconnect/core": "^2.23.10",
     "@walletconnect/ethereum-provider": "^2.23.10",
     "@walletconnect/sign-client": "^2.23.10",

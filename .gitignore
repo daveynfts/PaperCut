@@ -11,4 +11,4 @@ server/*.tmp
 assets/*.mp4
 coverage/
 deployments/
-
+.vercel/

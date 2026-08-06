@@ -106,3 +106,14 @@ test("mock payment grants content only after a completed operation", async () =>
 
   await request(app).get("/api/articles/0").set(asUser("other-reader@example.com")).expect(402);
 });
+
+test("concurrent wallet initialization returns one stable wallet", async () => {
+  const reader = asUser("concurrent-reader@example.com");
+  const responses = await Promise.all(
+    Array.from({ length: 12 }, () => request(app).post("/api/user/wallet").set(reader).send({}))
+  );
+
+  for (const response of responses) assert.equal(response.status, 200);
+  assert.equal(new Set(responses.map((response) => response.body.address)).size, 1);
+  assert.equal(new Set(responses.map((response) => response.body.walletId)).size, 1);
+});
