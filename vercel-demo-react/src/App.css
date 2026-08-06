@@ -675,6 +675,86 @@ body {
   animation: fadeIn 0.2s ease-out;
 }
 
+.signin-modal-overlay {
+  z-index: 2000;
+  padding: 16px;
+}
+
+.signin-modal-card {
+  width: min(430px, 100%);
+  position: relative;
+  background: var(--paper-bg);
+  border: 4px solid var(--ink-black);
+  outline: 1px dashed var(--ink-light-grey);
+  outline-offset: -7px;
+  box-shadow: 10px 10px 0 rgba(0, 0, 0, 0.4);
+  padding: 34px 30px 28px;
+  animation: slideUp 0.2s ease-out;
+}
+
+.signin-modal-card .serif-title {
+  margin: 12px 0 8px;
+  color: var(--ink-red);
+  font-size: 25px;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.signin-modal-copy {
+  margin: 0 0 20px;
+  color: var(--ink-grey);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.signin-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.signin-form input {
+  width: 100%;
+  border: 2px solid var(--ink-black);
+  border-radius: 0;
+  background: #fffaf0;
+  color: var(--ink-black);
+  font: 14px var(--font-mono);
+  padding: 10px 12px;
+}
+
+.signin-form input:focus {
+  outline: 3px solid #2775ca;
+  outline-offset: 2px;
+}
+
+.signin-form .btn,
+.signin-modal-card > .btn {
+  width: 100%;
+}
+
+.signin-modal-error {
+  margin-top: 12px;
+}
+
+.signin-modal-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 12px;
+  color: var(--ink-grey);
+  font: 10px var(--font-mono);
+}
+
+.signin-modal-divider::before,
+.signin-modal-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: var(--ink-light-grey);
+}
+
 .vintage-wallet-modal {
   background: #e8dfbe; /* Slightly darker aged paper inside */
   border: 6px solid #3d2f25; /* Leather outer cover color */

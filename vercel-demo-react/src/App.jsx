@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
-import { useIdentityToken, useModalStatus, usePrivy, useWallets, useLogin } from '@privy-io/react-auth';
+import { useIdentityToken, useLoginWithEmail, usePrivy, useWallets, useLogin } from '@privy-io/react-auth';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import './App.css';
@@ -286,7 +286,7 @@ function App() {
       setError(errMsg);
     }
   });
-  const { isOpen: isLoginModalOpen } = useModalStatus();
+  const { sendCode: sendEmailCode, loginWithCode: loginWithEmailCode } = useLoginWithEmail();
   const { wallets } = useWallets();
 
   const authFetch = useCallback(async (url, options = {}) => {
@@ -323,26 +323,80 @@ function App() {
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [error, setError] = useState("");
   const [chainId, setChainId] = useState(null);
+  const [showSignInModal, setShowSignInModal] = useState(false);
+  const [signInEmail, setSignInEmail] = useState("");
+  const [signInCode, setSignInCode] = useState("");
+  const [signInStep, setSignInStep] = useState("email");
+  const [signInBusy, setSignInBusy] = useState(false);
+  const [signInError, setSignInError] = useState("");
 
   const openLogin = useCallback((event) => {
     event?.preventDefault?.();
     event?.stopPropagation?.();
 
-    if (authenticated || isLoginModalOpen) return;
+    if (authenticated) return;
+    setError("");
+    setSignInError("");
+    setShowSignInModal(true);
+  }, [authenticated]);
+
+  const closeSignInModal = useCallback(() => {
+    if (signInBusy) return;
+    setShowSignInModal(false);
+    setSignInStep("email");
+    setSignInCode("");
+    setSignInError("");
+  }, [signInBusy]);
+
+  const handleSendSignInCode = async (event) => {
+    event.preventDefault();
+    const email = signInEmail.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      setSignInError("Enter a valid email address.");
+      return;
+    }
     if (!ready) {
-      setError("Sign-in is still initializing. Please wait a moment and try again.");
+      setSignInError("Privy is still initializing. Please wait a moment and retry.");
       return;
     }
 
-    setError("");
+    setSignInBusy(true);
+    setSignInError("");
     try {
-      // Never forward React's click/submit event into Privy's options argument.
-      login();
+      await sendEmailCode({ email });
+      setSignInEmail(email);
+      setSignInStep("code");
     } catch (err) {
-      console.error("[PaperCut] Could not open sign-in:", err);
-      setError(err?.message || "Could not open the sign-in window. Please reload and try again.");
+      console.error("[PaperCut] Could not send sign-in code:", err);
+      setSignInError(err?.message || "Could not send the sign-in code. Please try again.");
+    } finally {
+      setSignInBusy(false);
     }
-  }, [authenticated, isLoginModalOpen, login, ready]);
+  };
+
+  const handleVerifySignInCode = async (event) => {
+    event.preventDefault();
+    const code = signInCode.trim();
+    if (!code) {
+      setSignInError("Enter the code sent to your email.");
+      return;
+    }
+
+    setSignInBusy(true);
+    setSignInError("");
+    try {
+      await loginWithEmailCode({ code });
+      setShowSignInModal(false);
+      setSignInStep("email");
+      setSignInCode("");
+      setError("");
+    } catch (err) {
+      console.error("[PaperCut] Could not verify sign-in code:", err);
+      setSignInError(err?.message || "The sign-in code is invalid or expired.");
+    } finally {
+      setSignInBusy(false);
+    }
+  };
   
   // SurfAI PDF simulation states
   const [pdfSimulating, setPdfSimulating] = useState(false);
@@ -1750,11 +1804,10 @@ function App() {
                 type="button"
                 className="nav-front-page-btn" 
                 onClick={openLogin}
-                disabled={!ready || isLoginModalOpen}
-                aria-busy={!ready || isLoginModalOpen}
+                aria-haspopup="dialog"
                 title="Sign in"
               >
-                {!ready ? "SIGN-IN LOADING" : isLoginModalOpen ? "SIGN-IN OPEN" : "SIGN IN"}
+                SIGN IN
               </button>
             ) : (
               <div className="wallet-info-group">
@@ -1788,7 +1841,7 @@ function App() {
             <p className="serif-body" style={{ fontSize: '14px', lineHeight: '1.6', marginBottom: '24px', color: 'var(--ink-grey)' }}>
               Please sign the guest register with your cryptographic wallet. Once logged in, we will verify if your account is accredited with writing credentials.
             </p>
-            <button className="btn" onClick={openLogin} disabled={!ready || isLoginModalOpen} style={{ padding: '10px 24px', fontSize: '12px', width: '100%' }}>
+            <button className="btn" onClick={openLogin} style={{ padding: '10px 24px', fontSize: '12px', width: '100%' }}>
               SIGN GUEST REGISTER
             </button>
           </main>
@@ -3139,7 +3192,6 @@ function App() {
                       type="button"
                       className="rubber-stamp stamp-red clickable-stamp" 
                       onClick={openLogin}
-                      disabled={!ready || isLoginModalOpen}
                       title="Sign in"
                     >
                       SIGN IN TO UNLOCK
@@ -3156,7 +3208,6 @@ function App() {
                       type="button"
                       className="rubber-stamp stamp-red clickable-stamp"
                       onClick={openLogin}
-                      disabled={!ready || isLoginModalOpen}
                       title="Sign in to activate your wallet"
                     >
                       WALLET: SIGN IN REQUIRED
@@ -3497,6 +3548,84 @@ function App() {
             )}
           </section>
         </main>
+      )}
+
+      {/* APP-OWNED PRIVY EMAIL SIGN-IN MODAL */}
+      {showSignInModal && !authenticated && (
+        <div className="modal-overlay signin-modal-overlay" onClick={closeSignInModal}>
+          <section
+            className="signin-modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="signin-dialog-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button type="button" className="wallet-close-btn" aria-label="Close sign in" onClick={closeSignInModal}>X</button>
+            <div className="wallet-seal">* PRIVY SECURE ACCESS *</div>
+            <h2 id="signin-dialog-title" className="serif-title font-italic">SIGN THE GUEST REGISTER</h2>
+            <p className="mono-text signin-modal-copy">
+              {signInStep === "email"
+                ? "Enter your email to receive a one-time authentication code."
+                : `Enter the code sent to ${signInEmail}.`}
+            </p>
+
+            {signInStep === "email" ? (
+              <form className="signin-form" onSubmit={handleSendSignInCode}>
+                <label htmlFor="signin-email" className="wallet-id-label">EMAIL ADDRESS</label>
+                <input
+                  id="signin-email"
+                  type="email"
+                  autoComplete="email"
+                  autoFocus
+                  required
+                  value={signInEmail}
+                  onChange={(event) => setSignInEmail(event.target.value)}
+                  placeholder="reader@example.com"
+                  disabled={signInBusy}
+                />
+                <button type="submit" className="btn" disabled={signInBusy || !ready}>
+                  {signInBusy ? "SENDING CODE..." : !ready ? "INITIALIZING PRIVY..." : "SEND SIGN-IN CODE"}
+                </button>
+              </form>
+            ) : (
+              <form className="signin-form" onSubmit={handleVerifySignInCode}>
+                <label htmlFor="signin-code" className="wallet-id-label">ONE-TIME CODE</label>
+                <input
+                  id="signin-code"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  autoFocus
+                  required
+                  value={signInCode}
+                  onChange={(event) => setSignInCode(event.target.value)}
+                  placeholder="123456"
+                  disabled={signInBusy}
+                />
+                <button type="submit" className="btn" disabled={signInBusy}>
+                  {signInBusy ? "VERIFYING..." : "VERIFY & SIGN IN"}
+                </button>
+                <button type="button" className="btn btn-secondary" disabled={signInBusy} onClick={() => { setSignInStep("email"); setSignInCode(""); setSignInError(""); }}>
+                  CHANGE EMAIL
+                </button>
+              </form>
+            )}
+
+            {signInError && <div className="paywall-error signin-modal-error" role="alert">{signInError}</div>}
+            <div className="signin-modal-divider"><span>OR</span></div>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={!ready || signInBusy}
+              onClick={() => {
+                setSignInError("");
+                login({ loginMethods: ["wallet"] });
+              }}
+            >
+              CONNECT CRYPTO WALLET
+            </button>
+          </section>
+        </div>
       )}
 
       {/* WALLET DEPOSIT & QR MODAL */}
