@@ -9,15 +9,19 @@ test('sign-in buttons always open the app-owned Privy email dialog', () => {
   assert.doesNotMatch(appSource, /onClick=\{login\}/);
   assert.match(appSource, /const openLogin = useCallback/);
   assert.match(appSource, /setShowSignInModal\(true\)/);
-  assert.match(appSource, /sendEmailCode\(\{ email \}\)/);
+  assert.match(appSource, /sendCode: sendEmailCode/);
   assert.match(appSource, /loginWithEmailCode\(\{ code \}\)/);
+  assert.match(appSource, /sendEmailCodeWithSessionRecovery/);
   assert.match(appSource, /showSignInModal && !authenticated/);
   assert.doesNotMatch(appSource, /INITIALIZING PRIVY/);
 });
 
-test('email authentication does not wait for unused wallet connectors', () => {
-  assert.match(providerSource, /loginMethods: \['email'\]/);
-  assert.match(providerSource, /disableAllExternalWallets: true/);
-  assert.match(providerSource, /walletConnect: \{ enabled: false \}/);
+test('email and external-wallet authentication are both available', () => {
+  assert.match(providerSource, /loginMethods: \['email', 'wallet'\]/);
+  assert.doesNotMatch(providerSource, /disableAllExternalWallets: true/);
   assert.match(providerSource, /ethereum: \{ createOnLogin: 'off' \}/);
+  assert.match(appSource, /CONNECT CRYPTO WALLET/);
+  assert.match(appSource, /const handleWalletSignIn = async/);
+  assert.match(appSource, /searchParams\.set\("walletLogin", "1"\)/);
+  assert.match(appSource, /login\(\{ loginMethods: \["wallet"\] \}\)/);
 });

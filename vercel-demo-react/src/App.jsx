@@ -1,10 +1,11 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
-import { useIdentityToken, useLoginWithEmail, usePrivy } from '@privy-io/react-auth';
+import { useIdentityToken, useLogin, useLoginWithEmail, usePrivy } from '@privy-io/react-auth';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import './App.css';
 import logoImg from './assets/logo.png';
 import { resilientAuthFetch } from './apiClient.js';
+import { sendEmailCodeWithSessionRecovery } from './privyAuthRecovery.js';
 
 const INITIAL_ARTICLES = [
   {
@@ -270,9 +271,20 @@ const isDomainAuthorizationError = (message) => {
 };
 
 function App() {
-  const { logout, authenticated, user, getAccessToken } = usePrivy();
+  const { ready, logout, authenticated, user, getAccessToken } = usePrivy();
   const { identityToken } = useIdentityToken();
   const { sendCode: sendEmailCode, loginWithCode: loginWithEmailCode } = useLoginWithEmail();
+  const { login } = useLogin({
+    onComplete: () => {
+      setShowSignInModal(false);
+      setSignInError("");
+      setError("");
+    },
+    onError: (loginError) => {
+      console.error("[PaperCut] Wallet sign-in failed:", loginError);
+      setSignInError(loginError?.message || "Could not connect the wallet. Please try again.");
+    },
+  });
 
   const authFetch = useCallback(async (url, options = {}) => {
     return resilientAuthFetch(url, options, {
@@ -332,6 +344,41 @@ function App() {
     setSignInError("");
   }, [signInBusy]);
 
+  useEffect(() => {
+    if (!ready || authenticated) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("walletLogin") !== "1") return;
+
+    url.searchParams.delete("walletLogin");
+    window.history.replaceState({}, "", url);
+    setShowSignInModal(false);
+    login({ loginMethods: ["wallet"] });
+  }, [authenticated, login, ready]);
+
+  const handleWalletSignIn = async () => {
+    setSignInError("");
+    if (ready) {
+      setShowSignInModal(false);
+      login({ loginMethods: ["wallet"] });
+      return;
+    }
+
+    // Failed session refreshes can also leave Privy's wallet UI unready.
+    // Clear the stale local session, remount the provider, and resume the
+    // wallet intent once initialization succeeds.
+    setSignInBusy(true);
+    try {
+      await logout();
+      const url = new URL(window.location.href);
+      url.searchParams.set("walletLogin", "1");
+      window.location.replace(url);
+    } catch (walletError) {
+      console.error("[PaperCut] Could not recover wallet sign-in:", walletError);
+      setSignInError("Could not prepare wallet sign-in. Please reload and try again.");
+      setSignInBusy(false);
+    }
+  };
+
   const handleSendSignInCode = async (event) => {
     event.preventDefault();
     const email = signInEmail.trim().toLowerCase();
@@ -342,7 +389,11 @@ function App() {
     setSignInBusy(true);
     setSignInError("");
     try {
-      await sendEmailCode({ email });
+      await sendEmailCodeWithSessionRecovery({
+        email,
+        sendCode: sendEmailCode,
+        clearSession: logout,
+      });
       setSignInEmail(email);
       setSignInStep("code");
     } catch (err) {
@@ -3584,6 +3635,15 @@ function App() {
             )}
 
             {signInError && <div className="paywall-error signin-modal-error" role="alert">{signInError}</div>}
+            <div className="signin-modal-divider"><span>OR</span></div>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={signInBusy}
+              onClick={handleWalletSignIn}
+            >
+              {signInBusy ? "PREPARING WALLET LOGIN..." : "CONNECT CRYPTO WALLET"}
+            </button>
           </section>
         </div>
       )}

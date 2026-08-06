@@ -67,10 +67,9 @@ if (!PRIVY_APP_ID) {
           supportedChains: [arcTestnet],
           defaultChain: arcTestnet,
           // PaperCut provisions its transaction wallet through the backend
-          // (Circle W3S). Keeping Privy's external-wallet connectors enabled
-          // makes SDK readiness depend on third-party iframes that can be
-          // blocked by embedded browsers, even for an email-only login.
-          loginMethods: ['email'],
+          // (Circle W3S), but users may still authenticate with an existing
+          // external wallet. Do not create a second embedded Privy wallet.
+          loginMethods: ['email', 'wallet'],
           appearance: {
             theme: 'light',
             accentColor: '#8f2d1b',
@@ -78,10 +77,6 @@ if (!PRIVY_APP_ID) {
             showWalletLoginFirst: false,
             landingHeader: 'Sign the Guest Register',
             loginMessage: 'Log in with your cryptographic wallet or electronic mail to unlock dispatch files.',
-          },
-          externalWallets: {
-            disableAllExternalWallets: true,
-            walletConnect: { enabled: false },
           },
           embeddedWallets: {
             ethereum: { createOnLogin: 'off' },
