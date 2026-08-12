@@ -124,6 +124,30 @@ test("mock payment grants content only after a completed operation", async () =>
   assert.equal(otherSurfArticle.body.videoUrl, undefined);
 });
 
+test("personal library returns purchased dispatch metadata without protected content", async () => {
+  const reader = asUser("library-reader@example.com");
+  const initialWallet = await request(app).post("/api/user/wallet").set(reader).send({}).expect(200);
+  assert.equal(initialWallet.body.walletStatus, "READY");
+  assert.deepEqual(initialWallet.body.pendingOperations, []);
+
+  const emptyLibrary = await request(app).get("/api/user/library").set(reader).expect(200);
+  assert.equal(emptyLibrary.body.summary.totalItems, 0);
+  assert.deepEqual(emptyLibrary.body.items, []);
+
+  await request(app).post("/api/user/faucet").set(reader).send({}).expect(200);
+  await request(app).post("/api/articles/unlock").set(reader).send({ articleId: "1" }).expect(200);
+
+  const response = await request(app).get("/api/user/library").set(reader).expect(200);
+  assert.equal(response.body.summary.totalItems, 1);
+  assert.equal(response.body.summary.totalSpent, "0.08");
+  assert.equal(response.body.items[0].articleId, "1");
+  assert.equal(response.body.items[0].title, "The Promise and Challenges of Crypto-Pluralism");
+  assert.equal(response.body.items[0].status, "UNLOCKED");
+  assert.match(response.body.items[0].txHash, /^0x[a-f0-9]{64}$/);
+  assert.equal(response.body.items[0].content, undefined);
+  assert.deepEqual(response.body.pending, []);
+});
+
 test("concurrent wallet initialization returns one stable wallet", async () => {
   const reader = asUser("concurrent-reader@example.com");
   const responses = await Promise.all(

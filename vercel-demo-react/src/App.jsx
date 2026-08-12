@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useMemo, useReducer, useRef } from 'react';
 import { useIdentityToken, useLogin, useLoginWithEmail, usePrivy } from '@privy-io/react-auth';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
@@ -8,6 +8,12 @@ import { resilientAuthFetch } from './apiClient.js';
 import { sendEmailCodeWithSessionRecovery } from './privyAuthRecovery.js';
 import { getBackendBaseUrl } from './runtimeConfig.js';
 import { collectLegacyEntitlementReceipts } from './legacyEntitlements.js';
+import {
+  initialReaderLifecycle,
+  pendingPaymentOperations,
+  readerLifecycleReducer,
+  WALLET_PHASE,
+} from './readerLifecycle.js';
 
 const INITIAL_ARTICLES = [
   {
@@ -290,16 +296,32 @@ function App() {
     });
   }, [authenticated, getAccessToken, identityToken]);
 
+  const [readerLifecycle, dispatchReaderLifecycle] = useReducer(
+    readerLifecycleReducer,
+    initialReaderLifecycle,
+  );
+  const pendingPayments = useMemo(
+    () => pendingPaymentOperations(readerLifecycle),
+    [readerLifecycle],
+  );
+  const authPhase = !ready ? 'initializing' : authenticated ? 'authenticated' : 'signed-out';
+
   const waitForPaymentOperation = async (initialData) => {
     if (!initialData?.pending || !initialData.transactionId) return initialData;
+    dispatchReaderLifecycle({ type: 'PAYMENT_UPDATE', operation: initialData });
     for (let attempt = 0; attempt < 60; attempt += 1) {
       await new Promise(resolve => window.setTimeout(resolve, 1000));
       const response = await authFetch(`${BACKEND_URL}/api/transactions/${initialData.transactionId}`);
       const data = await safeParseResponse(response);
-      if (data.status === 'COMPLETE') return { ...initialData, ...data, pending: false, success: true };
+      const operation = { ...initialData, ...data };
+      dispatchReaderLifecycle({ type: 'PAYMENT_UPDATE', operation });
+      if (data.status === 'COMPLETE') return { ...operation, pending: false, success: true };
       if (!response.ok || data.status === 'FAILED') throw new Error(data.error || 'Payment operation failed.');
     }
-    throw new Error('Payment is still pending. Please refresh shortly to check its status.');
+    const pendingError = new Error('Payment was submitted and is still confirming. It will continue in My Library automatically.');
+    pendingError.paymentPending = true;
+    pendingError.transactionId = initialData.transactionId;
+    throw pendingError;
   };
 
   const [circleWallet, setCircleWallet] = useState(null);
@@ -309,6 +331,14 @@ function App() {
 
   const [selectedArticle, setSelectedArticle] = useState(null);
   const [unlockedArticles, setUnlockedArticles] = useState({});
+  const [isLibraryView, setIsLibraryView] = useState(false);
+  const [library, setLibrary] = useState({
+    items: [],
+    pending: [],
+    summary: { totalItems: 0, totalSpent: '0.00', currency: 'USDC' },
+  });
+  const [libraryPhase, setLibraryPhase] = useState('idle');
+  const [libraryError, setLibraryError] = useState('');
   const [txStatus, setTxStatus] = useState("");
   const [txHash, setTxHash] = useState("");
   const [isUnlocking, setIsUnlocking] = useState(false);
@@ -1164,6 +1194,7 @@ function App() {
 
   const handleOpenApplyForm = () => {
     setSelectedArticle(null);
+    setIsLibraryView(false);
     setShowApplyForm(true);
   };
 
@@ -1220,8 +1251,16 @@ function App() {
       });
       const data = await response.json();
       if (response.ok) {
-        setCircleWallet(prev => prev ? { ...prev, balance: data.balance } : null);
-        setCopyStatus("Balance updated!");
+        setCircleWallet(prev => prev ? { ...prev, balance: data.balance, balanceSyncedAt: data.balanceSyncedAt || prev.balanceSyncedAt } : null);
+        setUnlockedArticles(data.unlockedArticles || {});
+        dispatchReaderLifecycle({
+          type: 'WALLET_READY',
+          degraded: data.walletStatus === 'DEGRADED',
+          message: data.walletWarning || '',
+          balanceSyncedAt: data.balanceSyncedAt || null,
+        });
+        dispatchReaderLifecycle({ type: 'HYDRATE_OPERATIONS', operations: data.pendingOperations || [] });
+        setCopyStatus(data.walletStatus === 'DEGRADED' ? "Wallet loaded; balance is cached." : "Balance updated!");
         setTimeout(() => setCopyStatus("Click address to copy"), 1500);
       } else {
         setCopyStatus("Sync failed.");
@@ -1279,8 +1318,13 @@ function App() {
       }
     } catch (err) {
       console.error(err);
-      setFaucetError(err.message || "Failed to contact faucet server.");
-      setCopyStatus("Faucet failed.");
+      if (err.paymentPending) {
+        setFaucetSuccess(err.message);
+        setCopyStatus("Faucet pending confirmation.");
+      } else {
+        setFaucetError(err.message || "Failed to contact faucet server.");
+        setCopyStatus("Faucet failed.");
+      }
       setTimeout(() => setCopyStatus("Click address to copy"), 3000);
     } finally {
       setFaucetLoading(false);
@@ -1304,6 +1348,36 @@ function App() {
     return null;
   };
 
+  const fetchLibrary = useCallback(async ({ silent = false } = {}) => {
+    if (!authenticated || !user) {
+      setLibrary({ items: [], pending: [], summary: { totalItems: 0, totalSpent: '0.00', currency: 'USDC' } });
+      setLibraryPhase('idle');
+      setLibraryError('');
+      return null;
+    }
+
+    if (!silent) setLibraryPhase('loading');
+    setLibraryError('');
+    try {
+      const response = await authFetch(`${BACKEND_URL}/api/user/library`);
+      const data = await safeParseResponse(response);
+      if (!response.ok) throw new Error(data.error || 'Could not load your library.');
+      setLibrary({
+        items: Array.isArray(data.items) ? data.items : [],
+        pending: Array.isArray(data.pending) ? data.pending : [],
+        summary: data.summary || { totalItems: 0, totalSpent: '0.00', currency: 'USDC' },
+      });
+      dispatchReaderLifecycle({ type: 'HYDRATE_OPERATIONS', operations: data.pending || [] });
+      setLibraryPhase('ready');
+      return data;
+    } catch (libraryLoadError) {
+      console.error('Could not load reader library:', libraryLoadError);
+      setLibraryError(libraryLoadError.message || 'Could not load your library.');
+      if (!silent) setLibraryPhase('error');
+      return null;
+    }
+  }, [authenticated, authFetch, user]);
+
   // Fetch or create user's Circle Programmable Wallet on backend upon login
   const fetchUserCircleWallet = useCallback(() => {
     if (!authenticated || !user) {
@@ -1312,6 +1386,7 @@ function App() {
       setCircleWallet(null);
       setUnlockedArticles({});
       setIsLoadingWallet(false);
+      dispatchReaderLifecycle({ type: 'RESET' });
       return Promise.resolve({ wallet: null, error: null });
     }
 
@@ -1324,6 +1399,7 @@ function App() {
     walletRequestGenerationRef.current = requestGeneration;
     setIsLoadingWallet(true);
     setError("");
+    dispatchReaderLifecycle({ type: 'WALLET_LOADING' });
 
     const request = (async () => {
       try {
@@ -1339,11 +1415,19 @@ function App() {
             address: data.address,
             balance: data.balance,
             walletId: data.walletId,
-            isMock: data.isMock
+            isMock: data.isMock,
+            balanceSyncedAt: data.balanceSyncedAt || null,
           };
           if (walletRequestGenerationRef.current === requestGeneration) {
             setCircleWallet(walletData);
             setUnlockedArticles(serverUnlockedArticles);
+            dispatchReaderLifecycle({
+              type: 'WALLET_READY',
+              degraded: data.walletStatus === 'DEGRADED',
+              message: data.walletWarning || '',
+              balanceSyncedAt: data.balanceSyncedAt || null,
+            });
+            dispatchReaderLifecycle({ type: 'HYDRATE_OPERATIONS', operations: data.pendingOperations || [] });
           }
 
           const legacyReceipts = collectLegacyEntitlementReceipts({
@@ -1372,12 +1456,18 @@ function App() {
         }
 
         const errorMsg = data.error || "Failed to load Circle MPC wallet.";
-        if (walletRequestGenerationRef.current === requestGeneration) setError(errorMsg);
+        if (walletRequestGenerationRef.current === requestGeneration) {
+          setError(errorMsg);
+          dispatchReaderLifecycle({ type: 'WALLET_ERROR', message: errorMsg });
+        }
         return { wallet: null, error: errorMsg };
       } catch (err) {
         console.error("Error fetching Circle wallet:", err);
         const errorMsg = `Network/Proxy Error: ${err.message || String(err)}`;
-        if (walletRequestGenerationRef.current === requestGeneration) setError(errorMsg);
+        if (walletRequestGenerationRef.current === requestGeneration) {
+          setError(errorMsg);
+          dispatchReaderLifecycle({ type: 'WALLET_ERROR', message: errorMsg });
+        }
         return { wallet: null, error: errorMsg };
       } finally {
         if (walletRequestGenerationRef.current === requestGeneration) {
@@ -1396,11 +1486,53 @@ function App() {
   }, [fetchUserCircleWallet]);
 
   useEffect(() => {
+    if (authenticated && user) fetchLibrary();
+  }, [authenticated, fetchLibrary, user]);
+
+  useEffect(() => {
+    if (!authenticated || pendingPayments.length === 0) return undefined;
+    let disposed = false;
+    let polling = false;
+
+    const refreshPendingPayments = async () => {
+      if (polling || disposed || (document.visibilityState && document.visibilityState !== 'visible')) return;
+      polling = true;
+      let settled = false;
+      try {
+        for (const operation of pendingPayments) {
+          const response = await authFetch(`${BACKEND_URL}/api/transactions/${operation.transactionId}`);
+          const data = await safeParseResponse(response);
+          if (disposed || !data.transactionId) continue;
+          dispatchReaderLifecycle({ type: 'PAYMENT_UPDATE', operation: data });
+          if (['COMPLETE', 'FAILED'].includes(data.status)) settled = true;
+        }
+        if (settled && !disposed) {
+          await Promise.all([fetchUserCircleWallet(), fetchLibrary({ silent: true })]);
+        }
+      } catch (pendingRefreshError) {
+        console.error('Could not refresh pending payments:', pendingRefreshError);
+      } finally {
+        polling = false;
+      }
+    };
+
+    const timer = window.setInterval(refreshPendingPayments, 5000);
+    void refreshPendingPayments();
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [authenticated, authFetch, fetchLibrary, fetchUserCircleWallet, pendingPayments]);
+
+  useEffect(() => {
     const refreshAfterInterruption = () => {
       if (document.visibilityState && document.visibilityState !== "visible") return;
       fetchArticles();
       fetchPublishers();
-      if (authenticated) fetchUserCircleWallet();
+      if (authenticated) {
+        fetchUserCircleWallet();
+        fetchLibrary({ silent: true });
+      }
     };
 
     window.addEventListener("online", refreshAfterInterruption);
@@ -1409,7 +1541,7 @@ function App() {
       window.removeEventListener("online", refreshAfterInterruption);
       document.removeEventListener("visibilitychange", refreshAfterInterruption);
     };
-  }, [authenticated, fetchArticles, fetchPublishers, fetchUserCircleWallet]);
+  }, [authenticated, fetchArticles, fetchLibrary, fetchPublishers, fetchUserCircleWallet]);
 
   useEffect(() => {
     if (showWalletModal) {
@@ -1520,7 +1652,11 @@ function App() {
 
     } catch (err) {
       console.error("Withdrawal failed:", err);
-      setWithdrawError(err.message || "Failed to execute withdrawal.");
+      if (err.paymentPending) {
+        setWithdrawSuccess(err.message);
+      } else {
+        setWithdrawError(err.message || "Failed to execute withdrawal.");
+      }
     } finally {
       setWithdrawLoading(false);
     }
@@ -1532,6 +1668,7 @@ function App() {
   };
 
   const handleSelectArticle = (art) => {
+    setIsLibraryView(false);
     setSelectedArticle(art);
     setShowApplyForm(false);
     setTxStatus("");
@@ -1564,6 +1701,28 @@ function App() {
   const handleReturnToArticleList = () => {
     setSelectedArticle(null);
     window.setTimeout(() => articleListHeadingRef.current?.focus(), 0);
+  };
+
+  const handleOpenLibrary = () => {
+    setSelectedArticle(null);
+    setShowApplyForm(false);
+    setIsAdminView(false);
+    setIsPublisherView(false);
+    setIsLibraryView(true);
+    void fetchLibrary();
+  };
+
+  const handleOpenLibraryItem = (item) => {
+    const article = articles.find((entry) => entry.id === item.articleId) || {
+      id: item.articleId,
+      title: item.title,
+      author: item.author,
+      snippet: item.snippet,
+      price: item.price || item.amount,
+      verified: true,
+    };
+    setIsLibraryView(false);
+    handleSelectArticle(article);
   };
 
   const triggerScrapeSimulation = () => {
@@ -1769,16 +1928,16 @@ function App() {
       // Update local wallet balance state
       const walletResult = await fetchUserCircleWallet();
       if (walletResult?.wallet) setCircleWallet(walletResult.wallet);
+      await fetchLibrary({ silent: true });
 
       // Save unlocked state
-      const updatedUnlocked = { 
-        ...unlockedArticles, 
+      setUnlockedArticles((currentUnlocked) => ({
+        ...currentUnlocked,
         [unlockingArticleId]: {
           txHash: data.txHash || data.transactionId,
           isMock: !!data.isMock
-        } 
-      };
-      setUnlockedArticles(updatedUnlocked);
+        }
+      }));
 
       if (unlockingArticleId === "surfai-daily" && surfRequestedAsset === "video") {
         const protectedFields = await fetchFullArticleContent(unlockingArticleId);
@@ -1796,8 +1955,13 @@ function App() {
 
     } catch (err) {
       console.error("Micropayment error:", err);
-      setTxStatus("");
-      setError(err.message || "Transaction failed. Do you have enough USDC balance?");
+      if (err.paymentPending) {
+        setTxStatus(err.message);
+        await fetchLibrary({ silent: true });
+      } else {
+        setTxStatus("");
+        setError(err.message || "Transaction failed. Do you have enough USDC balance?");
+      }
     } finally {
       setIsUnlocking(false);
     }
@@ -1835,6 +1999,7 @@ function App() {
               setShowApplyForm(false);
               handleToggleAdminView(false);
               setIsPublisherView(false);
+              setIsLibraryView(false);
             }}
             title="Return to Front Page / Home"
             style={{ flex: 1, textAlign: 'left' }}
@@ -1867,6 +2032,7 @@ function App() {
                 onClick={() => {
                   setSelectedArticle(null);
                   setShowApplyForm(false);
+                  setIsLibraryView(false);
                   setIsPublisherView(true);
                   window.location.hash = '/publisher';
                 }}
@@ -1898,22 +2064,33 @@ function App() {
                 className="nav-front-page-btn" 
                 onClick={openLogin}
                 aria-haspopup="dialog"
-                title="Sign in"
+                title={authPhase === 'initializing' ? 'Authentication is initializing; you can still open the sign-in panel.' : 'Sign in'}
               >
-                SIGN IN
+                {authPhase === 'initializing' ? 'SIGN IN · INITIALIZING' : 'SIGN IN'}
               </button>
             ) : (
               <div className="wallet-info-group">
+                <button
+                  type="button"
+                  className={`nav-front-page-btn library-nav-button ${isLibraryView ? 'is-active' : ''}`}
+                  onClick={handleOpenLibrary}
+                  title="Open your purchased dispatches"
+                >
+                  MY LIBRARY
+                  {library.summary.totalItems > 0 && <span className="library-nav-count">{library.summary.totalItems}</span>}
+                </button>
                 <button 
-                  className="btn-wallet-icon" 
+                  type="button"
+                  className={`btn-wallet-icon wallet-phase-${readerLifecycle.walletPhase}`}
                   onClick={() => setShowWalletModal(true)} 
-                  title={`Open Ledger Vault Wallet (${smartWalletAddress || user?.wallet?.address})`}
+                  title={readerLifecycle.walletMessage || `Open Ledger Vault Wallet (${smartWalletAddress || user?.wallet?.address || 'initializing'})`}
                 >
                   <svg width="18" height="16" viewBox="0 0 20 18" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
                     <path d="M17 4H3C1.89543 4 1 4.89543 1 6V15C1 16.1046 1.89543 17 3 17H17C18.1046 17 19 16.1046 19 15V6C19 4.89543 18.1046 4 17 4Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     <path d="M19 8H14.5C13.6716 8 13 8.67157 13 9.5C13 10.3284 13.6716 11 14.5 11H19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     <path d="M1 8.5C1 4.5 4.5 1 9.5 1H17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
+                  <span className="wallet-phase-dot" aria-label={`Wallet ${readerLifecycle.walletPhase}`}></span>
                 </button>
                 <button className="btn btn-sm btn-secondary" onClick={logout} style={{ marginLeft: '12px' }}>Sign Out</button>
               </div>
@@ -1922,7 +2099,100 @@ function App() {
         </div>
       </nav>
             {/* MAIN CONTAINER */}
-      {isPublisherView ? (
+      {isLibraryView ? (
+        <main className="library-page">
+          <header className="library-header">
+            <div>
+              <span className="library-kicker">PRIVATE READING ROOM</span>
+              <h1>My Library</h1>
+              <p>Your permanent PaperCut purchases and payments awaiting confirmation.</p>
+            </div>
+            <button type="button" className="btn btn-secondary" onClick={() => fetchLibrary()} disabled={libraryPhase === 'loading'}>
+              {libraryPhase === 'loading' ? 'SYNCING…' : 'SYNC LIBRARY'}
+            </button>
+          </header>
+
+          <section className="reader-status-strip" aria-label="Reader account status">
+            <div className={`reader-status-step is-${authPhase}`}>
+              <span>01</span><strong>Identity</strong><small>{authPhase === 'authenticated' ? 'Signed in' : 'Initializing'}</small>
+            </div>
+            <div className={`reader-status-step is-${readerLifecycle.walletPhase}`}>
+              <span>02</span><strong>Wallet</strong><small>{readerLifecycle.walletPhase === WALLET_PHASE.DEGRADED ? 'Cached balance' : readerLifecycle.walletPhase}</small>
+            </div>
+            <div className={`reader-status-step ${pendingPayments.length ? 'is-pending' : 'is-ready'}`}>
+              <span>03</span><strong>Payments</strong><small>{pendingPayments.length ? `${pendingPayments.length} confirming` : 'Up to date'}</small>
+            </div>
+          </section>
+
+          {readerLifecycle.walletMessage && (
+            <div className="library-notice" role="status">{readerLifecycle.walletMessage} Your purchases remain available.</div>
+          )}
+          {libraryError && (
+            <div className="library-notice is-error" role="alert">{libraryError}</div>
+          )}
+
+          <section className="library-summary" aria-label="Library summary">
+            <div><strong>{library.summary.totalItems}</strong><span>Unlocked dispatches</span></div>
+            <div><strong>{library.summary.totalSpent}</strong><span>{library.summary.currency} recorded</span></div>
+            <div><strong>{library.pending.length || pendingPayments.length}</strong><span>Payments confirming</span></div>
+          </section>
+
+          {(library.pending.length > 0 || pendingPayments.length > 0) && (
+            <section className="library-pending-section">
+              <div className="library-section-heading">
+                <span>SETTLEMENT DESK</span>
+                <h2>Awaiting confirmation</h2>
+              </div>
+              <div className="library-pending-list">
+                {(library.pending.length ? library.pending : pendingPayments).map((operation) => (
+                  <div className="library-pending-item" key={operation.transactionId}>
+                    <span className="library-pulse" aria-hidden="true"></span>
+                    <div><strong>{operation.title || 'PaperCut transaction'}</strong><small>Circle status: {operation.circleState || operation.status}</small></div>
+                    <span>{operation.amount} USDC</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section className="library-collection">
+            <div className="library-section-heading">
+              <span>OWNED EDITIONS</span>
+              <h2>Purchased dispatches</h2>
+            </div>
+            {libraryPhase === 'loading' && library.items.length === 0 ? (
+              <div className="library-empty">Checking the entitlement ledger…</div>
+            ) : library.items.length === 0 ? (
+              <div className="library-empty">
+                <strong>Your reading room is ready.</strong>
+                <p>Unlock a dispatch and it will appear here automatically on every signed-in device.</p>
+                <button type="button" className="btn" onClick={() => setIsLibraryView(false)}>BROWSE FRONT PAGE</button>
+              </div>
+            ) : (
+              <div className="library-grid">
+                {library.items.map((item, index) => (
+                  <article className="library-card" key={item.articleId}>
+                    <div className="library-card-number">NO. {String(index + 1).padStart(2, '0')}</div>
+                    <h3>{item.title}</h3>
+                    <p className="library-card-author">By {item.author}</p>
+                    <p>{item.snippet}</p>
+                    <dl>
+                      <div><dt>Purchased</dt><dd>{item.purchasedAt ? new Date(item.purchasedAt).toLocaleDateString() : 'Legacy record'}</dd></div>
+                      <div><dt>Price</dt><dd>{item.amount} USDC</dd></div>
+                    </dl>
+                    <div className="library-card-actions">
+                      <button type="button" className="btn" onClick={() => handleOpenLibraryItem(item)}>OPEN DISPATCH</button>
+                      {item.txHash && (
+                        <a href={getExplorerUrl(chainId, item.txHash)} target="_blank" rel="noreferrer">VIEW RECEIPT ↗</a>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        </main>
+      ) : isPublisherView ? (
         <div className="portal-scroll-container" style={{ flex: '1', overflowY: 'auto', width: '100%', display: 'flex', flexDirection: 'column' }}>
           {!authenticated ? (
           <main className="publisher-container" style={{ padding: '32px', maxWidth: '480px', margin: '80px auto', border: '2px solid var(--ink-black)', backgroundColor: 'var(--paper-accent)', boxShadow: '6px 6px 0 var(--ink-black)', textAlign: 'center' }}>
@@ -3607,6 +3877,10 @@ function App() {
                 ? "Enter your email to receive a one-time authentication code."
                 : `Enter the code sent to ${signInEmail}.`}
             </p>
+            <div className={`signin-readiness is-${authPhase}`} role="status">
+              <span></span>
+              {ready ? 'PRIVY READY · SECURE SESSION AVAILABLE' : 'SECURE SESSION STARTING · EMAIL SIGN-IN REMAINS AVAILABLE'}
+            </div>
 
             {signInStep === "email" ? (
               <form className="signin-form" onSubmit={handleSendSignInCode}>
@@ -3749,6 +4023,18 @@ function App() {
                   <div className="wallet-id-group half">
                     <div className="wallet-id-label">GAS FEE SPONSOR</div>
                     <div className="wallet-id-value mono-text text-stamp">PUBLISHER PAID</div>
+                  </div>
+                </div>
+
+                <div className={`wallet-lifecycle-banner is-${readerLifecycle.walletPhase}`} role="status">
+                  <span className="wallet-phase-dot" aria-hidden="true"></span>
+                  <div>
+                    <strong>{readerLifecycle.walletPhase === WALLET_PHASE.DEGRADED ? 'WALLET READY · BALANCE CACHED' : `WALLET ${readerLifecycle.walletPhase.toUpperCase()}`}</strong>
+                    <small>
+                      {readerLifecycle.walletMessage || (pendingPayments.length
+                        ? `${pendingPayments.length} operation${pendingPayments.length === 1 ? '' : 's'} awaiting confirmation.`
+                        : 'Identity, wallet and entitlement ledger are synchronized.')}
+                    </small>
                   </div>
                 </div>
 
