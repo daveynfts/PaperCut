@@ -12,6 +12,7 @@ require("dotenv").config({ path: path.join(__dirname, ".env") });
 
 const { isAdminIdentity, normalizeIdentity, optionalAuth, requireAdmin, requireAuth } = require("./auth");
 const {
+  entitlementTxHash,
   findEntitlementByTxHash,
   normalizeTxHash,
   operationBelongsToUser,
@@ -360,14 +361,27 @@ async function getOrCreateUserWallet(auth) {
     }
   }
 
+  let walletStatus = "READY";
+  let walletWarning = null;
   if (isLiveMode) {
-    const balance = await getWalletUsdcBalance(result.walletId);
-    await store.update("users", (users) => {
-      users[auth.accountKey].balance = balance;
-      result = users[auth.accountKey];
-    });
+    try {
+      const balance = await getWalletUsdcBalance(result.walletId);
+      await store.update("users", (users) => {
+        users[auth.accountKey].balance = balance;
+        users[auth.accountKey].balanceSyncedAt = Date.now();
+        result = users[auth.accountKey];
+      });
+    } catch (error) {
+      // A transient Circle balance outage must not hide an already-created
+      // wallet or its entitlements from the reader. Return the cached balance
+      // and expose a degraded state so the client can retry explicitly.
+      walletStatus = "DEGRADED";
+      walletWarning = "Wallet loaded, but the live balance could not be refreshed.";
+      console.error(`[PaperCut API] Balance refresh failed for ${auth.accountKey}:`, error.message);
+    }
   }
-  return reconcileStoredPaymentOperations(auth, result);
+  const reconciled = await reconcileStoredPaymentOperations(auth, result);
+  return { ...reconciled, walletStatus, walletWarning };
 }
 
 async function createOperation(operation) {
@@ -670,13 +684,9 @@ async function startTransfer({ operationId, type, auth, sourceWalletId, destinat
     return finalizeOperation(id, { state: "COMPLETE", txHash: `0x${crypto.randomBytes(32).toString("hex")}` });
   }
 
+  let circleTransactionId = null;
   try {
-    const circleTransactionId = await createCircleTransfer({ operationId: id, sourceWalletId, destinationAddress, amount });
-    await updateOperation(id, (item) => {
-      item.circleTransactionId = circleTransactionId;
-      item.status = "PENDING";
-    });
-    return finalizeOperation(id, await pollCircleTransaction(circleTransactionId));
+    circleTransactionId = await createCircleTransfer({ operationId: id, sourceWalletId, destinationAddress, amount });
   } catch (error) {
     await clearReservation(operation);
     await updateOperation(id, (item) => {
@@ -684,6 +694,23 @@ async function startTransfer({ operationId, type, auth, sourceWalletId, destinat
       item.error = error.message;
     });
     throw error;
+  }
+
+  // Persist the Circle ID before any status polling. If storage is
+  // temporarily unavailable after Circle accepted the transfer, leave the
+  // reservation in place rather than allowing a second charge.
+  await updateOperation(id, (item) => {
+    item.circleTransactionId = circleTransactionId;
+    item.status = "PENDING";
+  });
+
+  try {
+    return await finalizeOperation(id, await pollCircleTransaction(circleTransactionId));
+  } catch (error) {
+    // Circle has already accepted this transfer. A timeout while reading its
+    // status is not a failed payment and must not permit a duplicate charge.
+    console.error(`[PaperCut API] Transaction ${id} remains pending after status check:`, error.message);
+    return (await store.read("transactions"))[id];
   }
 }
 
@@ -695,7 +722,83 @@ function operationResponse(operation) {
     transactionId: operation.id,
     txHash: operation.txHash || operation.circleTransactionId || null,
     amount: operation.amount,
+    type: operation.type,
+    articleId: operation.articleId || null,
+    circleState: operation.circleState || null,
+    createdAt: operation.createdAt || null,
+    updatedAt: operation.updatedAt || null,
+    completedAt: operation.completedAt || null,
+    error: operation.status === "FAILED" ? operation.error || "Payment operation failed" : null,
     isMock: isMockMode,
+  };
+}
+
+async function listUserOperations(auth, user) {
+  const transactions = await store.read("transactions");
+  return Object.values(transactions)
+    .filter((operation) => operationBelongsToUser(operation, auth, user))
+    .sort((left, right) => Number(right.createdAt || 0) - Number(left.createdAt || 0));
+}
+
+async function buildUserLibrary(auth, user) {
+  const [storedArticles, operations] = await Promise.all([
+    store.read("articles"),
+    listUserOperations(auth, user),
+  ]);
+  const completedByArticle = new Map(
+    operations
+      .filter((operation) => operation.type === "unlock" && operation.status === "COMPLETE" && operation.articleId)
+      .map((operation) => [operation.articleId, operation])
+  );
+
+  let totalSpent = 0n;
+  const items = Object.entries(user.unlockedArticles || {}).map(([articleId, entitlement]) => {
+    const article = storedArticles.find((entry) => entry.id === articleId) || getSpecialArticle(articleId);
+    const operation = completedByArticle.get(articleId);
+    const amount = typeof entitlement === "object" && entitlement?.amount
+      ? entitlement.amount
+      : operation?.amount || article?.price || "0";
+    try {
+      totalSpent += parseUsdc(amount, { allowZero: true, max: null });
+    } catch (_error) {
+      // Preserve the entitlement even if an imported legacy amount is malformed.
+    }
+    return {
+      articleId,
+      title: article?.title || "Archived dispatch",
+      author: article?.author || "PaperCut Archive",
+      snippet: article?.snippet || "This purchased dispatch is no longer listed on the front page.",
+      price: article?.price || amount,
+      amount,
+      purchasedAt: typeof entitlement === "object"
+        ? entitlement.confirmedAt || operation?.completedAt || operation?.createdAt || null
+        : operation?.completedAt || operation?.createdAt || null,
+      txHash: entitlementTxHash(entitlement) || normalizeTxHash(operation?.txHash) || null,
+      transactionId: operation?.id || null,
+      recovered: Boolean(typeof entitlement === "object" && entitlement?.recovered),
+      status: "UNLOCKED",
+    };
+  }).sort((left, right) => Number(right.purchasedAt || 0) - Number(left.purchasedAt || 0));
+
+  const pending = operations
+    .filter((operation) => operation.type === "unlock" && ["INITIATED", "PENDING"].includes(operation.status))
+    .map((operation) => {
+      const article = storedArticles.find((entry) => entry.id === operation.articleId) || getSpecialArticle(operation.articleId);
+      return {
+        ...operationResponse(operation),
+        title: article?.title || "Dispatch payment",
+        author: article?.author || "PaperCut",
+      };
+    });
+
+  return {
+    items,
+    pending,
+    summary: {
+      totalItems: items.length,
+      totalSpent: formatUsdc(totalSpent),
+      currency: "USDC",
+    },
   };
 }
 
@@ -913,13 +1016,27 @@ app.post("/api/admin/session", requireAuth, (req, res) => {
 app.post("/api/user/wallet", requireAuth, async (req, res, next) => {
   try {
     const user = await getOrCreateUserWallet(req.auth);
+    const pendingOperations = (await listUserOperations(req.auth, user))
+      .filter((operation) => ["INITIATED", "PENDING"].includes(operation.status))
+      .map(operationResponse);
     res.json({
       walletId: user.walletId,
       address: user.address,
       balance: user.balance,
+      balanceSyncedAt: user.balanceSyncedAt || null,
+      walletStatus: user.walletStatus || "READY",
+      walletWarning: user.walletWarning || null,
+      pendingOperations,
       unlockedArticles: user.unlockedArticles || {},
       isMock: isMockMode,
     });
+  } catch (error) { next(error); }
+});
+
+app.get("/api/user/library", requireAuth, async (req, res, next) => {
+  try {
+    const user = await getOrCreateUserWallet(req.auth);
+    res.json({ success: true, ...(await buildUserLibrary(req.auth, user)) });
   } catch (error) { next(error); }
 });
 
@@ -1105,7 +1222,10 @@ app.get("/api/transactions/:id", requireAuth, async (req, res, next) => {
   try {
     let operation = (await store.read("transactions"))[req.params.id];
     if (!operation) return res.status(404).json({ error: "Payment operation not found" });
-    if (operation.userId !== req.auth.userId && !isAdminIdentity(req.auth)) return res.status(403).json({ error: "Access denied" });
+    const user = await getUserRecord(req.auth);
+    if ((!user || !operationBelongsToUser(operation, req.auth, user)) && !isAdminIdentity(req.auth)) {
+      return res.status(403).json({ error: "Access denied" });
+    }
     if (isLiveMode && operation.status === "PENDING" && operation.circleTransactionId) {
       operation = await finalizeOperation(operation.id, await getCircleTransaction(operation.circleTransactionId));
     }
