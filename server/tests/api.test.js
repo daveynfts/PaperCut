@@ -14,6 +14,10 @@ process.env.PAYMENT_MODE = "mock";
 process.env.PAPERCUT_DATA_DIR = dataDirectory;
 process.env.ADMIN_EMAILS = "admin@example.com";
 process.env.SURFAI_VIDEO_URL = "https://media.example.test/protected-surfai.mp4";
+process.env.R2_ACCOUNT_ID = "test-account";
+process.env.R2_ACCESS_KEY_ID = "test-access-key";
+process.env.R2_SECRET_ACCESS_KEY = "test-secret-key";
+process.env.R2_BUCKET = "papercut-test";
 
 const app = require("../server");
 const asUser = (email) => ({ "x-test-user-email": email });
@@ -72,6 +76,41 @@ test("protected payment and admin routes reject missing or insufficient identity
     .set(asUser("hayden@uniswap.org"))
     .send({ email: "vitalik@ethereum.org", verified: false })
     .expect(403);
+
+  await request(app).post("/api/admin/uploads/presign").send({}).expect(401);
+  await request(app).post("/api/admin/uploads/presign").set(asUser("reader@example.com")).send({
+    assetType: "pdf",
+    fileName: "report.pdf",
+    contentType: "application/pdf",
+    size: 1024,
+  }).expect(403);
+});
+
+test("admin can create constrained direct-upload URLs for private R2 assets", async () => {
+  const admin = asUser("admin@example.com");
+  const config = await request(app).get("/api/admin/uploads/config").set(admin).expect(200);
+  assert.equal(config.body.r2.configured, true);
+  assert.equal(config.body.r2.bucket, "papercut-test");
+
+  await request(app).post("/api/admin/uploads/presign").set(admin).send({
+    assetType: "pdf",
+    fileName: "not-a-pdf.mp4",
+    contentType: "video/mp4",
+    size: 1024,
+  }).expect(400);
+
+  const response = await request(app).post("/api/admin/uploads/presign").set(admin).send({
+    assetType: "pdf",
+    fileName: "SurfAI Report 2026.pdf",
+    contentType: "application/pdf",
+    size: 1024 * 1024,
+  }).expect(200);
+  assert.match(response.body.assetRef, /^r2:\/\/surfai\/pdf\/\d{4}\/\d{2}\/\d{2}\/[a-f0-9-]+-SurfAI-Report-2026\.pdf$/);
+  assert.match(response.body.uploadUrl, /^https:\/\//);
+  assert.equal(response.body.uploadHeaders["Content-Type"], "application/pdf");
+  assert.ok(new URL(response.body.uploadUrl).searchParams.has("X-Amz-Signature"));
+  assert.ok(new URL(response.body.previewUrl).searchParams.has("X-Amz-Signature"));
+  assert.doesNotMatch(JSON.stringify(response.body), /test-secret-key/);
 });
 
 test("admin can update SurfAI content and protected media without leaking it publicly", async () => {
@@ -291,6 +330,62 @@ test("SurfAI report series preserves old purchases and supports archive, update,
   }).expect(200);
   const restoredCurrent = await request(app).get("/api/surfai").expect(200);
   assert.equal(restoredCurrent.body.id, legacy.id);
+});
+
+test("R2 references stay private and become short-lived links only for entitled readers", async () => {
+  const admin = asUser("admin@example.com");
+  const buyer = asUser("paying-reader@example.com");
+  const original = (await request(app).get("/api/admin/surfai/reports").set(admin).expect(200))
+    .body.reports.find((report) => report.id === "surfai-daily");
+  const pdfUpload = (await request(app).post("/api/admin/uploads/presign").set(admin).send({
+    assetType: "pdf",
+    fileName: "private-report.pdf",
+    contentType: "application/pdf",
+    size: 4096,
+  }).expect(200)).body;
+  const videoUpload = (await request(app).post("/api/admin/uploads/presign").set(admin).send({
+    assetType: "video",
+    fileName: "private-briefing.mp4",
+    contentType: "video/mp4",
+    size: 8192,
+  }).expect(200)).body;
+
+  await request(app).put("/api/admin/surfai/reports/surfai-daily").set(admin).send({
+    title: original.title,
+    snippet: original.snippet,
+    content: original.content,
+    price: original.price,
+    pdfUrl: pdfUpload.assetRef,
+    videoUrl: videoUpload.assetRef,
+    listed: true,
+  }).expect(200);
+
+  const publicMetadata = await request(app).get("/api/surfai").expect(200);
+  assert.equal(publicMetadata.body.pdfUrl, undefined);
+  assert.equal(publicMetadata.body.videoUrl, undefined);
+  assert.doesNotMatch(JSON.stringify(publicMetadata.body), /r2:\/\//);
+
+  const protectedArticle = await request(app).get("/api/articles/surfai-daily").set(buyer).expect(200);
+  assert.match(protectedArticle.body.pdfUrl, /^https:\/\//);
+  assert.match(protectedArticle.body.videoUrl, /^https:\/\//);
+  assert.ok(new URL(protectedArticle.body.pdfUrl).searchParams.has("X-Amz-Signature"));
+  assert.ok(new URL(protectedArticle.body.videoUrl).searchParams.has("X-Amz-Signature"));
+  assert.doesNotMatch(JSON.stringify(protectedArticle.body), /r2:\/\//);
+
+  const adminList = await request(app).get("/api/admin/surfai/reports").set(admin).expect(200);
+  const configured = adminList.body.reports.find((report) => report.id === "surfai-daily");
+  assert.equal(configured.pdfUrl, pdfUpload.assetRef);
+  assert.ok(new URL(configured.pdfPreviewUrl).searchParams.has("X-Amz-Signature"));
+
+  await request(app).put("/api/admin/surfai/reports/surfai-daily").set(admin).send({
+    title: original.title,
+    snippet: original.snippet,
+    content: original.content,
+    price: original.price,
+    pdfUrl: original.pdfUrl || "",
+    videoUrl: original.videoUrl || "",
+    listed: true,
+  }).expect(200);
 });
 
 test("concurrent wallet initialization returns one stable wallet", async () => {

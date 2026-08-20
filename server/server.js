@@ -19,6 +19,7 @@ const {
   verifyLegacyCircleTransaction,
 } = require("./entitlements");
 const { formatUsdc, parseExternalUsdcBalance, parseUsdc } = require("./money");
+const { createR2Upload, r2StorageStatus, resolveProtectedAssetUrl } = require("./r2");
 const { PaperCutStore } = require("./store");
 const { createRetryableInitializer } = require("./retryable-initializer");
 const { schemas, validate } = require("./validation");
@@ -945,14 +946,18 @@ app.get("/api/articles/:id", optionalAuth, async (req, res, next) => {
         articleId: article.id,
       });
     }
+    const [pdfUrl, videoUrl] = await Promise.all([
+      resolveProtectedAssetUrl(article.pdfUrl),
+      resolveProtectedAssetUrl(article.videoUrl),
+    ]);
     res.json({
       success: true,
       articleId: article.id,
       title: article.title,
       author: article.author,
       content: article.content,
-      ...(article.pdfUrl ? { pdfUrl: article.pdfUrl } : {}),
-      ...(article.videoUrl ? { videoUrl: article.videoUrl } : {}),
+      ...(pdfUrl ? { pdfUrl } : {}),
+      ...(videoUrl ? { videoUrl } : {}),
     });
   } catch (error) { next(error); }
 });
@@ -1141,6 +1146,21 @@ app.put("/api/admin/surfai", requireAuth, requireAdmin, validate(schemas.surfaiU
   } catch (error) { next(error); }
 });
 
+app.get("/api/admin/uploads/config", requireAuth, requireAdmin, (_req, res) => {
+  res.json({ success: true, r2: r2StorageStatus() });
+});
+
+app.post("/api/admin/uploads/presign", requireAuth, requireAdmin, validate(schemas.r2UploadRequest), async (req, res, next) => {
+  try {
+    const upload = await createR2Upload(req.validatedBody);
+    res.json({
+      success: true,
+      ...upload,
+      previewUrl: await resolveProtectedAssetUrl(upload.assetRef),
+    });
+  } catch (error) { next(error); }
+});
+
 app.get("/api/admin/surfai/reports", requireAuth, requireAdmin, async (_req, res, next) => {
   try {
     const [reports, users, settings] = await Promise.all([
@@ -1154,10 +1174,29 @@ app.get("/api/admin/surfai/reports", requireAuth, requireAdmin, async (_req, res
       });
       return counts;
     }, {});
+    const reportsWithPreviews = await Promise.all(reports.map(async (report) => {
+      let pdfPreviewUrl = "";
+      let videoPreviewUrl = "";
+      try {
+        [pdfPreviewUrl, videoPreviewUrl] = await Promise.all([
+          resolveProtectedAssetUrl(report.pdfUrl),
+          resolveProtectedAssetUrl(report.videoUrl),
+        ]);
+      } catch (_error) {
+        // Keep the editor available if R2 credentials are temporarily unavailable.
+      }
+      return {
+        ...report,
+        purchaseCount: purchaseCounts[report.id] || 0,
+        pdfPreviewUrl,
+        videoPreviewUrl,
+      };
+    }));
     res.json({
       success: true,
       featuredReportId: settings.featuredSurfAIReportId || reports.find((report) => report.listed)?.id || null,
-      reports: reports.map((report) => ({ ...report, purchaseCount: purchaseCounts[report.id] || 0 })),
+      r2: r2StorageStatus(),
+      reports: reportsWithPreviews,
     });
   } catch (error) { next(error); }
 });

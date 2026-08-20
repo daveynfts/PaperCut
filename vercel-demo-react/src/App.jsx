@@ -90,6 +90,8 @@ const EMPTY_SURFAI_REPORT = {
   price: "0.15",
   pdfUrl: "",
   videoUrl: "",
+  pdfPreviewUrl: "",
+  videoPreviewUrl: "",
   listed: true,
   replaceCurrent: true,
 };
@@ -106,6 +108,8 @@ const surfAIReportToDraft = (report = {}) => ({
   price: report.price || "0.15",
   pdfUrl: report.pdfUrl || "",
   videoUrl: report.videoUrl || "",
+  pdfPreviewUrl: report.pdfPreviewUrl || (String(report.pdfUrl || "").startsWith("https://") ? report.pdfUrl : ""),
+  videoPreviewUrl: report.videoPreviewUrl || (String(report.videoUrl || "").startsWith("https://") ? report.videoUrl : ""),
   listed: report.listed !== false,
   replaceCurrent: true,
 });
@@ -524,6 +528,8 @@ function App() {
     price: INITIAL_SURFAI_ARTICLE.price,
     pdfUrl: "",
     videoUrl: "",
+    pdfPreviewUrl: "",
+    videoPreviewUrl: "",
     listed: true,
     replaceCurrent: true,
   });
@@ -532,6 +538,11 @@ function App() {
   const [surfAIAdminMode, setSurfAIAdminMode] = useState("edit");
   const [surfAIAdminPhase, setSurfAIAdminPhase] = useState("idle");
   const [surfAIAdminStatus, setSurfAIAdminStatus] = useState("");
+  const [r2Storage, setR2Storage] = useState({ configured: false, bucket: null });
+  const [surfAIAssetUploads, setSurfAIAssetUploads] = useState({
+    pdf: { phase: "idle", message: "" },
+    video: { phase: "idle", message: "" },
+  });
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [adminAuthError, setAdminAuthError] = useState("");
   const readerArticles = useMemo(() => {
@@ -1156,6 +1167,7 @@ function App() {
       if (!response.ok) throw new Error(data.error || "Could not load SurfAI configuration.");
       const reports = Array.isArray(data.reports) ? data.reports : [];
       setSurfAIAdminReports(reports);
+      setR2Storage(data.r2 || { configured: false, bucket: null });
       const selected = reports.find((report) => report.id === surfAIAdminSelectedId)
         || reports.find((report) => report.id === data.featuredReportId)
         || reports[0];
@@ -1178,6 +1190,7 @@ function App() {
     setSurfAIAdminMode("create");
     setSurfAIAdminSelectedId(null);
     setSurfAIAdminDraft({ ...EMPTY_SURFAI_REPORT });
+    setSurfAIAssetUploads({ pdf: { phase: "idle", message: "" }, video: { phase: "idle", message: "" } });
     setSurfAIAdminStatus("A new report receives its own permanent entitlement ID. Existing purchases remain intact.");
   };
 
@@ -1185,12 +1198,14 @@ function App() {
     setSurfAIAdminMode("edit");
     setSurfAIAdminSelectedId(report.id);
     setSurfAIAdminDraft(surfAIReportToDraft(report));
+    setSurfAIAssetUploads({ pdf: { phase: "idle", message: "" }, video: { phase: "idle", message: "" } });
     setSurfAIAdminStatus("");
   };
 
   const handleResetSurfAIAdminDraft = () => {
     if (surfAIAdminMode === "create") {
       setSurfAIAdminDraft({ ...EMPTY_SURFAI_REPORT });
+      setSurfAIAssetUploads({ pdf: { phase: "idle", message: "" }, video: { phase: "idle", message: "" } });
       return;
     }
     const report = surfAIAdminReports.find((item) => item.id === surfAIAdminSelectedId);
@@ -1200,6 +1215,67 @@ function App() {
   const handleSurfAIAdminChange = (field, value) => {
     setSurfAIAdminDraft((current) => ({ ...current, [field]: value }));
     if (surfAIAdminStatus) setSurfAIAdminStatus("");
+  };
+
+  const handleSurfAIAssetUpload = async (assetType, file) => {
+    if (!file || !r2Storage.configured) return;
+    const field = assetType === "pdf" ? "pdfUrl" : "videoUrl";
+    const previewField = assetType === "pdf" ? "pdfPreviewUrl" : "videoPreviewUrl";
+    const lowerName = file.name.toLowerCase();
+    const contentType = file.type || (assetType === "pdf"
+      ? "application/pdf"
+      : lowerName.endsWith(".webm")
+        ? "video/webm"
+        : lowerName.endsWith(".mov")
+          ? "video/quicktime"
+          : "video/mp4");
+    setSurfAIAssetUploads((current) => ({
+      ...current,
+      [assetType]: { phase: "signing", message: `Preparing secure ${assetType.toUpperCase()} upload…` },
+    }));
+    try {
+      const presignResponse = await authFetch(`${BACKEND_URL}/api/admin/uploads/presign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assetType,
+          fileName: file.name,
+          contentType,
+          size: file.size,
+        }),
+      });
+      const upload = await safeParseResponse(presignResponse);
+      if (!presignResponse.ok) {
+        const detail = Array.isArray(upload.details) ? upload.details.map((item) => item.message).join(" · ") : upload.error;
+        throw new Error(detail || "Could not prepare the R2 upload.");
+      }
+      setSurfAIAssetUploads((current) => ({
+        ...current,
+        [assetType]: { phase: "uploading", message: `Uploading ${file.name} directly to R2…` },
+      }));
+      const uploadResponse = await fetch(upload.uploadUrl, {
+        method: "PUT",
+        headers: upload.uploadHeaders,
+        body: file,
+      });
+      if (!uploadResponse.ok) throw new Error(`R2 rejected the upload (${uploadResponse.status}).`);
+      setSurfAIAdminDraft((current) => ({
+        ...current,
+        [field]: upload.assetRef,
+        [previewField]: upload.previewUrl,
+      }));
+      setSurfAIAssetUploads((current) => ({
+        ...current,
+        [assetType]: { phase: "ready", message: `${file.name} is stored in R2. Save the report to attach it.` },
+      }));
+      setSurfAIAdminStatus(`${assetType.toUpperCase()} upload completed. Save the report to publish the new asset reference.`);
+    } catch (uploadError) {
+      console.error(`Failed to upload SurfAI ${assetType}:`, uploadError);
+      setSurfAIAssetUploads((current) => ({
+        ...current,
+        [assetType]: { phase: "error", message: uploadError.message || "R2 upload failed." },
+      }));
+    }
   };
 
   const handleSurfAIAdminSubmit = async (event) => {
@@ -1212,9 +1288,15 @@ function App() {
       const endpoint = isCreating
         ? `${BACKEND_URL}/api/admin/surfai/reports`
         : `${BACKEND_URL}/api/admin/surfai/reports/${encodeURIComponent(surfAIAdminSelectedId)}`;
-      const payload = isCreating
-        ? { ...surfAIAdminDraft, listed: undefined }
-        : { ...surfAIAdminDraft, replaceCurrent: undefined };
+      const payload = {
+        title: surfAIAdminDraft.title,
+        snippet: surfAIAdminDraft.snippet,
+        content: surfAIAdminDraft.content,
+        price: surfAIAdminDraft.price,
+        pdfUrl: surfAIAdminDraft.pdfUrl,
+        videoUrl: surfAIAdminDraft.videoUrl,
+        ...(isCreating ? { replaceCurrent: surfAIAdminDraft.replaceCurrent } : { listed: surfAIAdminDraft.listed }),
+      };
       const response = await authFetch(endpoint, {
         method: isCreating ? "POST" : "PUT",
         headers: { "Content-Type": "application/json" },
@@ -1251,7 +1333,15 @@ function App() {
       const response = await authFetch(`${BACKEND_URL}/api/admin/surfai/reports/${encodeURIComponent(report.id)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...surfAIReportToDraft(report), listed: !report.listed, replaceCurrent: undefined }),
+        body: JSON.stringify({
+          title: report.title,
+          snippet: report.snippet,
+          content: report.content,
+          price: report.price,
+          pdfUrl: report.pdfUrl || "",
+          videoUrl: report.videoUrl || "",
+          listed: !report.listed,
+        }),
       });
       const data = await safeParseResponse(response);
       if (!response.ok) throw new Error(data.error || "Could not update report listing status.");
@@ -3231,6 +3321,7 @@ function App() {
               </div>
               <div className="surfai-admin-header-actions">
                 <div className="surfai-admin-assets" aria-label="SurfAI asset status">
+                  <span className={r2Storage.configured ? 'is-configured' : ''}>R2 {r2Storage.configured ? 'CONFIGURED' : 'NOT CONFIGURED'}</span>
                   <span className={surfAIAdminDraft.pdfUrl ? 'is-configured' : ''}>PDF {surfAIAdminDraft.pdfUrl ? 'READY' : 'EMPTY'}</span>
                   <span className={surfAIAdminDraft.videoUrl ? 'is-configured' : ''}>VIDEO {surfAIAdminDraft.videoUrl ? 'READY' : 'EMPTY'}</span>
                 </div>
@@ -3321,30 +3412,70 @@ function App() {
                   />
                 </div>
 
-                <div className="surfai-admin-field">
-                  <label htmlFor="surfai-admin-pdf">Protected PDF URL</label>
+                <div className="surfai-admin-field surfai-admin-asset-field">
+                  <label htmlFor="surfai-admin-pdf">Protected PDF · URL or R2 asset</label>
                   <input
                     id="surfai-admin-pdf"
-                    type="url"
+                    type="text"
                     maxLength="2048"
                     value={surfAIAdminDraft.pdfUrl}
-                    onChange={(event) => handleSurfAIAdminChange("pdfUrl", event.target.value)}
-                    placeholder="https://media.example/report.pdf"
+                    onChange={(event) => setSurfAIAdminDraft((current) => ({ ...current, pdfUrl: event.target.value, pdfPreviewUrl: "" }))}
+                    placeholder="Upload to R2 or enter an HTTPS URL"
                   />
-                  <small>HTTPS only. Leave empty to hide the PDF action.</small>
+                  <div className="surfai-r2-upload-row">
+                    <label className={`btn btn-secondary surfai-r2-upload-button ${!r2Storage.configured ? 'is-disabled' : ''}`} htmlFor="surfai-admin-pdf-upload">
+                      {['signing', 'uploading'].includes(surfAIAssetUploads.pdf.phase) ? 'UPLOADING PDF…' : 'UPLOAD PDF TO R2'}
+                    </label>
+                    <input
+                      id="surfai-admin-pdf-upload"
+                      className="surfai-r2-file-input"
+                      type="file"
+                      accept="application/pdf,.pdf"
+                      disabled={!r2Storage.configured || ['signing', 'uploading'].includes(surfAIAssetUploads.pdf.phase)}
+                      onChange={(event) => {
+                        void handleSurfAIAssetUpload("pdf", event.target.files?.[0]);
+                        event.target.value = "";
+                      }}
+                    />
+                    {surfAIAdminDraft.pdfPreviewUrl && (
+                      <a href={surfAIAdminDraft.pdfPreviewUrl} target="_blank" rel="noopener noreferrer">PREVIEW PDF ↗</a>
+                    )}
+                  </div>
+                  {surfAIAssetUploads.pdf.message && <small className={`surfai-r2-upload-status is-${surfAIAssetUploads.pdf.phase}`}>{surfAIAssetUploads.pdf.message}</small>}
+                  <small>PDF up to 50 MB. The stored R2 reference remains protected by entitlement checks.</small>
                 </div>
 
-                <div className="surfai-admin-field surfai-admin-field-wide">
-                  <label htmlFor="surfai-admin-video">Protected video URL</label>
+                <div className="surfai-admin-field surfai-admin-asset-field">
+                  <label htmlFor="surfai-admin-video">Protected video · URL or R2 asset</label>
                   <input
                     id="surfai-admin-video"
-                    type="url"
+                    type="text"
                     maxLength="2048"
                     value={surfAIAdminDraft.videoUrl}
-                    onChange={(event) => handleSurfAIAdminChange("videoUrl", event.target.value)}
-                    placeholder="https://media.example/briefing.mp4"
+                    onChange={(event) => setSurfAIAdminDraft((current) => ({ ...current, videoUrl: event.target.value, videoPreviewUrl: "" }))}
+                    placeholder="Upload to R2 or enter an HTTPS URL"
                   />
-                  <small>HTTPS only. The URL is returned only after entitlement verification.</small>
+                  <div className="surfai-r2-upload-row">
+                    <label className={`btn btn-secondary surfai-r2-upload-button ${!r2Storage.configured ? 'is-disabled' : ''}`} htmlFor="surfai-admin-video-upload">
+                      {['signing', 'uploading'].includes(surfAIAssetUploads.video.phase) ? 'UPLOADING VIDEO…' : 'UPLOAD VIDEO TO R2'}
+                    </label>
+                    <input
+                      id="surfai-admin-video-upload"
+                      className="surfai-r2-file-input"
+                      type="file"
+                      accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+                      disabled={!r2Storage.configured || ['signing', 'uploading'].includes(surfAIAssetUploads.video.phase)}
+                      onChange={(event) => {
+                        void handleSurfAIAssetUpload("video", event.target.files?.[0]);
+                        event.target.value = "";
+                      }}
+                    />
+                    {surfAIAdminDraft.videoPreviewUrl && (
+                      <a href={surfAIAdminDraft.videoPreviewUrl} target="_blank" rel="noopener noreferrer">PREVIEW VIDEO ↗</a>
+                    )}
+                  </div>
+                  {surfAIAssetUploads.video.message && <small className={`surfai-r2-upload-status is-${surfAIAssetUploads.video.phase}`}>{surfAIAssetUploads.video.message}</small>}
+                  <small>MP4, WebM or MOV up to 1 GB. Buyers receive a short-lived signed playback URL.</small>
                 </div>
 
                 {surfAIAdminMode === "create" ? (
