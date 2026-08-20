@@ -31,6 +31,15 @@ const usdcAmount = (max = "1000000") =>
     }
   });
 
+const surfAIReportFields = {
+  title: z.string().trim().min(3).max(200),
+  snippet: z.string().trim().min(10).max(500),
+  content,
+  price: usdcAmount("1000"),
+  pdfUrl: secureAssetUrl,
+  videoUrl: secureAssetUrl,
+};
+
 const schemas = {
   articleCreate: z.object({
     title: z.string().trim().min(3).max(200),
@@ -63,13 +72,14 @@ const schemas = {
     category: z.string().trim().min(1).max(120).optional(),
   }),
   publisherVerify: z.object({ email, verified: z.boolean() }),
-  surfaiUpdate: z.object({
-    title: z.string().trim().min(3).max(200),
-    snippet: z.string().trim().min(10).max(500),
-    content,
-    price: usdcAmount("1000"),
-    pdfUrl: secureAssetUrl,
-    videoUrl: secureAssetUrl,
+  surfaiUpdate: z.object(surfAIReportFields),
+  surfaiReportCreate: z.object({
+    ...surfAIReportFields,
+    replaceCurrent: z.boolean().optional().default(true),
+  }),
+  surfaiReportUpdate: z.object({
+    ...surfAIReportFields,
+    listed: z.boolean(),
   }),
   withdraw: z.object({
     destinationAddress: ethAddress,

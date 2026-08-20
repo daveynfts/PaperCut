@@ -219,6 +219,80 @@ test("personal library returns purchased dispatch metadata without protected con
   assert.deepEqual(response.body.pending, []);
 });
 
+test("SurfAI report series preserves old purchases and supports archive, update, and relist", async () => {
+  const admin = asUser("admin@example.com");
+  const legacyBuyer = asUser("paying-reader@example.com");
+  const initialList = await request(app).get("/api/admin/surfai/reports").set(admin).expect(200);
+  const legacy = initialList.body.reports.find((report) => report.id === "surfai-daily");
+  assert.ok(legacy);
+  assert.equal(legacy.purchaseCount, 1);
+
+  const create = await request(app).post("/api/admin/surfai/reports").set(admin).send({
+    title: "SurfAI Capital Signal 002",
+    snippet: "A new report in the SurfAI series with a permanent independent entitlement.",
+    content: "## Signal 002\n\nProtected intelligence for buyers of the second report.",
+    price: "0.22",
+    pdfUrl: "https://media.example.test/surfai-002.pdf",
+    videoUrl: "https://media.example.test/surfai-002.mp4",
+    replaceCurrent: true,
+  }).expect(201);
+  const newReport = create.body.surfai;
+  assert.match(newReport.id, /^surfai-\d{8}-[a-f0-9-]+$/);
+  assert.notEqual(newReport.id, legacy.id);
+
+  const publicCurrent = await request(app).get("/api/surfai").expect(200);
+  assert.equal(publicCurrent.body.id, newReport.id);
+  assert.equal(publicCurrent.body.content, undefined);
+  const publicReports = await request(app).get("/api/surfai/reports").expect(200);
+  assert.deepEqual(publicReports.body.reports.map((report) => report.id), [newReport.id]);
+  assert.equal(publicReports.body.reports[0].videoUrl, undefined);
+
+  const archivedLegacy = (await request(app).get("/api/admin/surfai/reports").set(admin).expect(200))
+    .body.reports.find((report) => report.id === legacy.id);
+  assert.equal(archivedLegacy.listed, false);
+
+  const oldPurchase = await request(app).get(`/api/articles/${legacy.id}`).set(legacyBuyer).expect(200);
+  assert.equal(oldPurchase.body.success, true);
+  const nonBuyer = asUser("archived-report-nonbuyer@example.com");
+  await request(app).post("/api/user/wallet").set(nonBuyer).send({}).expect(200);
+  const blockedPurchase = await request(app).post("/api/articles/unlock").set(nonBuyer).send({ articleId: legacy.id }).expect(409);
+  assert.match(blockedPurchase.body.error, /archived/i);
+
+  const updatedLegacyContent = "## Updated archive\n\nExisting buyers receive the corrected report content.";
+  await request(app).put(`/api/admin/surfai/reports/${legacy.id}`).set(admin).send({
+    title: legacy.title,
+    snippet: legacy.snippet,
+    content: updatedLegacyContent,
+    price: legacy.price,
+    pdfUrl: legacy.pdfUrl || "",
+    videoUrl: legacy.videoUrl || "",
+    listed: false,
+  }).expect(200);
+  const updatedPurchase = await request(app).get(`/api/articles/${legacy.id}`).set(legacyBuyer).expect(200);
+  assert.equal(updatedPurchase.body.content, updatedLegacyContent);
+
+  await request(app).put(`/api/admin/surfai/reports/${legacy.id}`).set(admin).send({
+    title: legacy.title,
+    snippet: legacy.snippet,
+    content: legacy.content,
+    price: legacy.price,
+    pdfUrl: legacy.pdfUrl || "",
+    videoUrl: legacy.videoUrl || "",
+    listed: true,
+  }).expect(200);
+  await request(app).put(`/api/admin/surfai/reports/${newReport.id}`).set(admin).send({
+    title: newReport.title,
+    snippet: newReport.snippet,
+    content: newReport.content,
+    price: newReport.price,
+    pdfUrl: newReport.pdfUrl || "",
+    videoUrl: newReport.videoUrl || "",
+    listed: false,
+  }).expect(200);
+  const restoredCurrent = await request(app).get("/api/surfai").expect(200);
+  assert.equal(restoredCurrent.body.id, legacy.id);
+});
+
 test("concurrent wallet initialization returns one stable wallet", async () => {
   const reader = asUser("concurrent-reader@example.com");
   const responses = await Promise.all(

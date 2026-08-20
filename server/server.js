@@ -276,11 +276,15 @@ function isArticleOwner(article, publishers, auth) {
   return article.publisherId === publisherKey || normalizeIdentity(article.author) === normalizeIdentity(publisher.name);
 }
 
+const SURFAI_LEGACY_ID = "surfai-daily";
+const SURFAI_AUTHOR = "DaveyNFTs";
+const SURFAI_PAYEE = "0x1746978f956142e0482f0aff320d917ace450bcf";
+
 function getDefaultSurfAIArticle() {
   return {
-    id: "surfai-daily",
+    id: SURFAI_LEGACY_ID,
     title: "SurfAI Daily Intelligence Dispatch",
-    author: "DaveyNFTs",
+    author: SURFAI_AUTHOR,
     snippet: "An autonomous intelligence report on capital flows, resource allocation, and micro-tariffs.",
     content: process.env.SURFAI_ARTICLE_CONTENT || [
       "## SurfAI Daily Intelligence Dispatch",
@@ -296,27 +300,78 @@ function getDefaultSurfAIArticle() {
     pdfUrl: process.env.SURFAI_PDF_URL || "",
     videoUrl: process.env.SURFAI_VIDEO_URL || "",
     price: "0.15",
-    payee: "0x1746978f956142e0482f0aff320d917ace450bcf",
+    payee: SURFAI_PAYEE,
+    listed: true,
+    kind: "surfai",
   };
 }
 
-async function getSurfAIArticle() {
-  const settings = await store.read("settings");
-  const configured = settings.surfai || {};
+function normalizeSurfAIReport(report, id) {
   return {
     ...getDefaultSurfAIArticle(),
-    ...configured,
-    id: "surfai-daily",
-    author: "DaveyNFTs",
-    payee: "0x1746978f956142e0482f0aff320d917ace450bcf",
+    ...report,
+    id,
+    author: SURFAI_AUTHOR,
+    payee: SURFAI_PAYEE,
+    kind: "surfai",
+    listed: report?.listed !== false,
   };
+}
+
+function getSurfAIReportsFromSettings(settings) {
+  if (settings.surfaiReports && Object.keys(settings.surfaiReports).length) {
+    return Object.entries(settings.surfaiReports).map(([id, report]) => normalizeSurfAIReport(report, id));
+  }
+  return [normalizeSurfAIReport(settings.surfai || {}, SURFAI_LEGACY_ID)];
+}
+
+function sortSurfAIReports(reports) {
+  return [...reports].sort((left, right) =>
+    Number(right.createdAt || right.updatedAt || 0) - Number(left.createdAt || left.updatedAt || 0)
+  );
+}
+
+function materializeSurfAIReports(settings) {
+  if (!settings.surfaiReports || !Object.keys(settings.surfaiReports).length) {
+    const legacy = normalizeSurfAIReport(settings.surfai || {}, SURFAI_LEGACY_ID);
+    settings.surfaiReports = {
+      [SURFAI_LEGACY_ID]: {
+        title: legacy.title,
+        snippet: legacy.snippet,
+        content: legacy.content,
+        price: legacy.price,
+        pdfUrl: legacy.pdfUrl,
+        videoUrl: legacy.videoUrl,
+        listed: legacy.listed,
+        createdAt: legacy.createdAt || legacy.updatedAt || Date.now(),
+        updatedAt: legacy.updatedAt || Date.now(),
+        updatedBy: legacy.updatedBy || "legacy-migration",
+      },
+    };
+    settings.featuredSurfAIReportId ||= SURFAI_LEGACY_ID;
+  }
+  return settings.surfaiReports;
+}
+
+async function getSurfAIReports() {
+  const settings = await store.read("settings");
+  return sortSurfAIReports(getSurfAIReportsFromSettings(settings));
+}
+
+async function getSurfAIArticle(articleId) {
+  const settings = await store.read("settings");
+  const reports = getSurfAIReportsFromSettings(settings);
+  if (articleId) return reports.find((report) => report.id === articleId) || null;
+  const listed = reports.filter((report) => report.listed);
+  if (!listed.length) return null;
+  return listed.find((report) => report.id === settings.featuredSurfAIReportId) || sortSurfAIReports(listed)[0];
 }
 
 async function getArticle(articleId) {
   const articles = await store.read("articles");
   const storedArticle = articles.find((item) => item.id === articleId);
   if (storedArticle) return storedArticle;
-  return articleId === "surfai-daily" ? getSurfAIArticle() : null;
+  return String(articleId).startsWith("surfai-") ? getSurfAIArticle(articleId) : null;
 }
 
 async function getUserRecord(auth) {
@@ -754,13 +809,13 @@ async function listUserOperations(auth, user) {
 }
 
 async function buildUserLibrary(auth, user) {
-  const [storedArticles, operations, surfAIArticle] = await Promise.all([
+  const [storedArticles, operations, surfAIReports] = await Promise.all([
     store.read("articles"),
     listUserOperations(auth, user),
-    getSurfAIArticle(),
+    getSurfAIReports(),
   ]);
   const findLibraryArticle = (articleId) => storedArticles.find((entry) => entry.id === articleId) ||
-    (articleId === "surfai-daily" ? surfAIArticle : null);
+    surfAIReports.find((report) => report.id === articleId) || null;
   const completedByArticle = new Map(
     operations
       .filter((operation) => operation.type === "unlock" && operation.status === "COMPLETE" && operation.articleId)
@@ -832,6 +887,7 @@ app.get("/api/health", (_req, res) => {
 app.get("/api/surfai", async (_req, res, next) => {
   try {
     const article = await getSurfAIArticle();
+    if (!article) return res.status(404).json({ error: "No SurfAI report is currently listed" });
     res.json({
       id: article.id,
       title: article.title,
@@ -842,6 +898,19 @@ app.get("/api/surfai", async (_req, res, next) => {
       verified: true,
       category: "AI-Agent Autonomous Economics",
     });
+  } catch (error) { next(error); }
+});
+
+app.get("/api/surfai/reports", async (_req, res, next) => {
+  try {
+    const reports = (await getSurfAIReports())
+      .filter((article) => article.listed)
+      .map(({ id, title, author, snippet, price, payee, createdAt, updatedAt }) => ({
+        id, title, author, snippet, price, payee, createdAt, updatedAt,
+        verified: true,
+        category: "AI-Agent Autonomous Economics",
+      }));
+    res.json({ success: true, reports });
   } catch (error) { next(error); }
 });
 
@@ -1047,7 +1116,8 @@ app.post("/api/admin/session", requireAuth, (req, res) => {
 
 app.get("/api/admin/surfai", requireAuth, requireAdmin, async (_req, res, next) => {
   try {
-    res.json({ success: true, surfai: await getSurfAIArticle() });
+    const surfai = await getSurfAIArticle();
+    res.json({ success: true, surfai });
   } catch (error) { next(error); }
 });
 
@@ -1055,13 +1125,89 @@ app.put("/api/admin/surfai", requireAuth, requireAdmin, validate(schemas.surfaiU
   try {
     const updatedAt = Date.now();
     await store.update("settings", (settings) => {
-      settings.surfai = {
+      const reports = materializeSurfAIReports(settings);
+      const reportId = settings.featuredSurfAIReportId || SURFAI_LEGACY_ID;
+      reports[reportId] = {
+        ...reports[reportId],
         ...req.validatedBody,
+        listed: true,
+        createdAt: reports[reportId]?.createdAt || updatedAt,
         updatedAt,
         updatedBy: req.auth.email || req.auth.userId,
       };
+      settings.featuredSurfAIReportId = reportId;
     });
     res.json({ success: true, surfai: await getSurfAIArticle() });
+  } catch (error) { next(error); }
+});
+
+app.get("/api/admin/surfai/reports", requireAuth, requireAdmin, async (_req, res, next) => {
+  try {
+    const [reports, users, settings] = await Promise.all([
+      getSurfAIReports(),
+      store.read("users"),
+      store.read("settings"),
+    ]);
+    const purchaseCounts = Object.values(users).reduce((counts, user) => {
+      Object.keys(user.unlockedArticles || {}).forEach((articleId) => {
+        counts[articleId] = (counts[articleId] || 0) + 1;
+      });
+      return counts;
+    }, {});
+    res.json({
+      success: true,
+      featuredReportId: settings.featuredSurfAIReportId || reports.find((report) => report.listed)?.id || null,
+      reports: reports.map((report) => ({ ...report, purchaseCount: purchaseCounts[report.id] || 0 })),
+    });
+  } catch (error) { next(error); }
+});
+
+app.post("/api/admin/surfai/reports", requireAuth, requireAdmin, validate(schemas.surfaiReportCreate), async (req, res, next) => {
+  try {
+    const reportId = `surfai-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${crypto.randomUUID().slice(0, 8)}`;
+    const now = Date.now();
+    await store.update("settings", (settings) => {
+      const reports = materializeSurfAIReports(settings);
+      if (req.validatedBody.replaceCurrent) {
+        Object.values(reports).forEach((report) => { report.listed = false; });
+      }
+      const { replaceCurrent: _replaceCurrent, ...fields } = req.validatedBody;
+      reports[reportId] = {
+        ...fields,
+        listed: true,
+        createdAt: now,
+        updatedAt: now,
+        updatedBy: req.auth.email || req.auth.userId,
+      };
+      settings.featuredSurfAIReportId = reportId;
+    });
+    res.status(201).json({ success: true, surfai: await getSurfAIArticle(reportId) });
+  } catch (error) { next(error); }
+});
+
+app.put("/api/admin/surfai/reports/:id", requireAuth, requireAdmin, validate(schemas.surfaiReportUpdate), async (req, res, next) => {
+  try {
+    const reportId = req.params.id;
+    if (!/^surfai-[a-zA-Z0-9-]{1,120}$/.test(reportId)) return res.status(400).json({ error: "Invalid SurfAI report ID" });
+    const now = Date.now();
+    await store.update("settings", (settings) => {
+      const reports = materializeSurfAIReports(settings);
+      const current = reports[reportId];
+      if (!current) { const error = new Error("SurfAI report not found"); error.statusCode = 404; throw error; }
+      reports[reportId] = {
+        ...current,
+        ...req.validatedBody,
+        createdAt: current.createdAt || now,
+        updatedAt: now,
+        updatedBy: req.auth.email || req.auth.userId,
+      };
+      if (req.validatedBody.listed) {
+        settings.featuredSurfAIReportId = reportId;
+      } else if (settings.featuredSurfAIReportId === reportId) {
+        settings.featuredSurfAIReportId = Object.entries(reports).find(([id, report]) => id !== reportId && report.listed)?.[0] || null;
+      }
+    });
+    res.json({ success: true, surfai: await getSurfAIArticle(reportId) });
   } catch (error) { next(error); }
 });
 
@@ -1150,6 +1296,9 @@ app.post("/api/articles/unlock", requireAuth, validate(schemas.articleUnlock), a
     const article = await getArticle(req.validatedBody.articleId);
     if (!article) return res.status(404).json({ error: "Article not found" });
     const user = await getOrCreateUserWallet(req.auth);
+    if (article.kind === "surfai" && !article.listed && !user.unlockedArticles?.[article.id]) {
+      return res.status(409).json({ error: "This SurfAI report is archived and not currently available for purchase" });
+    }
     const publishers = await store.read("publishers");
     const publisherEntry = findPublisherForArticle(publishers, article);
     if (!publisherEntry?.[1]?.verified) return res.status(409).json({ error: "Article publisher is not verified" });
