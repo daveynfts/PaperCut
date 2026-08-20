@@ -71,6 +71,9 @@ function getR2Client(config = assertR2Configured()) {
     cachedClient = new S3Client({
       region: "auto",
       endpoint: config.endpoint,
+      // R2 supports path-style S3 URLs. Keeping the bucket out of the hostname
+      // avoids stale per-origin CORS/preflight failures in embedded browsers.
+      forcePathStyle: true,
       requestChecksumCalculation: "WHEN_REQUIRED",
       credentials: {
         accessKeyId: config.accessKeyId,

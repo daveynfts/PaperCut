@@ -109,8 +109,11 @@ test("admin can create constrained direct-upload URLs for private R2 assets", as
   }).expect(200);
   assert.match(response.body.assetRef, /^r2:\/\/PaperCut\/surfai\/pdf\/\d{4}\/\d{2}\/\d{2}\/[a-f0-9-]+-SurfAI-Report-2026\.pdf$/);
   assert.match(response.body.uploadUrl, /^https:\/\//);
+  const uploadUrl = new URL(response.body.uploadUrl);
+  assert.equal(uploadUrl.hostname, "test-account.r2.cloudflarestorage.com");
+  assert.match(uploadUrl.pathname, /^\/papercut-test\/PaperCut\/surfai\/pdf\//);
   assert.equal(response.body.uploadHeaders["Content-Type"], "application/pdf");
-  assert.ok(new URL(response.body.uploadUrl).searchParams.has("X-Amz-Signature"));
+  assert.ok(uploadUrl.searchParams.has("X-Amz-Signature"));
   assert.ok(new URL(response.body.previewUrl).searchParams.has("X-Amz-Signature"));
   assert.doesNotMatch(JSON.stringify(response.body), /test-secret-key/);
 });

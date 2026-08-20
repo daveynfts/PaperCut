@@ -84,6 +84,8 @@ browser to a private Cloudflare R2 bucket. The API signs the upload, so R2
 credentials never reach the frontend and large media files do not pass through
 the Vercel function. Saved reports store an internal `r2://...` reference. Only
 an entitled reader receives a short-lived signed R2 download or playback URL.
+Signed requests use R2's path-style S3 endpoint for compatibility with embedded
+browsers and their per-origin CORS caches.
 
 Create an R2 API token with Object Read & Write access limited to the PaperCut
 bucket, then add these server-side environment variables in Vercel:
