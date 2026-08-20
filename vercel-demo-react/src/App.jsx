@@ -72,6 +72,17 @@ const INITIAL_ARTICLES = [
   }
 ];
 
+const INITIAL_SURFAI_ARTICLE = {
+  id: "surfai-daily",
+  title: "SurfAI Daily Intelligence Dispatch",
+  author: "DaveyNFTs",
+  category: "AI-Agent Autonomous Economics",
+  price: "0.15",
+  payee: "0x1746978f956142e0482f0aff320d917ace450bcf",
+  verified: true,
+  snippet: "An advanced programmatic intelligence report compiled automatically by the SurfAI pipeline on daily capital flows, sovereign resource allocations, and micro-tariffs.",
+};
+
 const BACKEND_URL = getBackendBaseUrl({
   configuredUrl: import.meta.env.VITE_API_URL,
   location: typeof window === "undefined" ? undefined : window.location,
@@ -468,6 +479,7 @@ function App() {
 
   // Publisher Admin Portal States
   const [articles, setArticles] = useState(INITIAL_ARTICLES);
+  const [surfAIArticle, setSurfAIArticle] = useState(INITIAL_SURFAI_ARTICLE);
   const [publishers, setPublishers] = useState({});
   const [isAdminView, setIsAdminView] = useState(false);
   const [isPublisherView, setIsPublisherView] = useState(false);
@@ -477,6 +489,16 @@ function App() {
   const [adminWallet, setAdminWallet] = useState("");
   const [adminCategory, setAdminCategory] = useState("Web3 Infrastructures & Protocols");
   const [adminStatusMsg, setAdminStatusMsg] = useState("");
+  const [surfAIAdminDraft, setSurfAIAdminDraft] = useState({
+    title: INITIAL_SURFAI_ARTICLE.title,
+    snippet: INITIAL_SURFAI_ARTICLE.snippet,
+    content: "",
+    price: INITIAL_SURFAI_ARTICLE.price,
+    pdfUrl: "",
+    videoUrl: "",
+  });
+  const [surfAIAdminPhase, setSurfAIAdminPhase] = useState("idle");
+  const [surfAIAdminStatus, setSurfAIAdminStatus] = useState("");
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [adminAuthError, setAdminAuthError] = useState("");
 
@@ -719,6 +741,22 @@ function App() {
     } catch (err) {
       console.error("Failed to fetch articles:", err);
       setArticles(INITIAL_ARTICLES);
+    }
+  }, [authFetch]);
+
+  const fetchSurfAIMetadata = useCallback(async () => {
+    try {
+      const response = await authFetch(`${BACKEND_URL}/api/surfai`);
+      const data = await safeParseResponse(response);
+      if (!response.ok) throw new Error(data.error || 'Failed to load SurfAI metadata.');
+      setSurfAIArticle({ ...INITIAL_SURFAI_ARTICLE, ...data });
+      setSelectedArticle((current) => current?.id === 'surfai-daily'
+        ? { ...current, ...data }
+        : current);
+      return data;
+    } catch (surfAIError) {
+      console.error('Failed to fetch SurfAI metadata:', surfAIError);
+      return null;
     }
   }, [authFetch]);
 
@@ -1057,10 +1095,81 @@ function App() {
     }
   };
 
+  const fetchAdminSurfAI = useCallback(async () => {
+    if (!isAdminAuthenticated) return null;
+    setSurfAIAdminPhase("loading");
+    setSurfAIAdminStatus("");
+    try {
+      const response = await authFetch(`${BACKEND_URL}/api/admin/surfai`);
+      const data = await safeParseResponse(response);
+      if (!response.ok) throw new Error(data.error || "Could not load SurfAI configuration.");
+      const surfai = data.surfai || {};
+      setSurfAIAdminDraft({
+        title: surfai.title || INITIAL_SURFAI_ARTICLE.title,
+        snippet: surfai.snippet || INITIAL_SURFAI_ARTICLE.snippet,
+        content: surfai.content || "",
+        price: surfai.price || INITIAL_SURFAI_ARTICLE.price,
+        pdfUrl: surfai.pdfUrl || "",
+        videoUrl: surfai.videoUrl || "",
+      });
+      setSurfAIAdminPhase("ready");
+      return surfai;
+    } catch (surfAIAdminError) {
+      console.error("Failed to load SurfAI admin configuration:", surfAIAdminError);
+      setSurfAIAdminPhase("error");
+      setSurfAIAdminStatus(surfAIAdminError.message || "Could not load SurfAI configuration.");
+      return null;
+    }
+  }, [authFetch, isAdminAuthenticated]);
+
+  const handleSurfAIAdminChange = (field, value) => {
+    setSurfAIAdminDraft((current) => ({ ...current, [field]: value }));
+    if (surfAIAdminStatus) setSurfAIAdminStatus("");
+  };
+
+  const handleSurfAIAdminSubmit = async (event) => {
+    event.preventDefault();
+    if (surfAIAdminPhase === "saving") return;
+    setSurfAIAdminPhase("saving");
+    setSurfAIAdminStatus("Saving SurfAI edition to the protected ledger...");
+    try {
+      const response = await authFetch(`${BACKEND_URL}/api/admin/surfai`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(surfAIAdminDraft),
+      });
+      const data = await safeParseResponse(response);
+      if (!response.ok) {
+        const validationMessage = Array.isArray(data.details)
+          ? data.details.map((detail) => `${detail.path}: ${detail.message}`).join(" · ")
+          : data.error;
+        throw new Error(validationMessage || "Could not save SurfAI configuration.");
+      }
+      const surfai = data.surfai;
+      setSurfAIAdminDraft({
+        title: surfai.title,
+        snippet: surfai.snippet,
+        content: surfai.content,
+        price: surfai.price,
+        pdfUrl: surfai.pdfUrl || "",
+        videoUrl: surfai.videoUrl || "",
+      });
+      setSurfAIArticle((current) => ({ ...current, ...surfai }));
+      setSurfAIAdminPhase("ready");
+      setSurfAIAdminStatus("SurfAI content, PDF and video configuration saved successfully.");
+      await Promise.all([fetchSurfAIMetadata(), fetchLibrary({ silent: true })]);
+    } catch (surfAISaveError) {
+      console.error("Failed to save SurfAI admin configuration:", surfAISaveError);
+      setSurfAIAdminPhase("error");
+      setSurfAIAdminStatus(surfAISaveError.message || "Could not save SurfAI configuration.");
+    }
+  };
+
   useEffect(() => {
     fetchArticles();
     fetchPublishers();
-  }, [fetchArticles, fetchPublishers]);
+    fetchSurfAIMetadata();
+  }, [fetchArticles, fetchPublishers, fetchSurfAIMetadata]);
 
   // Check if current IP is authorized admin when entering admin view
   useEffect(() => {
@@ -1081,6 +1190,10 @@ function App() {
       checkAdminIp();
     }
   }, [authFetch, authenticated, isAdminView, isAdminAuthenticated]);
+
+  useEffect(() => {
+    if (isAdminView && isAdminAuthenticated) fetchAdminSurfAI();
+  }, [fetchAdminSurfAI, isAdminAuthenticated, isAdminView]);
 
   const handleToggleVerify = async (email, currentStatus) => {
     setAdminStatusMsg(`Updating verification for ${email}...`);
@@ -1529,6 +1642,7 @@ function App() {
       if (document.visibilityState && document.visibilityState !== "visible") return;
       fetchArticles();
       fetchPublishers();
+      fetchSurfAIMetadata();
       if (authenticated) {
         fetchUserCircleWallet();
         fetchLibrary({ silent: true });
@@ -1541,7 +1655,7 @@ function App() {
       window.removeEventListener("online", refreshAfterInterruption);
       document.removeEventListener("visibilitychange", refreshAfterInterruption);
     };
-  }, [authenticated, fetchArticles, fetchLibrary, fetchPublishers, fetchUserCircleWallet]);
+  }, [authenticated, fetchArticles, fetchLibrary, fetchPublishers, fetchSurfAIMetadata, fetchUserCircleWallet]);
 
   useEffect(() => {
     if (showWalletModal) {
@@ -1793,16 +1907,7 @@ function App() {
   };
 
   const getDailyAISurfArticle = () => {
-    return {
-      id: "surfai-daily",
-      title: "SurfAI Daily Intelligence Dispatch",
-      author: "DaveyNFTs",
-      category: "AI-Agent Autonomous Economics",
-      price: "0.15",
-      payee: "0x1746978f956142e0482f0aff320d917ace450bcf",
-      verified: true,
-      snippet: "An advanced programmatic intelligence report compiled automatically by the SurfAI pipeline on daily capital flows, sovereign resource allocations, and micro-tariffs."
-    };
+    return surfAIArticle;
   };
 
   const triggerPdfSimulation = () => {
@@ -3012,6 +3117,119 @@ function App() {
           <p className="mono-text text-muted" style={{ textAlign: 'center', marginBottom: '24px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             REGISTRY & CRYPTOGRAPHIC VERIFICATION CONSOLE
           </p>
+
+          <section className="surfai-admin-card" aria-labelledby="surfai-admin-title">
+            <header className="surfai-admin-header">
+              <div>
+                <span className="surfai-admin-kicker">PROTECTED EDITION CONTROL</span>
+                <h2 id="surfai-admin-title">SurfAI Content Desk</h2>
+                <p>Update the paid report and its protected PDF and video sources.</p>
+              </div>
+              <div className="surfai-admin-assets" aria-label="SurfAI asset status">
+                <span className={surfAIAdminDraft.pdfUrl ? 'is-configured' : ''}>PDF {surfAIAdminDraft.pdfUrl ? 'READY' : 'EMPTY'}</span>
+                <span className={surfAIAdminDraft.videoUrl ? 'is-configured' : ''}>VIDEO {surfAIAdminDraft.videoUrl ? 'READY' : 'EMPTY'}</span>
+              </div>
+            </header>
+
+            {surfAIAdminPhase === "loading" ? (
+              <div className="surfai-admin-loading" role="status">Loading protected SurfAI configuration…</div>
+            ) : (
+              <form className="surfai-admin-form" onSubmit={handleSurfAIAdminSubmit}>
+                <div className="surfai-admin-field surfai-admin-field-wide">
+                  <label htmlFor="surfai-admin-title-input">Edition title</label>
+                  <input
+                    id="surfai-admin-title-input"
+                    type="text"
+                    minLength="3"
+                    maxLength="200"
+                    required
+                    value={surfAIAdminDraft.title}
+                    onChange={(event) => handleSurfAIAdminChange("title", event.target.value)}
+                  />
+                </div>
+
+                <div className="surfai-admin-field surfai-admin-field-wide">
+                  <label htmlFor="surfai-admin-snippet">Public preview</label>
+                  <textarea
+                    id="surfai-admin-snippet"
+                    rows="3"
+                    minLength="10"
+                    maxLength="500"
+                    required
+                    value={surfAIAdminDraft.snippet}
+                    onChange={(event) => handleSurfAIAdminChange("snippet", event.target.value)}
+                  />
+                  <small>This text is visible before payment. {surfAIAdminDraft.snippet.length}/500</small>
+                </div>
+
+                <div className="surfai-admin-field surfai-admin-field-wide">
+                  <label htmlFor="surfai-admin-content">Paid report content · Markdown</label>
+                  <textarea
+                    id="surfai-admin-content"
+                    className="surfai-admin-content-input"
+                    rows="16"
+                    required
+                    value={surfAIAdminDraft.content}
+                    onChange={(event) => handleSurfAIAdminChange("content", event.target.value)}
+                    placeholder="## SurfAI Daily Intelligence Dispatch"
+                  />
+                  <small>Only entitled readers receive this field from the API.</small>
+                </div>
+
+                <div className="surfai-admin-field">
+                  <label htmlFor="surfai-admin-price">Tariff · USDC</label>
+                  <input
+                    id="surfai-admin-price"
+                    type="number"
+                    min="0.000001"
+                    max="1000"
+                    step="0.000001"
+                    required
+                    value={surfAIAdminDraft.price}
+                    onChange={(event) => handleSurfAIAdminChange("price", event.target.value)}
+                  />
+                </div>
+
+                <div className="surfai-admin-field">
+                  <label htmlFor="surfai-admin-pdf">Protected PDF URL</label>
+                  <input
+                    id="surfai-admin-pdf"
+                    type="url"
+                    maxLength="2048"
+                    value={surfAIAdminDraft.pdfUrl}
+                    onChange={(event) => handleSurfAIAdminChange("pdfUrl", event.target.value)}
+                    placeholder="https://media.example/report.pdf"
+                  />
+                  <small>HTTPS only. Leave empty to hide the PDF action.</small>
+                </div>
+
+                <div className="surfai-admin-field surfai-admin-field-wide">
+                  <label htmlFor="surfai-admin-video">Protected video URL</label>
+                  <input
+                    id="surfai-admin-video"
+                    type="url"
+                    maxLength="2048"
+                    value={surfAIAdminDraft.videoUrl}
+                    onChange={(event) => handleSurfAIAdminChange("videoUrl", event.target.value)}
+                    placeholder="https://media.example/briefing.mp4"
+                  />
+                  <small>HTTPS only. The URL is returned only after entitlement verification.</small>
+                </div>
+
+                <div className="surfai-admin-actions surfai-admin-field-wide">
+                  <div className={`surfai-admin-status is-${surfAIAdminPhase}`} role="status" aria-live="polite">
+                    {surfAIAdminStatus || "Changes are published immediately after saving."}
+                  </div>
+                  <button type="button" className="btn btn-secondary" onClick={fetchAdminSurfAI} disabled={surfAIAdminPhase === "saving"}>
+                    RESET FORM
+                  </button>
+                  <button type="submit" className="btn" disabled={surfAIAdminPhase === "saving" || !surfAIAdminDraft.content.trim()}>
+                    {surfAIAdminPhase === "saving" ? "PUBLISHING…" : "SAVE SURFAI EDITION"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </section>
 
           <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'center', width: '100%' }}>
             {/* Left pane: Combined column for forms */}

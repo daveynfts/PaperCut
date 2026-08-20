@@ -1747,6 +1747,170 @@ body {
   background: var(--ink-grey);
 }
 
+/* ============ SURFAI ADMIN CONTENT DESK ============ */
+.surfai-admin-card {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 32px;
+  border: 2px solid var(--ink-black);
+  background: var(--paper-accent);
+  box-shadow: 5px 5px 0 var(--ink-black);
+}
+
+.surfai-admin-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 24px;
+  color: #f7efd1;
+  background: linear-gradient(125deg, #072f36 0%, #0b4d50 68%, #123d45 100%);
+  border-bottom: 2px solid var(--ink-black);
+}
+
+.surfai-admin-kicker {
+  color: #76d6c9;
+  font: bold 9px var(--font-mono);
+  letter-spacing: 0.14em;
+}
+
+.surfai-admin-header h2 {
+  margin: 5px 0 4px;
+  font: italic 30px/1 var(--font-headline);
+}
+
+.surfai-admin-header p {
+  margin: 0;
+  color: rgba(247, 239, 209, 0.74);
+  font: 11px/1.5 var(--font-mono);
+}
+
+.surfai-admin-assets {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.surfai-admin-assets span {
+  padding: 6px 9px;
+  border: 1px solid rgba(247, 239, 209, 0.4);
+  color: rgba(247, 239, 209, 0.66);
+  font: bold 8px var(--font-mono);
+  letter-spacing: 0.06em;
+}
+
+.surfai-admin-assets span.is-configured {
+  border-color: #76d6c9;
+  color: #76d6c9;
+  background: rgba(118, 214, 201, 0.08);
+}
+
+.surfai-admin-loading {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--ink-grey);
+  font: 11px var(--font-mono);
+}
+
+.surfai-admin-form {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.32fr) minmax(260px, 1fr);
+  gap: 18px 22px;
+  padding: 24px;
+}
+
+.surfai-admin-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.surfai-admin-field-wide {
+  grid-column: 1 / -1;
+}
+
+.surfai-admin-field label {
+  color: var(--ink-black);
+  font: bold 9px var(--font-mono);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.surfai-admin-field input,
+.surfai-admin-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--ink-black);
+  border-radius: 0;
+  color: var(--ink-black);
+  background: var(--paper-bg);
+  font: 13px/1.5 var(--font-serif);
+}
+
+.surfai-admin-field input:focus,
+.surfai-admin-field textarea:focus {
+  border-color: #0b6764;
+  box-shadow: inset 4px 0 0 #0b6764;
+  outline: 2px solid rgba(11, 103, 100, 0.18);
+  outline-offset: 1px;
+}
+
+.surfai-admin-field small {
+  color: var(--ink-grey);
+  font: 9px/1.45 var(--font-mono);
+}
+
+.surfai-admin-content-input {
+  min-height: 280px;
+  resize: vertical;
+  font-family: var(--font-mono) !important;
+  font-size: 11px !important;
+}
+
+.surfai-admin-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-direction: row;
+  gap: 10px;
+  padding-top: 18px;
+  border-top: 1px dashed var(--ink-light-grey);
+}
+
+.surfai-admin-status {
+  flex: 1;
+  color: var(--ink-grey);
+  font: 9px/1.45 var(--font-mono);
+}
+
+.surfai-admin-status.is-ready { color: #2b7034; }
+.surfai-admin-status.is-error { color: var(--ink-red); }
+.surfai-admin-status.is-saving { color: #8b5d0b; }
+
+@media (max-width: 720px) {
+  .surfai-admin-header,
+  .surfai-admin-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .surfai-admin-assets {
+    justify-content: flex-start;
+  }
+
+  .surfai-admin-form {
+    grid-template-columns: 1fr;
+    padding: 18px;
+  }
+
+  .surfai-admin-field-wide {
+    grid-column: 1;
+  }
+}
+
 /* Markdown Parsing inside articles */
 .content-text p {
   margin-bottom: 12px;

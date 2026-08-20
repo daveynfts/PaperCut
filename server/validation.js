@@ -8,6 +8,14 @@ const txHash = z.string().trim().regex(/^0x[a-fA-F0-9]{64}$/, "Invalid transacti
 const email = z.string().trim().email().max(254).transform((value) => value.toLowerCase());
 const shortText = z.string().trim().min(1).max(120);
 const content = z.string().trim().min(1).max(100_000);
+const secureAssetUrl = z.string().trim().max(2_048).refine((value) => {
+  if (!value) return true;
+  try {
+    return new URL(value).protocol === "https:";
+  } catch (_error) {
+    return false;
+  }
+}, "Asset URL must be empty or use HTTPS");
 const domain = z.string().trim().toLowerCase().max(253).refine(
   (value) => /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(value),
   "Invalid domain name"
@@ -55,6 +63,14 @@ const schemas = {
     category: z.string().trim().min(1).max(120).optional(),
   }),
   publisherVerify: z.object({ email, verified: z.boolean() }),
+  surfaiUpdate: z.object({
+    title: z.string().trim().min(3).max(200),
+    snippet: z.string().trim().min(10).max(500),
+    content,
+    price: usdcAmount("1000"),
+    pdfUrl: secureAssetUrl,
+    videoUrl: secureAssetUrl,
+  }),
   withdraw: z.object({
     destinationAddress: ethAddress,
     amount: usdcAmount("1000000"),

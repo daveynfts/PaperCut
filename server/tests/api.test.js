@@ -42,6 +42,21 @@ test("article content cannot be bypassed with an author query", async () => {
 });
 
 test("protected payment and admin routes reject missing or insufficient identity", async () => {
+  await request(app).get("/api/admin/surfai").expect(401);
+
+  await request(app)
+    .put("/api/admin/surfai")
+    .set(asUser("reader@example.com"))
+    .send({
+      title: "Unauthorized SurfAI update",
+      snippet: "This update must never reach the protected settings store.",
+      content: "## Unauthorized",
+      price: "0.15",
+      pdfUrl: "",
+      videoUrl: "",
+    })
+    .expect(403);
+
   await request(app)
     .post("/api/user/entitlements/reconcile")
     .send({ receipts: [] })
@@ -57,6 +72,62 @@ test("protected payment and admin routes reject missing or insufficient identity
     .set(asUser("hayden@uniswap.org"))
     .send({ email: "vitalik@ethereum.org", verified: false })
     .expect(403);
+});
+
+test("admin can update SurfAI content and protected media without leaking it publicly", async () => {
+  const admin = asUser("admin@example.com");
+  const originalResponse = await request(app).get("/api/admin/surfai").set(admin).expect(200);
+  const original = originalResponse.body.surfai;
+  const update = {
+    title: "SurfAI Weekly Capital Signal",
+    snippet: "A public preview of this week's highest-conviction capital and compute signals.",
+    content: "## Protected weekly signal\n\nOnly entitled readers can access this analysis.",
+    price: "0.25",
+    pdfUrl: "https://media.example.test/surfai-weekly.pdf",
+    videoUrl: "https://media.example.test/surfai-weekly.mp4",
+  };
+
+  const saved = await request(app).put("/api/admin/surfai").set(admin).send(update).expect(200);
+  assert.equal(saved.body.surfai.title, update.title);
+  assert.equal(saved.body.surfai.content, update.content);
+  assert.equal(saved.body.surfai.pdfUrl, update.pdfUrl);
+  assert.equal(saved.body.surfai.videoUrl, update.videoUrl);
+  assert.equal(saved.body.surfai.updatedBy, "admin@example.com");
+
+  const publicMetadata = await request(app).get("/api/surfai").expect(200);
+  assert.equal(publicMetadata.body.title, update.title);
+  assert.equal(publicMetadata.body.price, update.price);
+  assert.equal(publicMetadata.body.content, undefined);
+  assert.equal(publicMetadata.body.pdfUrl, undefined);
+  assert.equal(publicMetadata.body.videoUrl, undefined);
+
+  const protectedArticle = await request(app).get("/api/articles/surfai-daily").expect(402);
+  assert.equal(protectedArticle.body.content, undefined);
+  assert.equal(protectedArticle.body.pdfUrl, undefined);
+  assert.equal(protectedArticle.body.videoUrl, undefined);
+
+  await request(app).put("/api/admin/surfai").set(admin).send({
+    title: original.title,
+    snippet: original.snippet,
+    content: original.content,
+    price: original.price,
+    pdfUrl: original.pdfUrl || "",
+    videoUrl: original.videoUrl || "",
+  }).expect(200);
+});
+
+test("SurfAI admin rejects insecure media URLs", async () => {
+  const admin = asUser("admin@example.com");
+  const current = (await request(app).get("/api/admin/surfai").set(admin).expect(200)).body.surfai;
+  const response = await request(app).put("/api/admin/surfai").set(admin).send({
+    title: current.title,
+    snippet: current.snippet,
+    content: current.content,
+    price: current.price,
+    pdfUrl: "http://media.example.test/insecure.pdf",
+    videoUrl: current.videoUrl || "",
+  }).expect(400);
+  assert.match(JSON.stringify(response.body.details), /HTTPS/);
 });
 
 test("publisher identity, article ownership, and prices are server controlled", async () => {
