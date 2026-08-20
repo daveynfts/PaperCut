@@ -538,6 +538,7 @@ function App() {
   const [surfAIAdminMode, setSurfAIAdminMode] = useState("edit");
   const [surfAIAdminPhase, setSurfAIAdminPhase] = useState("idle");
   const [surfAIAdminStatus, setSurfAIAdminStatus] = useState("");
+  const [surfAIPublishNotice, setSurfAIPublishNotice] = useState("");
   const [r2Storage, setR2Storage] = useState({ configured: false, bucket: null, prefix: null });
   const [surfAIAssetUploads, setSurfAIAssetUploads] = useState({
     pdf: { phase: "idle", message: "" },
@@ -1157,10 +1158,12 @@ function App() {
     }
   };
 
-  const fetchAdminSurfAI = useCallback(async () => {
+  const fetchAdminSurfAI = useCallback(async ({ preferredReportId = null, preserveStatus = false } = {}) => {
     if (!isAdminAuthenticated) return null;
-    setSurfAIAdminPhase("loading");
-    setSurfAIAdminStatus("");
+    if (!preserveStatus) {
+      setSurfAIAdminPhase("loading");
+      setSurfAIAdminStatus("");
+    }
     try {
       const response = await authFetch(`${BACKEND_URL}/api/admin/surfai/reports`);
       const data = await safeParseResponse(response);
@@ -1168,23 +1171,25 @@ function App() {
       const reports = Array.isArray(data.reports) ? data.reports : [];
       setSurfAIAdminReports(reports);
       setR2Storage(data.r2 || { configured: false, bucket: null, prefix: null });
-      const selected = reports.find((report) => report.id === surfAIAdminSelectedId)
+      const selected = reports.find((report) => report.id === preferredReportId)
         || reports.find((report) => report.id === data.featuredReportId)
         || reports[0];
-      if (selected && surfAIAdminMode !== "create") {
+      if (selected) {
         setSurfAIAdminSelectedId(selected.id);
         setSurfAIAdminDraft(surfAIReportToDraft(selected));
         setSurfAIAdminMode("edit");
       }
-      setSurfAIAdminPhase("ready");
+      if (!preserveStatus) setSurfAIAdminPhase("ready");
       return reports;
     } catch (surfAIAdminError) {
       console.error("Failed to load SurfAI admin configuration:", surfAIAdminError);
-      setSurfAIAdminPhase("error");
-      setSurfAIAdminStatus(surfAIAdminError.message || "Could not load SurfAI configuration.");
+      if (!preserveStatus) {
+        setSurfAIAdminPhase("error");
+        setSurfAIAdminStatus(surfAIAdminError.message || "Could not load SurfAI configuration.");
+      }
       return null;
     }
-  }, [authFetch, isAdminAuthenticated, surfAIAdminMode, surfAIAdminSelectedId]);
+  }, [authFetch, isAdminAuthenticated]);
 
   const handleCreateSurfAIReport = () => {
     setSurfAIAdminMode("create");
@@ -1281,6 +1286,24 @@ function App() {
   const handleSurfAIAdminSubmit = async (event) => {
     event.preventDefault();
     if (surfAIAdminPhase === "saving") return;
+    const title = surfAIAdminDraft.title.trim();
+    const snippet = surfAIAdminDraft.snippet.trim();
+    const content = surfAIAdminDraft.content.trim();
+    const price = Number(surfAIAdminDraft.price);
+    const validationMessage = title.length < 3
+      ? "Edition title must contain at least 3 characters."
+      : snippet.length < 10
+        ? "Public preview must contain at least 10 characters."
+        : !content
+          ? "Paid report content cannot be empty."
+          : !Number.isFinite(price) || price < 0.000001 || price > 1000
+            ? "Tariff must be between 0.000001 and 1000 USDC."
+            : "";
+    if (validationMessage) {
+      setSurfAIAdminPhase("error");
+      setSurfAIAdminStatus(validationMessage);
+      return;
+    }
     setSurfAIAdminPhase("saving");
     setSurfAIAdminStatus("Saving SurfAI edition to the protected ledger...");
     try {
@@ -1310,14 +1333,35 @@ function App() {
         throw new Error(validationMessage || "Could not save SurfAI configuration.");
       }
       const surfai = data.surfai;
+      if (!surfai?.id) throw new Error("The server did not return the saved SurfAI report.");
+      const refreshedReports = await fetchAdminSurfAI({
+        preferredReportId: surfai.id,
+        preserveStatus: true,
+      });
+      const confirmedReport = refreshedReports?.find((report) => report.id === surfai.id);
+      if (!confirmedReport) {
+        throw new Error("The server could not confirm that the SurfAI report was saved.");
+      }
+      await Promise.all([fetchSurfAIMetadata(), fetchLibrary({ silent: true })]);
       setSurfAIAdminMode("edit");
       setSurfAIAdminSelectedId(surfai.id);
-      setSurfAIAdminDraft(surfAIReportToDraft(surfai));
+      setSurfAIAdminDraft(surfAIReportToDraft(confirmedReport));
       setSurfAIAdminPhase("ready");
-      setSurfAIAdminStatus(isCreating
+      const successMessage = isCreating
         ? "New SurfAI report published. Previous reports and buyer entitlements were preserved."
-        : "This report was updated for everyone who already owns it.");
-      await Promise.all([fetchAdminSurfAI(), fetchSurfAIMetadata(), fetchLibrary({ silent: true })]);
+        : "This report was updated for everyone who already owns it.";
+      setSurfAIAdminStatus(successMessage);
+      if (isCreating) {
+        setSurfAIPublishNotice(successMessage);
+        setSelectedArticle(null);
+        setShowApplyForm(false);
+        setShowSurfVideoMockup(false);
+        setIsLibraryView(false);
+        setIsPublisherView(false);
+        handleToggleAdminView(false);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        window.setTimeout(() => setSurfAIPublishNotice(""), 6000);
+      }
     } catch (surfAISaveError) {
       console.error("Failed to save SurfAI admin configuration:", surfAISaveError);
       setSurfAIAdminPhase("error");
@@ -2397,6 +2441,13 @@ function App() {
           </div>
         </div>
       </nav>
+      {surfAIPublishNotice && !isAdminView && (
+        <div className="surfai-publish-notice" role="status" aria-live="polite">
+          <strong>REPORT PUBLISHED</strong>
+          <span>{surfAIPublishNotice}</span>
+          <button type="button" onClick={() => setSurfAIPublishNotice("")} aria-label="Dismiss publish notification">×</button>
+        </div>
+      )}
             {/* MAIN CONTAINER */}
       {isLibraryView ? (
         <main className="library-page">
@@ -3357,7 +3408,7 @@ function App() {
             {surfAIAdminPhase === "loading" ? (
               <div className="surfai-admin-loading" role="status">Loading protected SurfAI configuration…</div>
             ) : (
-              <form className="surfai-admin-form" onSubmit={handleSurfAIAdminSubmit}>
+              <form className="surfai-admin-form" onSubmit={handleSurfAIAdminSubmit} noValidate>
                 <div className="surfai-admin-editor-banner surfai-admin-field-wide">
                   <strong>{surfAIAdminMode === "create" ? "NEW REPORT" : "EDIT REPORT"}</strong>
                   <span>{surfAIAdminMode === "create" ? "A permanent content and entitlement ID will be created." : surfAIAdminSelectedId}</span>
@@ -3516,7 +3567,7 @@ function App() {
                   <button type="button" className="btn btn-secondary" onClick={handleResetSurfAIAdminDraft} disabled={surfAIAdminPhase === "saving"}>
                     RESET FORM
                   </button>
-                  <button type="submit" className="btn" disabled={surfAIAdminPhase === "saving" || !surfAIAdminDraft.content.trim()}>
+                  <button type="submit" className="btn" disabled={surfAIAdminPhase === "saving"}>
                     {surfAIAdminPhase === "saving" ? "PUBLISHING…" : surfAIAdminMode === "create" ? "PUBLISH NEW REPORT" : "SAVE REPORT UPDATE"}
                   </button>
                 </div>
