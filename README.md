@@ -92,7 +92,8 @@ bucket, then add these server-side environment variables in Vercel:
 R2_ACCOUNT_ID=your-cloudflare-account-id
 R2_ACCESS_KEY_ID=your-r2-access-key-id
 R2_SECRET_ACCESS_KEY=your-r2-secret-access-key
-R2_BUCKET=papercut-media
+R2_BUCKET=daveynfts
+R2_PREFIX=PaperCut
 R2_UPLOAD_URL_TTL_SECONDS=900
 R2_READ_URL_TTL_SECONDS=900
 ```
@@ -111,6 +112,10 @@ requests. Origins must be origins only, without `/papercut` paths:
   }
 ]
 ```
+
+`R2_PREFIX` is optional. When set to `PaperCut`, new objects are stored under
+`PaperCut/surfai/...`; previously saved `r2://surfai/...` references continue
+to work.
 
 Keep the R2 bucket private. `SURFAI_PDF_URL` and `SURFAI_VIDEO_URL` remain
 supported for legacy externally hosted assets, while uploads from admin use

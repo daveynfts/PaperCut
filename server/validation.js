@@ -2,6 +2,7 @@
 
 const { z } = require("zod");
 const { formatUsdc, parseUsdc } = require("./money");
+const { parseR2AssetRef } = require("./r2");
 
 const ethAddress = z.string().trim().regex(/^0x[a-fA-F0-9]{40}$/, "Invalid EVM address");
 const txHash = z.string().trim().regex(/^0x[a-fA-F0-9]{64}$/, "Invalid transaction hash");
@@ -10,9 +11,12 @@ const shortText = z.string().trim().min(1).max(120);
 const content = z.string().trim().min(1).max(100_000);
 const protectedAssetRef = (assetType) => z.string().trim().max(2_048).refine((value) => {
   if (!value) return true;
-  if (value.startsWith(`r2://surfai/${assetType}/`)) {
-    const key = value.slice(5);
-    return /^surfai\/(?:pdf|video)\/[a-zA-Z0-9/._-]{1,500}$/.test(key) && !key.includes("..");
+  if (value.startsWith("r2://")) {
+    try {
+      return Boolean(parseR2AssetRef(value, assetType));
+    } catch (_error) {
+      return false;
+    }
   }
   try {
     return new URL(value).protocol === "https:";

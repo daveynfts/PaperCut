@@ -18,6 +18,7 @@ process.env.R2_ACCOUNT_ID = "test-account";
 process.env.R2_ACCESS_KEY_ID = "test-access-key";
 process.env.R2_SECRET_ACCESS_KEY = "test-secret-key";
 process.env.R2_BUCKET = "papercut-test";
+process.env.R2_PREFIX = "PaperCut";
 
 const app = require("../server");
 const asUser = (email) => ({ "x-test-user-email": email });
@@ -91,6 +92,7 @@ test("admin can create constrained direct-upload URLs for private R2 assets", as
   const config = await request(app).get("/api/admin/uploads/config").set(admin).expect(200);
   assert.equal(config.body.r2.configured, true);
   assert.equal(config.body.r2.bucket, "papercut-test");
+  assert.equal(config.body.r2.prefix, "PaperCut");
 
   await request(app).post("/api/admin/uploads/presign").set(admin).send({
     assetType: "pdf",
@@ -105,7 +107,7 @@ test("admin can create constrained direct-upload URLs for private R2 assets", as
     contentType: "application/pdf",
     size: 1024 * 1024,
   }).expect(200);
-  assert.match(response.body.assetRef, /^r2:\/\/surfai\/pdf\/\d{4}\/\d{2}\/\d{2}\/[a-f0-9-]+-SurfAI-Report-2026\.pdf$/);
+  assert.match(response.body.assetRef, /^r2:\/\/PaperCut\/surfai\/pdf\/\d{4}\/\d{2}\/\d{2}\/[a-f0-9-]+-SurfAI-Report-2026\.pdf$/);
   assert.match(response.body.uploadUrl, /^https:\/\//);
   assert.equal(response.body.uploadHeaders["Content-Type"], "application/pdf");
   assert.ok(new URL(response.body.uploadUrl).searchParams.has("X-Amz-Signature"));
@@ -167,6 +169,37 @@ test("SurfAI admin rejects insecure media URLs", async () => {
     videoUrl: current.videoUrl || "",
   }).expect(400);
   assert.match(JSON.stringify(response.body.details), /HTTPS/);
+});
+
+test("SurfAI accepts prefixed R2 assets while preserving legacy R2 references", async () => {
+  const admin = asUser("admin@example.com");
+  const current = (await request(app).get("/api/admin/surfai").set(admin).expect(200)).body.surfai;
+  const update = {
+    title: current.title,
+    snippet: current.snippet,
+    content: current.content,
+    price: current.price,
+    pdfUrl: "r2://surfai/pdf/2026/08/20/legacy-report.pdf",
+    videoUrl: "r2://PaperCut/surfai/video/2026/08/20/new-briefing.mp4",
+  };
+
+  const saved = await request(app).put("/api/admin/surfai").set(admin).send(update).expect(200);
+  assert.equal(saved.body.surfai.pdfUrl, update.pdfUrl);
+  assert.equal(saved.body.surfai.videoUrl, update.videoUrl);
+
+  await request(app).put("/api/admin/surfai").set(admin).send({
+    ...update,
+    pdfUrl: "r2://PaperCut/surfai/video/2026/08/20/wrong-kind.mp4",
+  }).expect(400);
+
+  await request(app).put("/api/admin/surfai").set(admin).send({
+    title: current.title,
+    snippet: current.snippet,
+    content: current.content,
+    price: current.price,
+    pdfUrl: current.pdfUrl || "",
+    videoUrl: current.videoUrl || "",
+  }).expect(200);
 });
 
 test("publisher identity, article ownership, and prices are server controlled", async () => {

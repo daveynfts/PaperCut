@@ -538,7 +538,7 @@ function App() {
   const [surfAIAdminMode, setSurfAIAdminMode] = useState("edit");
   const [surfAIAdminPhase, setSurfAIAdminPhase] = useState("idle");
   const [surfAIAdminStatus, setSurfAIAdminStatus] = useState("");
-  const [r2Storage, setR2Storage] = useState({ configured: false, bucket: null });
+  const [r2Storage, setR2Storage] = useState({ configured: false, bucket: null, prefix: null });
   const [surfAIAssetUploads, setSurfAIAssetUploads] = useState({
     pdf: { phase: "idle", message: "" },
     video: { phase: "idle", message: "" },
@@ -1167,7 +1167,7 @@ function App() {
       if (!response.ok) throw new Error(data.error || "Could not load SurfAI configuration.");
       const reports = Array.isArray(data.reports) ? data.reports : [];
       setSurfAIAdminReports(reports);
-      setR2Storage(data.r2 || { configured: false, bucket: null });
+      setR2Storage(data.r2 || { configured: false, bucket: null, prefix: null });
       const selected = reports.find((report) => report.id === surfAIAdminSelectedId)
         || reports.find((report) => report.id === data.featuredReportId)
         || reports[0];
@@ -3321,7 +3321,12 @@ function App() {
               </div>
               <div className="surfai-admin-header-actions">
                 <div className="surfai-admin-assets" aria-label="SurfAI asset status">
-                  <span className={r2Storage.configured ? 'is-configured' : ''}>R2 {r2Storage.configured ? 'CONFIGURED' : 'NOT CONFIGURED'}</span>
+                  <span
+                    className={r2Storage.configured ? 'is-configured' : ''}
+                    title={r2Storage.configured ? `${r2Storage.bucket}/${r2Storage.prefix || ''}`.replace(/\/$/, '') : 'R2 storage is not configured'}
+                  >
+                    R2 {r2Storage.configured ? 'CONFIGURED' : 'NOT CONFIGURED'}
+                  </span>
                   <span className={surfAIAdminDraft.pdfUrl ? 'is-configured' : ''}>PDF {surfAIAdminDraft.pdfUrl ? 'READY' : 'EMPTY'}</span>
                   <span className={surfAIAdminDraft.videoUrl ? 'is-configured' : ''}>VIDEO {surfAIAdminDraft.videoUrl ? 'READY' : 'EMPTY'}</span>
                 </div>
