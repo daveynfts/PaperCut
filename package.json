@@ -9,9 +9,11 @@
   "scripts": {
     "start": "node server/server.js",
     "test": "node --test server/tests/*.test.js",
-    "check": "node --check server/server.js && node --check server/auth.js && node --check server/entitlements.js && node --check server/money.js && node --check server/retryable-initializer.js && node --check server/store.js && node --check server/validation.js && node --check server/check_tx.js && node --check server/test_faucet_integration.js"
+    "check": "node --check server/server.js && node --check server/auth.js && node --check server/entitlements.js && node --check server/money.js && node --check server/r2.js && node --check server/retryable-initializer.js && node --check server/store.js && node --check server/validation.js && node --check server/check_tx.js && node --check server/test_faucet_integration.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1114.0",
+    "@aws-sdk/s3-request-presigner": "^3.1114.0",
     "@privy-io/node": "^0.26.0",
     "@upstash/redis": "^1.38.0",
     "cors": "^2.8.5",

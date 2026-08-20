@@ -12,8 +12,12 @@ test('admin SurfAI desk manages a durable report series', () => {
   assert.match(appSource, /ADD NEW REPORT/);
   assert.match(appSource, /ARCHIVE/);
   assert.match(appSource, /RELIST/);
-  assert.match(appSource, /Protected PDF URL/);
-  assert.match(appSource, /Protected video URL/);
+  assert.match(appSource, /Protected PDF · URL or R2 asset/);
+  assert.match(appSource, /Protected video · URL or R2 asset/);
+  assert.match(appSource, /\/api\/admin\/uploads\/presign/);
+  assert.match(appSource, /UPLOAD PDF TO R2/);
+  assert.match(appSource, /UPLOAD VIDEO TO R2/);
+  assert.match(appSource, /handleSurfAIAssetUpload/);
   assert.match(appSource, /Paid report content · Markdown/);
 });
 

@@ -77,6 +77,45 @@ Production requires Redis by default. File persistence can only be enabled
 explicitly with `ALLOW_FILE_DB_IN_PRODUCTION=true`, which is not recommended for
 multi-instance or serverless deployments.
 
+## Cloudflare R2 uploads for SurfAI
+
+The admin SurfAI desk can upload protected PDFs and videos directly from the
+browser to a private Cloudflare R2 bucket. The API signs the upload, so R2
+credentials never reach the frontend and large media files do not pass through
+the Vercel function. Saved reports store an internal `r2://...` reference. Only
+an entitled reader receives a short-lived signed R2 download or playback URL.
+
+Create an R2 API token with Object Read & Write access limited to the PaperCut
+bucket, then add these server-side environment variables in Vercel:
+
+```dotenv
+R2_ACCOUNT_ID=your-cloudflare-account-id
+R2_ACCESS_KEY_ID=your-r2-access-key-id
+R2_SECRET_ACCESS_KEY=your-r2-secret-access-key
+R2_BUCKET=papercut-media
+R2_UPLOAD_URL_TTL_SECONDS=900
+R2_READ_URL_TTL_SECONDS=900
+```
+
+Configure the bucket CORS policy for direct browser uploads and video range
+requests. Origins must be origins only, without `/papercut` paths:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://daveynfts.com", "http://localhost:5173"],
+    "AllowedMethods": ["GET", "HEAD", "PUT"],
+    "AllowedHeaders": ["Content-Type", "Range"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Keep the R2 bucket private. `SURFAI_PDF_URL` and `SURFAI_VIDEO_URL` remain
+supported for legacy externally hosted assets, while uploads from admin use
+private R2 references by default.
+
 ## Verification
 
 Run the API checks and tests:
@@ -111,7 +150,8 @@ for pushes and pull requests.
 - Rotate any credential that has ever appeared in Git history; deleting it from
   the latest revision does not revoke it.
 - Configure `CORS_ORIGIN` with the exact deployed frontend origins.
-- `SURFAI_PDF_URL` and `SURFAI_VIDEO_URL` are disclosed only after an API
-  entitlement grant, but the storage/CDN must still enforce its own access
-  control; prefer short-lived signed URLs backed by private objects.
+- R2 access keys are server-only. Never add them to `VITE_*` variables or the
+  browser bundle. Keep the bucket private and use the signed upload/read flow.
+- Legacy `SURFAI_PDF_URL` and `SURFAI_VIDEO_URL` values are disclosed only
+  after an API entitlement grant; their external host must enforce access.
 - Review and test live Circle transfers with small amounts before production.
