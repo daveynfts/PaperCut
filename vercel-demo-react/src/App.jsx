@@ -83,6 +83,33 @@ const INITIAL_SURFAI_ARTICLE = {
   snippet: "An advanced programmatic intelligence report compiled automatically by the SurfAI pipeline on daily capital flows, sovereign resource allocations, and micro-tariffs.",
 };
 
+const EMPTY_SURFAI_REPORT = {
+  title: "",
+  snippet: "",
+  content: "",
+  price: "0.15",
+  pdfUrl: "",
+  videoUrl: "",
+  listed: true,
+  replaceCurrent: true,
+};
+
+const isSurfAIArticle = (articleOrId) => {
+  const id = typeof articleOrId === "string" ? articleOrId : articleOrId?.id;
+  return String(id || "").startsWith("surfai-");
+};
+
+const surfAIReportToDraft = (report = {}) => ({
+  title: report.title || "",
+  snippet: report.snippet || "",
+  content: report.content || "",
+  price: report.price || "0.15",
+  pdfUrl: report.pdfUrl || "",
+  videoUrl: report.videoUrl || "",
+  listed: report.listed !== false,
+  replaceCurrent: true,
+});
+
 const BACKEND_URL = getBackendBaseUrl({
   configuredUrl: import.meta.env.VITE_API_URL,
   location: typeof window === "undefined" ? undefined : window.location,
@@ -480,6 +507,7 @@ function App() {
   // Publisher Admin Portal States
   const [articles, setArticles] = useState(INITIAL_ARTICLES);
   const [surfAIArticle, setSurfAIArticle] = useState(INITIAL_SURFAI_ARTICLE);
+  const [surfAIReports, setSurfAIReports] = useState([INITIAL_SURFAI_ARTICLE]);
   const [publishers, setPublishers] = useState({});
   const [isAdminView, setIsAdminView] = useState(false);
   const [isPublisherView, setIsPublisherView] = useState(false);
@@ -496,11 +524,20 @@ function App() {
     price: INITIAL_SURFAI_ARTICLE.price,
     pdfUrl: "",
     videoUrl: "",
+    listed: true,
+    replaceCurrent: true,
   });
+  const [surfAIAdminReports, setSurfAIAdminReports] = useState([]);
+  const [surfAIAdminSelectedId, setSurfAIAdminSelectedId] = useState(null);
+  const [surfAIAdminMode, setSurfAIAdminMode] = useState("edit");
   const [surfAIAdminPhase, setSurfAIAdminPhase] = useState("idle");
   const [surfAIAdminStatus, setSurfAIAdminStatus] = useState("");
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [adminAuthError, setAdminAuthError] = useState("");
+  const readerArticles = useMemo(() => {
+    const regularIds = new Set(articles.map((article) => article.id));
+    return [...surfAIReports.filter((report) => !regularIds.has(report.id)), ...articles];
+  }, [articles, surfAIReports]);
 
   // Publisher Portal states
   const [pubFormName, setPubFormName] = useState("");
@@ -714,13 +751,13 @@ function App() {
   }, [fetchFullArticleContent, selectedArticle, unlockedArticles]);
 
   useEffect(() => {
-    if (authenticated && unlockedArticles["surfai-daily"]) return;
+    if (authenticated && surfAIArticle?.id && unlockedArticles[surfAIArticle.id]) return;
     setSurfVideoUrl("");
     setShowSurfVideoMockup(false);
     setVideoSimulating(false);
     setVideoReady(false);
     setVideoSimStep(0);
-  }, [authenticated, unlockedArticles]);
+  }, [authenticated, surfAIArticle?.id, unlockedArticles]);
 
   const fetchArticles = useCallback(async () => {
     try {
@@ -748,11 +785,25 @@ function App() {
     try {
       const response = await authFetch(`${BACKEND_URL}/api/surfai`);
       const data = await safeParseResponse(response);
+      if (response.status === 404) {
+        setSurfAIArticle(null);
+        setSurfAIReports([]);
+        return null;
+      }
       if (!response.ok) throw new Error(data.error || 'Failed to load SurfAI metadata.');
       setSurfAIArticle({ ...INITIAL_SURFAI_ARTICLE, ...data });
-      setSelectedArticle((current) => current?.id === 'surfai-daily'
+      setSelectedArticle((current) => current?.id === data.id
         ? { ...current, ...data }
         : current);
+      try {
+        const reportsResponse = await authFetch(`${BACKEND_URL}/api/surfai/reports`);
+        const reportsData = await safeParseResponse(reportsResponse);
+        setSurfAIReports(reportsResponse.ok && Array.isArray(reportsData.reports)
+          ? reportsData.reports.map((report) => ({ ...INITIAL_SURFAI_ARTICLE, ...report }))
+          : [{ ...INITIAL_SURFAI_ARTICLE, ...data }]);
+      } catch (_reportsError) {
+        setSurfAIReports([{ ...INITIAL_SURFAI_ARTICLE, ...data }]);
+      }
       return data;
     } catch (surfAIError) {
       console.error('Failed to fetch SurfAI metadata:', surfAIError);
@@ -1100,27 +1151,51 @@ function App() {
     setSurfAIAdminPhase("loading");
     setSurfAIAdminStatus("");
     try {
-      const response = await authFetch(`${BACKEND_URL}/api/admin/surfai`);
+      const response = await authFetch(`${BACKEND_URL}/api/admin/surfai/reports`);
       const data = await safeParseResponse(response);
       if (!response.ok) throw new Error(data.error || "Could not load SurfAI configuration.");
-      const surfai = data.surfai || {};
-      setSurfAIAdminDraft({
-        title: surfai.title || INITIAL_SURFAI_ARTICLE.title,
-        snippet: surfai.snippet || INITIAL_SURFAI_ARTICLE.snippet,
-        content: surfai.content || "",
-        price: surfai.price || INITIAL_SURFAI_ARTICLE.price,
-        pdfUrl: surfai.pdfUrl || "",
-        videoUrl: surfai.videoUrl || "",
-      });
+      const reports = Array.isArray(data.reports) ? data.reports : [];
+      setSurfAIAdminReports(reports);
+      const selected = reports.find((report) => report.id === surfAIAdminSelectedId)
+        || reports.find((report) => report.id === data.featuredReportId)
+        || reports[0];
+      if (selected && surfAIAdminMode !== "create") {
+        setSurfAIAdminSelectedId(selected.id);
+        setSurfAIAdminDraft(surfAIReportToDraft(selected));
+        setSurfAIAdminMode("edit");
+      }
       setSurfAIAdminPhase("ready");
-      return surfai;
+      return reports;
     } catch (surfAIAdminError) {
       console.error("Failed to load SurfAI admin configuration:", surfAIAdminError);
       setSurfAIAdminPhase("error");
       setSurfAIAdminStatus(surfAIAdminError.message || "Could not load SurfAI configuration.");
       return null;
     }
-  }, [authFetch, isAdminAuthenticated]);
+  }, [authFetch, isAdminAuthenticated, surfAIAdminMode, surfAIAdminSelectedId]);
+
+  const handleCreateSurfAIReport = () => {
+    setSurfAIAdminMode("create");
+    setSurfAIAdminSelectedId(null);
+    setSurfAIAdminDraft({ ...EMPTY_SURFAI_REPORT });
+    setSurfAIAdminStatus("A new report receives its own permanent entitlement ID. Existing purchases remain intact.");
+  };
+
+  const handleEditSurfAIReport = (report) => {
+    setSurfAIAdminMode("edit");
+    setSurfAIAdminSelectedId(report.id);
+    setSurfAIAdminDraft(surfAIReportToDraft(report));
+    setSurfAIAdminStatus("");
+  };
+
+  const handleResetSurfAIAdminDraft = () => {
+    if (surfAIAdminMode === "create") {
+      setSurfAIAdminDraft({ ...EMPTY_SURFAI_REPORT });
+      return;
+    }
+    const report = surfAIAdminReports.find((item) => item.id === surfAIAdminSelectedId);
+    if (report) setSurfAIAdminDraft(surfAIReportToDraft(report));
+  };
 
   const handleSurfAIAdminChange = (field, value) => {
     setSurfAIAdminDraft((current) => ({ ...current, [field]: value }));
@@ -1133,10 +1208,17 @@ function App() {
     setSurfAIAdminPhase("saving");
     setSurfAIAdminStatus("Saving SurfAI edition to the protected ledger...");
     try {
-      const response = await authFetch(`${BACKEND_URL}/api/admin/surfai`, {
-        method: "PUT",
+      const isCreating = surfAIAdminMode === "create";
+      const endpoint = isCreating
+        ? `${BACKEND_URL}/api/admin/surfai/reports`
+        : `${BACKEND_URL}/api/admin/surfai/reports/${encodeURIComponent(surfAIAdminSelectedId)}`;
+      const payload = isCreating
+        ? { ...surfAIAdminDraft, listed: undefined }
+        : { ...surfAIAdminDraft, replaceCurrent: undefined };
+      const response = await authFetch(endpoint, {
+        method: isCreating ? "POST" : "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(surfAIAdminDraft),
+        body: JSON.stringify(payload),
       });
       const data = await safeParseResponse(response);
       if (!response.ok) {
@@ -1146,22 +1228,41 @@ function App() {
         throw new Error(validationMessage || "Could not save SurfAI configuration.");
       }
       const surfai = data.surfai;
-      setSurfAIAdminDraft({
-        title: surfai.title,
-        snippet: surfai.snippet,
-        content: surfai.content,
-        price: surfai.price,
-        pdfUrl: surfai.pdfUrl || "",
-        videoUrl: surfai.videoUrl || "",
-      });
-      setSurfAIArticle((current) => ({ ...current, ...surfai }));
+      setSurfAIAdminMode("edit");
+      setSurfAIAdminSelectedId(surfai.id);
+      setSurfAIAdminDraft(surfAIReportToDraft(surfai));
       setSurfAIAdminPhase("ready");
-      setSurfAIAdminStatus("SurfAI content, PDF and video configuration saved successfully.");
-      await Promise.all([fetchSurfAIMetadata(), fetchLibrary({ silent: true })]);
+      setSurfAIAdminStatus(isCreating
+        ? "New SurfAI report published. Previous reports and buyer entitlements were preserved."
+        : "This report was updated for everyone who already owns it.");
+      await Promise.all([fetchAdminSurfAI(), fetchSurfAIMetadata(), fetchLibrary({ silent: true })]);
     } catch (surfAISaveError) {
       console.error("Failed to save SurfAI admin configuration:", surfAISaveError);
       setSurfAIAdminPhase("error");
       setSurfAIAdminStatus(surfAISaveError.message || "Could not save SurfAI configuration.");
+    }
+  };
+
+  const handleToggleSurfAIListing = async (report) => {
+    if (surfAIAdminPhase === "saving") return;
+    setSurfAIAdminPhase("saving");
+    setSurfAIAdminStatus(report.listed ? "Archiving report…" : "Relisting report…");
+    try {
+      const response = await authFetch(`${BACKEND_URL}/api/admin/surfai/reports/${encodeURIComponent(report.id)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...surfAIReportToDraft(report), listed: !report.listed, replaceCurrent: undefined }),
+      });
+      const data = await safeParseResponse(response);
+      if (!response.ok) throw new Error(data.error || "Could not update report listing status.");
+      setSurfAIAdminPhase("ready");
+      setSurfAIAdminStatus(report.listed
+        ? "Report archived. Existing buyers can still open it from My Library."
+        : "Report is available for purchase again.");
+      await Promise.all([fetchAdminSurfAI(), fetchSurfAIMetadata()]);
+    } catch (listingError) {
+      setSurfAIAdminPhase("error");
+      setSurfAIAdminStatus(listingError.message || "Could not update report listing status.");
     }
   };
 
@@ -1950,7 +2051,9 @@ function App() {
   };
 
   const openSurfDailyDispatch = () => {
-    handleSelectArticle(getDailyAISurfArticle());
+    const report = getDailyAISurfArticle();
+    if (!report) return;
+    handleSelectArticle(report);
     setShowApplyForm(false);
     setIsPublisherView(false);
     handleToggleAdminView(false);
@@ -1968,7 +2071,8 @@ function App() {
   };
 
   const handleSurfLogoClick = async () => {
-    const surfArticleId = "surfai-daily";
+    const surfArticleId = surfAIArticle?.id;
+    if (!surfArticleId) return;
     if (!authenticated || !unlockedArticles[surfArticleId]) {
       openSurfDailyDispatch();
       setSurfRequestedAsset("video");
@@ -2044,7 +2148,7 @@ function App() {
         }
       }));
 
-      if (unlockingArticleId === "surfai-daily" && surfRequestedAsset === "video") {
+      if (isSurfAIArticle(unlockingArticleId) && surfRequestedAsset === "video") {
         const protectedFields = await fetchFullArticleContent(unlockingArticleId);
         if (protectedFields?.videoUrl) {
           openSurfVideoStudio(protectedFields.videoUrl);
@@ -3123,18 +3227,45 @@ function App() {
               <div>
                 <span className="surfai-admin-kicker">PROTECTED EDITION CONTROL</span>
                 <h2 id="surfai-admin-title">SurfAI Content Desk</h2>
-                <p>Update the paid report and its protected PDF and video sources.</p>
+                <p>Create a report series, preserve past purchases, and relist archived editions.</p>
               </div>
-              <div className="surfai-admin-assets" aria-label="SurfAI asset status">
-                <span className={surfAIAdminDraft.pdfUrl ? 'is-configured' : ''}>PDF {surfAIAdminDraft.pdfUrl ? 'READY' : 'EMPTY'}</span>
-                <span className={surfAIAdminDraft.videoUrl ? 'is-configured' : ''}>VIDEO {surfAIAdminDraft.videoUrl ? 'READY' : 'EMPTY'}</span>
+              <div className="surfai-admin-header-actions">
+                <div className="surfai-admin-assets" aria-label="SurfAI asset status">
+                  <span className={surfAIAdminDraft.pdfUrl ? 'is-configured' : ''}>PDF {surfAIAdminDraft.pdfUrl ? 'READY' : 'EMPTY'}</span>
+                  <span className={surfAIAdminDraft.videoUrl ? 'is-configured' : ''}>VIDEO {surfAIAdminDraft.videoUrl ? 'READY' : 'EMPTY'}</span>
+                </div>
+                <button type="button" className="btn" onClick={handleCreateSurfAIReport}>+ ADD NEW REPORT</button>
               </div>
             </header>
+
+            <div className="surfai-report-archive" aria-label="SurfAI report archive">
+              {surfAIAdminReports.map((report) => (
+                <article key={report.id} className={`surfai-report-row ${surfAIAdminSelectedId === report.id ? 'is-selected' : ''}`}>
+                  <div className="surfai-report-row-main">
+                    <span className={`surfai-report-state ${report.listed ? 'is-listed' : 'is-archived'}`}>
+                      {report.listed ? 'ON SALE' : 'ARCHIVED'}
+                    </span>
+                    <strong>{report.title}</strong>
+                    <small>{report.id} · {report.purchaseCount || 0} buyer{report.purchaseCount === 1 ? '' : 's'} · {report.price} USDC</small>
+                  </div>
+                  <div className="surfai-report-row-actions">
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleEditSurfAIReport(report)}>EDIT</button>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleToggleSurfAIListing(report)} disabled={surfAIAdminPhase === "saving"}>
+                      {report.listed ? 'ARCHIVE' : 'RELIST'}
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
 
             {surfAIAdminPhase === "loading" ? (
               <div className="surfai-admin-loading" role="status">Loading protected SurfAI configuration…</div>
             ) : (
               <form className="surfai-admin-form" onSubmit={handleSurfAIAdminSubmit}>
+                <div className="surfai-admin-editor-banner surfai-admin-field-wide">
+                  <strong>{surfAIAdminMode === "create" ? "NEW REPORT" : "EDIT REPORT"}</strong>
+                  <span>{surfAIAdminMode === "create" ? "A permanent content and entitlement ID will be created." : surfAIAdminSelectedId}</span>
+                </div>
                 <div className="surfai-admin-field surfai-admin-field-wide">
                   <label htmlFor="surfai-admin-title-input">Edition title</label>
                   <input
@@ -3216,15 +3347,41 @@ function App() {
                   <small>HTTPS only. The URL is returned only after entitlement verification.</small>
                 </div>
 
+                {surfAIAdminMode === "create" ? (
+                  <label className="surfai-admin-checkbox surfai-admin-field-wide">
+                    <input
+                      type="checkbox"
+                      checked={surfAIAdminDraft.replaceCurrent}
+                      onChange={(event) => handleSurfAIAdminChange("replaceCurrent", event.target.checked)}
+                    />
+                    <span>
+                      <strong>Archive currently listed reports when publishing</strong>
+                      <small>Recommended for a daily series. Existing buyers keep access in My Library.</small>
+                    </span>
+                  </label>
+                ) : (
+                  <label className="surfai-admin-checkbox surfai-admin-field-wide">
+                    <input
+                      type="checkbox"
+                      checked={surfAIAdminDraft.listed}
+                      onChange={(event) => handleSurfAIAdminChange("listed", event.target.checked)}
+                    />
+                    <span>
+                      <strong>Available for purchase</strong>
+                      <small>Turn this back on to sell the archived report again.</small>
+                    </span>
+                  </label>
+                )}
+
                 <div className="surfai-admin-actions surfai-admin-field-wide">
                   <div className={`surfai-admin-status is-${surfAIAdminPhase}`} role="status" aria-live="polite">
                     {surfAIAdminStatus || "Changes are published immediately after saving."}
                   </div>
-                  <button type="button" className="btn btn-secondary" onClick={fetchAdminSurfAI} disabled={surfAIAdminPhase === "saving"}>
+                  <button type="button" className="btn btn-secondary" onClick={handleResetSurfAIAdminDraft} disabled={surfAIAdminPhase === "saving"}>
                     RESET FORM
                   </button>
                   <button type="submit" className="btn" disabled={surfAIAdminPhase === "saving" || !surfAIAdminDraft.content.trim()}>
-                    {surfAIAdminPhase === "saving" ? "PUBLISHING…" : "SAVE SURFAI EDITION"}
+                    {surfAIAdminPhase === "saving" ? "PUBLISHING…" : surfAIAdminMode === "create" ? "PUBLISH NEW REPORT" : "SAVE REPORT UPDATE"}
                   </button>
                 </div>
               </form>
@@ -3406,10 +3563,10 @@ function App() {
           <section className="sidebar">
             <div className="section-title">
               <h2 ref={articleListHeadingRef} tabIndex="-1">LATEST DISPATCHES</h2>
-              <span className="item-count">{articles.length} columns published</span>
+              <span className="item-count">{readerArticles.length} columns published</span>
             </div>
             <div className="article-list">
-              {articles.map((art) => (
+              {readerArticles.map((art) => (
                 <article
                   key={`${art.id}-${art.author}`}
                   className={`article-card ${selectedArticle?.id === art.id && selectedArticle?.author.toLowerCase() === art.author.toLowerCase() ? 'active' : ''}`}
@@ -3444,7 +3601,7 @@ function App() {
           {/* RIGHT CONTENT */}
           <section className="viewer" style={{ position: 'relative' }} aria-label="Article reader">
             {/* SURFAI DAILY INTELLIGENCE DESK */}
-            {!isPublisherView && !isAdminView && (
+            {!isPublisherView && !isAdminView && surfAIArticle && (
               <aside className="surfai-ticker-bar" aria-label="SurfAI intelligence desk">
                 <button
                   type="button"
@@ -3478,8 +3635,8 @@ function App() {
                   onClick={handleSurfLogoClick}
                   title="Generate an AI video briefing"
                 >
-                  <span aria-hidden="true">{unlockedArticles["surfai-daily"] ? '▶' : '◆'}</span>
-                  <span>{unlockedArticles["surfai-daily"] ? 'Video brief' : 'Unlock video'}</span>
+                  <span aria-hidden="true">{unlockedArticles[surfAIArticle.id] ? '▶' : '◆'}</span>
+                  <span>{unlockedArticles[surfAIArticle.id] ? 'Video brief' : 'Unlock video'}</span>
                 </button>
               </aside>
             )}
@@ -3751,8 +3908,8 @@ function App() {
                 <button type="button" className="mobile-back-button" onClick={handleReturnToArticleList}>
                   ← Back to articles
                 </button>
-                <div className={`article-header ${selectedArticle.id === "surfai-daily" ? 'surfai-article-header' : ''}`}>
-                  {selectedArticle.id === "surfai-daily" && (
+                <div className={`article-header ${isSurfAIArticle(selectedArticle) ? 'surfai-article-header' : ''}`}>
+                  {isSurfAIArticle(selectedArticle) && (
                     <div className="surfai-article-kicker">
                       <SurfAILogo size={34} />
                       <span>Machine-curated intelligence · Daily edition</span>
@@ -3788,7 +3945,7 @@ function App() {
                 <div className="article-body">
                   {unlockedArticles[selectedArticle.id] ? (
                     <div>
-                      {selectedArticle.id === "surfai-daily" && (
+                      {isSurfAIArticle(selectedArticle) && (
                         <section className="surfai-briefing-intro" aria-label="SurfAI briefing status">
                           <div className="surfai-briefing-copy">
                             <span className="surfai-eyebrow">Access granted / Intelligence online</span>
@@ -3803,16 +3960,16 @@ function App() {
                           <dl className="surfai-briefing-metrics">
                             <div><dt>Coverage</dt><dd>Capital + compute</dd></div>
                             <div><dt>Access</dt><dd>Permanent</dd></div>
-                            <div><dt>Settlement</dt><dd>0.15 USDC</dd></div>
+                            <div><dt>Settlement</dt><dd>{selectedArticle.price} USDC</dd></div>
                           </dl>
                         </section>
                       )}
                       <div 
-                        className={`content-text premium-unlocked ${selectedArticle.id === "surfai-daily" ? 'surfai-premium-copy' : ''}`}
+                        className={`content-text premium-unlocked ${isSurfAIArticle(selectedArticle) ? 'surfai-premium-copy' : ''}`}
                         dangerouslySetInnerHTML={{ __html: parseMarkdownToHtml(selectedArticle.content) }}
                       />
                       
-                      {selectedArticle.id === "surfai-daily" && (
+                      {isSurfAIArticle(selectedArticle) && (
                         <section className="surfai-report-card" aria-live="polite">
                           <div className="surfai-report-head">
                             <div className="surfai-report-title">
@@ -3908,17 +4065,17 @@ function App() {
                       </div>
 
                       {/* PAYWALL */}
-                      <div className={`paywall-card ${selectedArticle.id === "surfai-daily" ? 'surfai-paywall' : ''}`}>
-                        {selectedArticle.id === "surfai-daily" && (
+                      <div className={`paywall-card ${isSurfAIArticle(selectedArticle) ? 'surfai-paywall' : ''}`}>
+                        {isSurfAIArticle(selectedArticle) && (
                           <div className="surfai-paywall-brand"><SurfAILogo size={40} /><span>SurfAI protected intelligence</span></div>
                         )}
-                        <div className="paywall-title">{selectedArticle.id === "surfai-daily" ? 'Access the full signal' : 'Unlock this article'}</div>
+                        <div className="paywall-title">{isSurfAIArticle(selectedArticle) ? 'Access the full signal' : 'Unlock this article'}</div>
                         <p className="paywall-intro">
-                          {selectedArticle.id === "surfai-daily"
+                          {isSurfAIArticle(selectedArticle)
                             ? 'One payment unlocks the complete dispatch, signed PDF and AI video briefing.'
                             : 'Read the complete article with a one-time USDC payment.'}
                         </p>
-                        {selectedArticle.id === "surfai-daily" && surfRequestedAsset === "video" && (
+                        {isSurfAIArticle(selectedArticle) && surfRequestedAsset === "video" && (
                           <div className="surfai-video-lock-notice" role="status">
                             <span aria-hidden="true">◆</span>
                             <div><strong>Video briefing locked</strong><small>Complete the one-time payment below to continue to the protected video.</small></div>
