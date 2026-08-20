@@ -2049,6 +2049,36 @@ body {
 .surfai-admin-status.is-error { color: var(--ink-red); }
 .surfai-admin-status.is-saving { color: #8b5d0b; }
 
+.surfai-publish-notice {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 14px;
+  margin: 12px auto 0;
+  padding: 12px 16px;
+  width: min(920px, calc(100% - 32px));
+  border: 2px solid #2b7034;
+  background: #e4ecd2;
+  box-shadow: 4px 4px 0 rgba(43, 112, 52, 0.22);
+  color: #1f5728;
+  font: 10px/1.45 var(--font-mono);
+}
+
+.surfai-publish-notice strong {
+  letter-spacing: 0.08em;
+}
+
+.surfai-publish-notice button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: 700 18px/1 var(--font-mono);
+}
+
 @media (max-width: 720px) {
   .surfai-admin-header,
   .surfai-admin-actions {
@@ -2074,6 +2104,20 @@ body {
   .surfai-report-archive { padding: 12px; }
   .surfai-report-row { align-items: stretch; flex-direction: column; }
   .surfai-report-row-actions button { flex: 1; }
+
+  .surfai-publish-notice {
+    grid-template-columns: 1fr auto;
+  }
+
+  .surfai-publish-notice strong,
+  .surfai-publish-notice span {
+    grid-column: 1;
+  }
+
+  .surfai-publish-notice button {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
 }
 
 /* Markdown Parsing inside articles */

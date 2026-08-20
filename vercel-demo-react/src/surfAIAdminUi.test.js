@@ -27,3 +27,12 @@ test('reader SurfAI metadata is loaded from the public metadata-only endpoint', 
   assert.match(appSource, /return surfAIArticle/);
   assert.match(appSource, /isSurfAIArticle/);
 });
+
+test('publishing a new SurfAI report is confirmed before returning to the front page', () => {
+  assert.match(appSource, /preferredReportId: surfai\.id/);
+  assert.match(appSource, /refreshedReports\?\.find\(\(report\) => report\.id === surfai\.id\)/);
+  assert.match(appSource, /Paid report content cannot be empty/);
+  assert.match(appSource, /setSurfAIPublishNotice\(successMessage\)/);
+  assert.match(appSource, /handleToggleAdminView\(false\)/);
+  assert.match(appSource, /REPORT PUBLISHED/);
+});
