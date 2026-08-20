@@ -9,6 +9,7 @@ const DATABASES = {
   publishers: { key: "papercut_publishers", fallback: {} },
   articles: { key: "papercut_articles", fallback: [] },
   transactions: { key: "papercut_transactions", fallback: {} },
+  settings: { key: "papercut_settings", fallback: {} },
 };
 
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
