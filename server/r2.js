@@ -14,16 +14,34 @@ function getR2Config() {
   const accessKeyId = String(process.env.R2_ACCESS_KEY_ID || "").trim();
   const secretAccessKey = String(process.env.R2_SECRET_ACCESS_KEY || "").trim();
   const bucket = String(process.env.R2_BUCKET || "").trim();
+  const prefix = normalizePrefix(process.env.R2_PREFIX);
   const endpoint = String(process.env.R2_ENDPOINT || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : "")).trim();
   return {
     accountId,
     accessKeyId,
     secretAccessKey,
     bucket,
+    prefix,
     endpoint,
     uploadTtlSeconds: positiveInteger(process.env.R2_UPLOAD_URL_TTL_SECONDS, DEFAULT_UPLOAD_TTL_SECONDS, 3600),
     readTtlSeconds: positiveInteger(process.env.R2_READ_URL_TTL_SECONDS, DEFAULT_READ_TTL_SECONDS, 3600),
   };
+}
+
+function normalizePrefix(value) {
+  const prefix = String(value || "").trim().replace(/^\/+|\/+$/g, "");
+  if (!prefix) return "";
+  if (
+    prefix.length > 200
+    || !/^[a-zA-Z0-9._/-]+$/.test(prefix)
+    || prefix.includes("//")
+    || prefix.split("/").some((segment) => segment === "." || segment === "..")
+  ) {
+    const error = new Error("R2_PREFIX must be a safe object-key prefix");
+    error.statusCode = 503;
+    throw error;
+  }
+  return prefix;
 }
 
 function positiveInteger(value, fallback, maximum) {
@@ -73,20 +91,23 @@ function sanitizeFileName(fileName) {
   return clean || "asset";
 }
 
-function createAssetKey(assetType, fileName) {
+function createAssetKey(assetType, fileName, prefix = getR2Config().prefix) {
   if (!new Set(["pdf", "video"]).has(assetType)) throw new Error("Unsupported R2 asset type");
   const date = new Date().toISOString().slice(0, 10).replaceAll("-", "/");
-  return `surfai/${assetType}/${date}/${crypto.randomUUID()}-${sanitizeFileName(fileName)}`;
+  const root = prefix ? `${prefix}/` : "";
+  return `${root}surfai/${assetType}/${date}/${crypto.randomUUID()}-${sanitizeFileName(fileName)}`;
 }
 
 function toR2AssetRef(key) {
   return `r2://${key}`;
 }
 
-function parseR2AssetRef(value) {
+function parseR2AssetRef(value, expectedAssetType) {
   if (!String(value || "").startsWith("r2://")) return null;
   const key = String(value).slice(5);
-  if (!/^surfai\/(?:pdf|video)\/[a-zA-Z0-9/._-]{1,500}$/.test(key) || key.includes("..")) {
+  const match = key.match(/^(?:[a-zA-Z0-9._-]+\/)*surfai\/(pdf|video)\/[a-zA-Z0-9/._-]{1,500}$/);
+  const unsafeSegment = key.split("/").some((segment) => segment === "." || segment === "..");
+  if (!match || unsafeSegment || (expectedAssetType && match[1] !== expectedAssetType)) {
     const error = new Error("Invalid R2 asset reference");
     error.statusCode = 400;
     throw error;
@@ -96,7 +117,7 @@ function parseR2AssetRef(value) {
 
 async function createR2Upload({ assetType, fileName, contentType }) {
   const config = assertR2Configured();
-  const key = createAssetKey(assetType, fileName);
+  const key = createAssetKey(assetType, fileName, config.prefix);
   const uploadUrl = await getSignedUrl(getR2Client(config), new PutObjectCommand({
     Bucket: config.bucket,
     Key: key,
@@ -127,14 +148,16 @@ async function resolveProtectedAssetUrl(value) {
 function r2StorageStatus() {
   try {
     const config = assertR2Configured();
-    return { configured: true, bucket: config.bucket };
+    return { configured: true, bucket: config.bucket, prefix: config.prefix };
   } catch (_error) {
-    return { configured: false, bucket: null };
+    return { configured: false, bucket: null, prefix: null };
   }
 }
 
 module.exports = {
   createR2Upload,
+  createAssetKey,
+  normalizePrefix,
   parseR2AssetRef,
   r2StorageStatus,
   resolveProtectedAssetUrl,
